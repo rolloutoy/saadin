@@ -167,7 +167,7 @@ main (int argc, const char *argv[])
 		sql_sprintf(&s,",`min%#S`=%s,`max%#S`=%s",#name,j_val(j_index(j,0)),#name,j_val(j_index(j,1)));	\
 		else if(j_isnumber(j))sql_sprintf(&s,",`min%#S`=%s,`max%#S`=%s",#name,j_val(j),#name,j_val(j));}
 #define e(name,t) if((j=find(#name,"char(1)"))){if(j_isstring(j))sql_sprintf(&s,",`%#S`=%#s",#name,j_val(j));}
-#include "main/acextras.m"
+#include "acextras.m"
          sql_safe_query_s (&sql, &s);
          if (changed)
          {
