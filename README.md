@@ -6,7 +6,7 @@ Yes, it seems Daikin don't like Faikin, and I don't have the time or money to ar
 
 Everyone knows Daikin make some of the best air conditioners out there, mechanically speaking. Sadly their WiFi control modules are not so good, especially the latest models which are all cloud based, require an internet connection to even work, and are slow.
 
-[<img src="https://github.com/user-attachments/assets/338f32f4-08dc-4355-88a8-cc47ec79a074" width=30% alt="Faikout">](https://www.youtube.com/watch?v=7ANKUI45cHw "Faikout")
+[<img src="https://github.com/user-attachments/assets/99d14089-d5c0-4edf-a9b9-cb052f3eacef" width=30% alt="Faikout">](https://www.youtube.com/watch?v=7ANKUI45cHw "Faikout")
 <img src="https://github.com/user-attachments/assets/81cdd6ae-362e-4a48-8efd-c60beae9d125" width=30% align="right" Alt="Optional cabel">
 <img src="https://github.com/user-attachments/assets/0dbb6cf9-0fd9-482d-a2ed-75dde9e37b82" width=30% align="right" Alt="Optional case">
 
