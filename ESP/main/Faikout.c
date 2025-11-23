@@ -3823,6 +3823,8 @@ app_main ()
                   b.startup = 0;        // End of startup
             }
          }
+         if (daikin.power && (daikin.status_known & CONTROL_outside) && !isnan (daikin.outside) && daikin.outside < minoutside)
+            daikin_set_v (power, 0);    // Auto off as too cold outside
          // Report status changes if happen on AC side. Ignore if we've just sent
          // some new control values
          if (!daikin.control_changed && (daikin.status_changed || daikin.status_report || daikin.mode_changed))

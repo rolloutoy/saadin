@@ -66,18 +66,20 @@ u8	uart		1		.fix .hide				// UART number
 
 u8	thermref	50		.live					// Percentage inlet rather than home temp used by your aircon
 
-u8	switchtemp	0.5		.live	.decimal=1	.old="switch10"	// Increase max (heating) or decrease min (cooling)
-u8	pushtemp	0.1		.live	.decimal=1	.old="push10"	// Increase min (heating) or decrease max (cooling)
+u8	switchtemp	0.5		.live	.decimal=1 .unit="℃" .old="switch10"	// Increase max (heating) or decrease min (cooling)
+u8	pushtemp	0.1		.live	.decimal=1 .unit="℃" .old="push10"	// Increase min (heating) or decrease max (cooling)
 
-s8	cool.over	6		.live					// For cooling, push (decrease) target sent to aircon by this from min to force cooling before reaching target
-u8	cool.back	6		.live					// For cooling, pull (increase) target sent to aircon by this from max to stop cooling after reaching target
+s8	cool.over	6		.live	.unit="℃"			// For cooling, push (decrease) target sent to aircon by this from min to force cooling before reaching target
+u8	cool.back	6		.live	.unit="℃"			// For cooling, pull (increase) target sent to aircon by this from max to stop cooling after reaching target
 
-s8	heat.over	6		.live					// For heating, push (increase) target sent to aircon by this from max to force heating before reaching target
-u8	heat.back	6		.live					// For heating, pull (decrease) target sent to aircon by this from min to stop heating after reaching target
+s8	heat.over	6		.live	.unit="℃"			// For heating, push (increase) target sent to aircon by this from max to force heating before reaching target
+u8	heat.back	6		.live	.unit="℃"			// For heating, pull (decrease) target sent to aircon by this from min to stop heating after reaching target
+
+s8	min.outside	-100		.live	.unit="℃"			// Lowest allowed outside temp allowed for operation (if known)
 
 bit	temp.track	0		.live					// Set target temp based on Daikin measured temp not required target
 bit	temp.adjust	1		.live					// Adjust target temp allowing for different Daikin measure to external measure
-u16	temp.noflap	0		.live					// Min time between target temp changes (seconds)
+u16	temp.noflap	0		.live	.unit="s"			// Min time between target temp changes
 
 #ifdef CONFIG_BT_NIMBLE_ENABLED
 bit	ble.enable			.old="ble"				// Enable BLE for sensors or remote
