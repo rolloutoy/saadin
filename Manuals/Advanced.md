@@ -70,11 +70,11 @@ If `autop` is set, and the last two sample periods are entirely inside the targe
 
 The system is designed to work with an external remote [Environmental monitor](https://github.com/revk/ESP32-EnvMon). This sends a command `control` periodically.
 
-You can use for your own external control, which takes priority over *Faikout auto*, but you have to send the `control` command regularly.
+You can use for your own external control, which takes priority over *Faikout auto*, but you have to send the `control`.
 
 |Field|Meaning|
 |-----|-------|
-|`env`|Set the current room temperature.|
+|`env`|Set the current room temperature (this needs to be regularly sent (`tcontrol` seconds max), and in every `control` message else it times out)|
 |`target`|Set the target temperature, either an array of *min* and *max*, or a single number.|
 |`margin`|Mainly for when sending `target` as just a number, if present the *min* is reduced by half `margin` and the *max* is increased by half `margin`|
 
