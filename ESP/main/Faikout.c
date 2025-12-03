@@ -1875,7 +1875,7 @@ web_control (httpd_req_t *req)
    addb ("⏼", "power", "Main\npower");
    revk_web_send (req, "</tr>");
    if (noauto)
-      add ("Mode", "A", "Heat", "H", "Cool", "C", "Dry", "D", "Fan", "F", NULL);
+      add ("Mode", "mode", "Heat", "H", "Cool", "C", "Dry", "D", "Fan", "F", NULL);
    else
       add ("Mode", "mode", "Auto", "A", "Heat", "H", "Cool", "C", "Dry", "D", "Fan", "F", NULL);
    if (fan_5_auto ())
