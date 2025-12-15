@@ -1,10 +1,11 @@
 bit	dump									// Dump protocol on MQTT for each message
 bit	debug				.live					// Debug - logs summary of status responses
-bit	s21extra			.live					// Sends extra S21 messages, usually used with dump or debug
 bit	debughex			.live					// Debug in hex
 bit	snoop									// Listen only (for debugging)
 bit	livestatus			.live					// Send status messages in real time
 bit	fixstatus								// Send status as fixed values not array
+bit	s21.extra			.live					// Sends extra S21 messages, usually used with dump or debug
+u8	s21.tries	10		.live					// Repeat attempts at S21 controls
 
 bit	web.control	1							// Web based controls
 bit	web.settings	1							// Web based settings
