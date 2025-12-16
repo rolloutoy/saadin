@@ -3862,7 +3862,7 @@ app_main ()
          daikin.statscount++;
          if (!daikin.control_changed)
             daikin.control_count = 0;
-         else if (daikin.control_count++ > 10)
+         else if (daikin.control_count++ > s21tries)
          {                      // Tried a lot
             // Report failed settings
             jo_t j = jo_object_alloc ();
