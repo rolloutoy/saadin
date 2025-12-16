@@ -116,7 +116,12 @@ u32	t.control	600							// Control messages timeout
 gpio	tx	-48								// Tx
 gpio	rx	-34								// Rx
 #else
+#ifdef  CONFIG_IDF_TARGET_ESP32C5
+gpio	tx	-26								// Tx
+gpio	rx	-25								// Rx
+#else
 gpio	tx	-26								// Tx
 gpio	rx	-27								// Rx
+#endif
 #endif
 
