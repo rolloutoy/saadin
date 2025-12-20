@@ -1788,7 +1788,7 @@ web_favicon (httpd_req_t *req)
 static void
 settings_autob (httpd_req_t *req)
 {
-   revk_web_send (req, "<tr><td>BLE</td><td colspan=6>" //
+   revk_web_send (req, "<tr class='autoe autor'><td>BLE</td><td colspan=6>"     //
                   "<select name=autob onchange=\"w('autob',this.options[this.selectedIndex].value);\">");
    if (!*autob)
       revk_web_send (req, "<option value=\"\">-- None --");
@@ -1820,17 +1820,30 @@ web_control (httpd_req_t *req)
 {
    web_head (req, hostname == revk_id ? revk_app : hostname);
    revk_web_send (req, "<div id=top class=off><form name=F><table id=live>");
-   void addh (const char *field,const char *tag)
+   void tre (void)
+   {
+      revk_web_send (req, "</tr>");
+   }
+   void tr (const char *c)
+   {
+      if (c)
+         revk_web_send (req, "<tr class='%s'>", c);
+      else
+         revk_web_send (req, "<tr>");
+   }
+   void addh (const char *class, const char *tag)
    {                            // Head (well, start of row)
-      revk_web_send (req, "<tr id=row%s><td align=right>%s</td>", field, tag);
+      tr (class);
+      revk_web_send (req, "<td align=right>%s</td>", tag);
    }
    void addf (const char *tag)
    {                            // Foot (well, end of row)
-      revk_web_send (req, "<td colspan=2 id='%s'></td></tr>", tag);
+      revk_web_send (req, "<td colspan=2 id='%s'></td>", tag);
+      tre ();
    }
-   void add (const char *tag, const char *field, ...)
+   void add (const char *class, const char *tag, const char *field, ...)
    {
-      addh (field,tag);
+      addh (class, tag);
       va_list ap;
       va_start (ap, field);
       int n = 0;
@@ -1841,7 +1854,9 @@ web_control (httpd_req_t *req)
             break;
          if (n == 5)
          {
-            revk_web_send (req, "</tr><tr><td></td>");
+            tre ();
+            tr (class);
+            revk_web_send (req, "<td></td>");
             n = 0;
          }
          n++;
@@ -1863,33 +1878,34 @@ web_control (httpd_req_t *req)
                      "<td title=\"%s\"><label class=switch><input type=checkbox id=\"%s\" onchange=\"w('%s',this.checked);\"><span class=slider></span></label></td>",
                      help, field, field);
    }
-   void addslider (const char *tag, const char *field, int min, int max, const char *step)
+   void addslider (const char *class, const char *tag, const char *field, int min, int max, const char *step)
    {
-      addh (field,tag);
+      addh (class, tag);
       revk_web_send (req,
                      "<td colspan=4><a onclick=\"if(+document.F.%s.value>%d)w('%s',+document.F.%s.value-%s);\" class=pn>-</a><input type=range class=temp min=%d max=%d step=%s id=%s onchange=\"w('%s',+this.value);\"><a onclick=\"if(+document.F.%s.value<%d)w('%s',+document.F.%s.value+%s);\" class=pn>+</a></td><td><button id=\"T%s\" onclick=\"return false;\"></button></td>",
                      field, min, field, field, step, min, max, step, field, field, field, max, field, field, step, field);
       addf (tag);
    }
-   revk_web_send (req, "<tr>");
+   tr (NULL);
    addb ("⏼", "power", "Main\npower");
-   revk_web_send (req, "</tr>");
+   tre ();
    if (noauto)
-      add ("Mode", "mode", "Heat", "H", "Cool", "C", "Dry", "D", "Fan", "F", NULL);
+      add (NULL, "Mode", "mode", "Heat", "H", "Cool", "C", "Dry", "D", "Fan", "F", NULL);
    else
-      add ("Mode", "mode", "Auto", "A", "Heat", "H", "Cool", "C", "Dry", "D", "Fan", "F", NULL);
+      add (NULL, "Mode", "mode", "Auto", "A", "Heat", "H", "Cool", "C", "Dry", "D", "Fan", "F", NULL);
    if (fan_5_auto ())
-      add ("Fan", "fan", "1", "1", "2", "2", "3", "3", "4", "4", "5", "5", "Night", "Q", "Auto", "A", NULL);
+      add (NULL, "Fan", "fan", "1", "1", "2", "2", "3", "3", "4", "4", "5", "5", "Night", "Q", "Auto", "A", NULL);
    else if (fan_3_auto ())
-      add ("Fan", "fan", "Low", "1", "Mid", "3", "High", "5", "Auto", "A", "Quiet", "Q", NULL);
+      add (NULL, "Fan", "fan", "Low", "1", "Mid", "3", "High", "5", "Auto", "A", "Quiet", "Q", NULL);
    else
-      add ("Fan", "fan", "Low", "1", "Mid", "3", "High", "5", NULL);
-   addslider ("Set", "temp", tmin, tmax, get_temp_step ());
+      add (NULL, "Fan", "fan", "Low", "1", "Mid", "3", "High", "5", NULL);
+   addslider (NULL, "Set", "temp", tmin, tmax, get_temp_step ());
    void addt (const char *tag, const char *help)
    {
       revk_web_send (req, "<td title=\"%s\" align=right>%s<br><span id=\"%s\"></span></td>", help, tag, tag);
    }
-   revk_web_send (req, "<tr><td>Temps</td>");
+   tr (NULL);
+   revk_web_send (req, "<td>Temps</td>");
    if (daikin.status_known & CONTROL_inlet)
       addt ("Inlet", "Inlet temperature");
    if (daikin.status_known & CONTROL_home)
@@ -1903,7 +1919,9 @@ web_control (httpd_req_t *req)
 #ifdef ELA
    if (bleenable && *autob)
    {
-      revk_web_send (req, "</tr><tr><td>%s</td>", bletemp && bletemp->faikoutset ? "BLE<br>Remote" : "BLE");
+      tre ();
+      tr (NULL);
+      revk_web_send (req, "<td>%s</td>", bletemp && bletemp->faikoutset ? "BLE<br>Remote" : "BLE");
       if (!bletemp || bletemp->tempset)
          addt ("Temp", "External BLE temperature");
       if (!bletemp || bletemp->humset)
@@ -1912,56 +1930,57 @@ web_control (httpd_req_t *req)
          addt ("Bat", "External BLE battery");
    }
 #endif
-   revk_web_send (req, "</tr>");
+   tre ();
    if (daikin.status_known & CONTROL_demand)
-      addslider ("Demand", "demand", 30, 100, "5");
+      addslider (NULL, "Demand", "demand", 30, 100, "5");
    if (daikin.status_known & (CONTROL_econo | CONTROL_powerful | CONTROL_led))
    {
-      revk_web_send (req, "<tr>");
+      tr (NULL);
       if (daikin.status_known & CONTROL_econo)
          addb ("♻", "econo", "Econo\nmode");
       if (daikin.status_known & CONTROL_powerful)
          addb ("💪", "powerful", "Powerful\nmode");
       if (daikin.status_known & CONTROL_led)
          addb ("💡", "led", "LED\nhigh");
-      revk_web_send (req, "</tr>");
+      tre ();
    }
    if (daikin.status_known & (CONTROL_swingv | CONTROL_swingh | CONTROL_comfort))
    {
-      revk_web_send (req, "<tr>");
+      tr (NULL);
       if (daikin.status_known & CONTROL_swingv)
          addb ("↕", "swingv", "Vertical\nSwing");
       if (daikin.status_known & CONTROL_swingh)
          addb ("↔", "swingh", "Horizontal\nSwing");
       if (daikin.status_known & CONTROL_comfort)
          addb ("🧸", "comfort", "Comfort\nmode");
-      revk_web_send (req, "</tr>");
+      tre ();
    }
    if (daikin.status_known & (CONTROL_streamer | CONTROL_sensor | CONTROL_quiet))
    {
-      revk_web_send (req, "<tr>");
+      tr (NULL);
       if (daikin.status_known & CONTROL_streamer)
          addb ("🦠", "streamer", "Stream/\nfilter");
       if (daikin.status_known & CONTROL_sensor)
          addb ("🙆", "sensor", "Sensor\nmode");
       if (daikin.status_known & CONTROL_quiet)
          addb ("🤫", "quiet", "Quiet\noutdoor");
-      revk_web_send (req, "</tr>");
+      tre();
    }
    revk_web_send (req, "</table>"       //
-                  "<p id=offline style='display:none'><b>System is offline (no data tx/rx).</b></p>"    //
-                  "<p id=loopback style='display:none'><b>System is in loopback test.</b></p>"  //
-                  "<p id=shutdown style='display:none;color:red;'></p>" //
-                  "<p id=slave style='display:none'>❋ Another unit is controlling the mode, so this unit is not operating at present.</p>"    //
-                  "<p id=control style='display:none'>✷ Automatic control means some functions are limited.</p>"      //
-                  "<p id=antifreeze style='display:none'>❄ System is in anti-freeze now, so cooling is suspended.</p>");
-
-   void addnote (const char *note)
+                  "<p class=offline><b>System is offline (no data tx/rx).</b></p>"      //
+                  "<p class=loopback><b>System is in loopback test.</b></p>"    //
+                  "<p class=shutdown style='color:red;display:none;'></p>"      //
+                  "<p class=slave>❋ Another unit is controlling the mode, so this unit is not operating at present.</p>"      //
+                  "<p class=control>✷ Automatic control means some functions are limited.</p>"        //
+                  "<p class=antifreeze>❄ System is in anti-freeze now, so cooling is suspended.</p>");
+   void addnote (const char *class, const char *note)
    {
-      revk_web_send (req, "<tr><td colspan=6>%s</td></tr>", note);
+      tr (class);
+      revk_web_send (req, "<td colspan=6>%s</td>", note);
+      tre ();
    }
    if (nofaikoutauto && (*password || !autor))
-      addnote ("Faikout auto controls are hidden.");    // Hide works if password set, or if not actually set up for auto, otherwise show
+      addnote (NULL, "Faikout auto controls are hidden.");      // Hide works if password set, or if not actually set up for auto, otherwise show
    else if (!daikin.remote && (autor || !nofaikoutauto))
    {
       void addtime (const char *tag, const char *field)
@@ -1970,43 +1989,52 @@ web_control (httpd_req_t *req)
                         "<td align=right>%s</td><td><input class=time type=time title=\"Set 00:00 to disable\" id='%s' onchange=\"w('%s',this.value);\"></td>",
                         tag, field, field);
       }
-      revk_web_send (req, "<div id=remote><hr><table>");
+      revk_web_send (req, "<div class=remote><hr><table>");
+      tr (NULL);
       if (!*password)
       {
-         revk_web_send (req, "<tr>");
          addb ("Enable", "autoe", "Enable");
          revk_web_send (req, "<td colspan=3>Auto functions...</td>");
       }
-      add ("Auto temp", "autor", "Off", "0", fahrenheit ? "±0.9℉" : "±½℃", "0.5", fahrenheit ? "±1.8℉" : "±1℃",
-           "1", fahrenheit ? "±3.6℉" : "±2℃", "2", NULL);
-      addslider ("Auto target", "autot", tmin, tmax, get_temp_step ());
+      add ("autoe", "Auto temp", "autor", "Off", "0", fahrenheit ? "±0.9℉" : "±½℃", "0.5",
+           fahrenheit ? "±1.8℉" : "±1℃", "1", fahrenheit ? "±3.6℉" : "±2℃", "2", NULL);
+      addslider ("autoe autor", "Auto target", "autot", tmin, tmax, get_temp_step ());
+#ifdef ELA
+      if (bleenable && !*password)
+      {                         // BLE setting needs password
+         addnote ("autoe autor", "External temperature reference for auto temp.");
+         settings_autob (req);
+      }
+#endif
       if (!*password)
       {                         // Timed controls need password
-         addnote ("Auto timed on and off, and auto temperature on/off.");
-         revk_web_send (req, "<tr>");
+         addnote ("autoe", "Auto timed on and off, and auto temperature on/off.");
+         tr ("autoe");
          addtime ("On", "auto1");
          addtime ("Off", "auto0");
          addb ("Auto ⏼", "autop", "Auto\non/off");
       }
-      revk_web_send (req, "</tr>");
-#ifdef ELA
-      if (bleenable && !*password)
-      {                         // BLE setting needs password
-         addnote ("External temperature reference for Faikout-auto mode");
-         settings_autob (req);
-      }
-#endif
+      tre ();
       revk_web_send (req, "</table></div>");
    }
    revk_web_send (req, "</form>"        //
                   "</div>"      //
+                  "<style>"     //
+                  ".xautoe .autoe,"        //
+                  ".xautor .autor,"        //
+                  ".xslave .slave,"        //
+                  ".xloopback .loopback,"        //
+                  ".xantifreeze .antifreeze,"        //
+                  ".xcontrol .control,"        //
+                  ".isremote .remote,"        //
+                  ".xoffline .offline {display:none;}"   //
+                  "</style>"    //
                   "<script>"    //
                   "var ws=0;"   //
                   "var reboot=0;"       //
                   "function cf(v){return %s;}"  //
                   "function g(n){return document.getElementById(n);};"  //
                   "function b(n,v){var d=g(n);if(d)d.checked=v;}"       //
-                  "function h(n,v){var d=g(n);if(d)d.style.display=v?'':'none';}"  //
                   "function s(n,v){var d=g(n);if(d)d.textContent=v;}"   //
                   "function n(n,v){var d=g(n);if(d)d.value=v;}" //
                   "function e(n,v){var d=g(n+v);if(d)d.checked=true;}"  //
@@ -2019,12 +2047,16 @@ web_control (httpd_req_t *req)
                   "ws.onerror=function(v){ws.close();};"        //
                   "ws.onmessage=function(v){"   //
                   "o=JSON.parse(v.data);"       //
+                  "c=(!o.online&&o.protocol!='loopback'?'':'xoffline ')+" //
+                  "(o.protocol=='loopback'?'':'xloopback ')+"   //
+                  "(o.control?'':'xcontrol ')+" //
+                  "(o.slave?'':'xslave ')+"     //
+                  "(o.remote?'isremote ':'')+"   //
+                  "(o.antifreeze?'':'xantifreeze ')+"   //
+                  "(o.autor>0?'':'xautor ')+"   //
+                  " (o.autoe?'':'xautoe ');"    //
+                  "if(document.F.className!=c)document.F.className=c;"  //
                   "b('power',o.power);" //
-                  "h('offline',!o.online&&o.protocol!='loopback');"     //
-                  "h('loopback',o.protocol=='loopback');"       //
-                  "h('control',o.control);"     //
-                  "h('slave',o.slave);" //
-                  "h('remote',!o.remote);"      //
                   "b('swingh',o.swingh);"       //
                   "b('swingv',o.swingv);"       //
                   "b('econo',o.econo);" //
@@ -2051,7 +2083,6 @@ web_control (httpd_req_t *req)
                   "s('Ttemp',(o.temp?cf(o.temp):'---')+(o.control?'✷':''));"  //
                   "b('autop',o.autop);" //
                   "b('autoe',o.autoe);" //
-		  "h('rowautot',o.autor>0);" //
                   "e('autor',o.autor);" //
                   "n('autob',o.autob);" //
                   "n('auto0',o.auto0);" //
@@ -2061,7 +2092,7 @@ web_control (httpd_req_t *req)
                   "s('0/1',(o.slave?'❋':'')+(o.antifreeze?'❄':''));"        //
                   "s('Fan',(o.fanrpm?o.fanrpm+'RPM':'')+(o.antifreeze?'❄':'')+(o.control?'✷':''));" //
                   "e('fan',o.fan);"     //
-                  "if(o.shutdown){reboot=true;s('shutdown','Restarting: '+o.shutdown);h('shutdown',true);};"    //
+                  "if(o.shutdown){reboot=true;s('shutdown','Restarting: '+o.shutdown);g('shutdown').style.display='';};"        //
                   "};};c();"    //
                   "setInterval(function() {if(!ws)c();else ws.send('');},1000);"        //
                   "</script>", fahrenheit ? "Math.round(10*((v*9/5)+32))/10+'℉'" : "v+'℃'");
@@ -3112,8 +3143,8 @@ uart_setup (void)
       err = cn_wired_driver_install (rx.num, tx.num, invert_rx_line (), invert_tx_line ());
    } else
    {
-#ifdef CONFIG_IDF_TARGET_ESP32C5 // before ESP-IDF v5.5.2 don't install UART driver several times. See https://github.com/espressif/esp-idf/issues/18011
-      if (!err && !uart_is_driver_installed(uart))
+#ifdef CONFIG_IDF_TARGET_ESP32C5        // before ESP-IDF v5.5.2 don't install UART driver several times. See https://github.com/espressif/esp-idf/issues/18011
+      if (!err && !uart_is_driver_installed (uart))
          err = uart_driver_install (uart, 1024, 0, 0, NULL, 0);
 #endif
       uart_config_t uart_config = {
@@ -3139,7 +3170,7 @@ uart_setup (void)
             i |= UART_SIGNAL_TXD_INV;
          err = uart_set_line_inverse (uart, i);
       }
-#ifndef CONFIG_IDF_TARGET_ESP32C5 // before ESP-IDF v5.5.2 don't install UART driver several times. See https://github.com/espressif/esp-idf/issues/18011
+#ifndef CONFIG_IDF_TARGET_ESP32C5       // before ESP-IDF v5.5.2 don't install UART driver several times. See https://github.com/espressif/esp-idf/issues/18011
       if (!err)
          err = uart_driver_install (uart, 1024, 0, 0, NULL, 0);
 #endif
@@ -4282,7 +4313,7 @@ app_main ()
       // in detection phase.
       if (proto_type () == PROTO_TYPE_CN_WIRED)
          cn_wired_driver_delete ();
-#ifndef CONFIG_IDF_TARGET_ESP32C5 // before ESP-IDF v5.5.2 don't install/delete UART driver several times. See https://github.com/espressif/esp-idf/issues/18011
+#ifndef CONFIG_IDF_TARGET_ESP32C5       // before ESP-IDF v5.5.2 don't install/delete UART driver several times. See https://github.com/espressif/esp-idf/issues/18011
       else
          uart_driver_delete (uart);
 #endif
