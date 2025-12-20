@@ -1820,9 +1820,9 @@ web_control (httpd_req_t *req)
 {
    web_head (req, hostname == revk_id ? revk_app : hostname);
    revk_web_send (req, "<div id=top class=off><form name=F><table id=live>");
-   void addh (const char *tag)
+   void addh (const char *field,const char *tag)
    {                            // Head (well, start of row)
-      revk_web_send (req, "<tr><td align=right>%s</td>", tag);
+      revk_web_send (req, "<tr id=row%s><td align=right>%s</td>", field, tag);
    }
    void addf (const char *tag)
    {                            // Foot (well, end of row)
@@ -1830,7 +1830,7 @@ web_control (httpd_req_t *req)
    }
    void add (const char *tag, const char *field, ...)
    {
-      addh (tag);
+      addh (field,tag);
       va_list ap;
       va_start (ap, field);
       int n = 0;
@@ -1865,7 +1865,7 @@ web_control (httpd_req_t *req)
    }
    void addslider (const char *tag, const char *field, int min, int max, const char *step)
    {
-      addh (tag);
+      addh (field,tag);
       revk_web_send (req,
                      "<td colspan=4><a onclick=\"if(+document.F.%s.value>%d)w('%s',+document.F.%s.value-%s);\" class=pn>-</a><input type=range class=temp min=%d max=%d step=%s id=%s onchange=\"w('%s',+this.value);\"><a onclick=\"if(+document.F.%s.value<%d)w('%s',+document.F.%s.value+%s);\" class=pn>+</a></td><td><button id=\"T%s\" onclick=\"return false;\"></button></td>",
                      field, min, field, field, step, min, max, step, field, field, field, max, field, field, step, field);
@@ -1970,24 +1970,23 @@ web_control (httpd_req_t *req)
                         "<td align=right>%s</td><td><input class=time type=time title=\"Set 00:00 to disable\" id='%s' onchange=\"w('%s',this.value);\"></td>",
                         tag, field, field);
       }
-      revk_web_send (req,
-                     "<div id=remote><hr><p>Faikout-auto mode (sets hot/cold and temp high/low to aim for the following target).</p><table>");
+      revk_web_send (req, "<div id=remote><hr><table>");
       if (!*password)
       {
          revk_web_send (req, "<tr>");
-         addb ("Enable", "autoe", "Enable auto");
-         addb ("Auto ⏼", "autop", "Auto\non/off");
-         revk_web_send (req, "<td>(temp)</td></tr>");
+         addb ("Enable", "autoe", "Enable");
+         revk_web_send (req, "<td colspan=3>Auto functions...</td>");
       }
-      add ("Range", "autor", "Off", "0", fahrenheit ? "±0.9℉" : "±½℃", "0.5", fahrenheit ? "±1.8℉" : "±1℃", "1",
-           fahrenheit ? "±3.6℉" : "±2℃", "2", NULL);
-      addslider ("Target", "autot", tmin, tmax, get_temp_step ());
+      add ("Auto temp", "autor", "Off", "0", fahrenheit ? "±0.9℉" : "±½℃", "0.5", fahrenheit ? "±1.8℉" : "±1℃",
+           "1", fahrenheit ? "±3.6℉" : "±2℃", "2", NULL);
+      addslider ("Auto target", "autot", tmin, tmax, get_temp_step ());
       if (!*password)
       {                         // Timed controls need password
-         addnote ("Timed on and off.");
+         addnote ("Auto timed on and off, and auto temperature on/off.");
          revk_web_send (req, "<tr>");
          addtime ("On", "auto1");
          addtime ("Off", "auto0");
+         addb ("Auto ⏼", "autop", "Auto\non/off");
       }
       revk_web_send (req, "</tr>");
 #ifdef ELA
@@ -2007,7 +2006,7 @@ web_control (httpd_req_t *req)
                   "function cf(v){return %s;}"  //
                   "function g(n){return document.getElementById(n);};"  //
                   "function b(n,v){var d=g(n);if(d)d.checked=v;}"       //
-                  "function h(n,v){var d=g(n);if(d)d.style.display=v?'block':'none';}"  //
+                  "function h(n,v){var d=g(n);if(d)d.style.display=v?'':'none';}"  //
                   "function s(n,v){var d=g(n);if(d)d.textContent=v;}"   //
                   "function n(n,v){var d=g(n);if(d)d.value=v;}" //
                   "function e(n,v){var d=g(n+v);if(d)d.checked=true;}"  //
@@ -2052,6 +2051,7 @@ web_control (httpd_req_t *req)
                   "s('Ttemp',(o.temp?cf(o.temp):'---')+(o.control?'✷':''));"  //
                   "b('autop',o.autop);" //
                   "b('autoe',o.autoe);" //
+		  "h('rowautot',o.autor>0);" //
                   "e('autor',o.autor);" //
                   "n('autob',o.autob);" //
                   "n('auto0',o.auto0);" //
