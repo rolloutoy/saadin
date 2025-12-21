@@ -11,6 +11,7 @@ static const char TAG[] = "Faikout";
 #include "esp_http_server.h"
 #include <math.h>
 #include "mdns.h"
+#include "faikout_i2c.h"
 #ifdef CONFIG_BT_NIMBLE_ENABLED
 #include "bleenv.h"
 #endif
@@ -3356,6 +3357,12 @@ app_main ()
    else
       esp_wifi_set_ps (WIFI_PS_NONE);
 #endif
+#ifdef FAIKOUT_I2C_SENSOR
+   if(i2cen && !faikout_i2c_init(i2cslsda, i2cslscl, i2cmasda, i2cmassl)) // init I2C master and slave
+   {
+      faikout_i2c_start(); // start to reply to Daikin motherboard
+   }
+#endif
    if (!uart_enabled ())
    {                            // Mock for interface development and testing
       ESP_LOGE (TAG, "Dummy operational mode (no tx/rx set)");
@@ -3528,6 +3535,46 @@ app_main ()
                static const uint8_t map[] = { 2, 5, 4, 1, 0, 0, 0, 3 }; // FHCA456D Unspecified,Auto,Fan,Dry,Cool,Heat,Reserved,Faikout
                bleenv_faikout (hostname, daikin.home, daikin.temp, daikin.temp, daikin.power, daikin.antifreeze | daikin.slave,
                                map[daikin.mode], daikin.fan + 1);
+            }
+         }
+#endif
+#ifdef FAIKOUT_I2C_SENSOR
+         if(i2cen)
+         {
+            if(faikout_i2c_is_init_done() || !faikout_i2c_init(i2cslsda, i2cslscl, i2cmasda, i2cmassl)) // first init probably failed, try again...
+            {
+               if(faikout_i2c_is_started() || !faikout_i2c_start()) // not yet started, start it...
+               {
+                  // Start by reading inlet sensor values
+                  float inlet_temp, inlet_hum;
+                  bool inlet_valid_values = false;
+                  if(!faikout_i2c_get_inlet_sensor_values(&inlet_temp, &inlet_hum))
+                  {
+                     // we have inlet values
+                     inlet_valid_values = true;
+                  }
+                  // let's check if we have env sensor values to use...
+                  if(daikin.status_known & CONTROL_env) // temp
+                  {
+                     if(daikin.heat)
+                     {
+                        inlet_temp = daikin.env + (float) i2chtemp / i2chtemp_scale; // add offset for heating mode
+                     }
+                     else
+                     {
+                        inlet_temp = daikin.env + (float) i2cctemp / i2cctemp_scale; // add offset for cooling mode
+                     }
+                  }
+                  if(daikin.status_known & CONTROL_hum) // hum
+                  {
+                     inlet_hum = daikin.hum;
+                  }
+                  if (inlet_valid_values || ((daikin.status_known & CONTROL_env) && (daikin.status_known & CONTROL_hum)))
+                  {
+                     // we have both temp and hum, let's provide them to Daikin motherboard!
+                     faikout_i2c_set_external_sensor_values(inlet_temp, inlet_hum);
+                  }
+               }
             }
          }
 #endif
