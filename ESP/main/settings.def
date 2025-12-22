@@ -126,3 +126,24 @@ gpio	rx	-27								// Rx
 #endif
 #endif
 
+#if CONFIG_SOC_I2C_NUM > 1 // we need 2 I2C bus for master and slave
+bit     i2c.en      0                                       // Enable I2C temp and humidity sensor spoofing
+s8      i2c.htemp	4.0     .live   .decimal=1  .unit="℃"   // Offset to add to external sensor temp to reflect inlet temp when heating
+s8      i2c.ctemp	-1.5    .live   .decimal=1  .unit="℃"   // Offset to add to external sensor temp to reflect inlet temp when cooling
+#if defined(CONFIG_IDF_TARGET_ESP32C5)
+gpio    i2c.slsda    9                                      // GPIO to use for I2C slave with Daikin board - SDA
+gpio    i2c.slscl   10                                      // GPIO to use for I2C slave with Daikin board - SCL
+gpio    i2c.masda    2      .fix .hide                      // GPIO to use for I2C master with inlet sensor - SDA - always LP I2C pins on this target
+gpio    i2c.massl    3      .fix .hide                      // GPIO to use for I2C master with inlet sensor - SCL - always LP I2C pins on this target
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+gpio    i2c.slsda    2                                      // GPIO to use for I2C slave with Daikin board - SDA
+gpio    i2c.slscl    3                                      // GPIO to use for I2C slave with Daikin board - SCL
+gpio    i2c.masda    6      .fix .hide                      // GPIO to use for I2C master with inlet sensor - SDA - always LP I2C pins on this target
+gpio    i2c.massl    7      .fix .hide                      // GPIO to use for I2C master with inlet sensor - SCL - always LP I2C pins on this target
+#else
+gpio    i2c.slsda    9                                      // GPIO to use for I2C slave with Daikin board - SDA
+gpio    i2c.slscl   10                                      // GPIO to use for I2C slave with Daikin board - SCL
+gpio    i2c.masda   11                                      // GPIO to use for I2C master with inlet sensor - SDA
+gpio    i2c.massl   12                                      // GPIO to use for I2C master with inlet sensor - SCL
+#endif
+#endif
