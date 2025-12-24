@@ -1965,7 +1965,7 @@ web_control (httpd_req_t *req)
          addb ("🙆", "sensor", "Sensor\nmode");
       if (daikin.status_known & CONTROL_quiet)
          addb ("🤫", "quiet", "Quiet\noutdoor");
-      tre();
+      tre ();
    }
    revk_web_send (req, "</table>"       //
                   "<p class=offline><b>System is offline (no data tx/rx).</b></p>"      //
@@ -2021,14 +2021,14 @@ web_control (httpd_req_t *req)
    revk_web_send (req, "</form>"        //
                   "</div>"      //
                   "<style>"     //
-                  ".xautoe .autoe,"        //
-                  ".xautor .autor,"        //
-                  ".xslave .slave,"        //
-                  ".xloopback .loopback,"        //
-                  ".xantifreeze .antifreeze,"        //
-                  ".xcontrol .control,"        //
-                  ".isremote .remote,"        //
-                  ".xoffline .offline {display:none;}"   //
+                  ".xautoe .autoe,"     //
+                  ".xautor .autor,"     //
+                  ".xslave .slave,"     //
+                  ".xloopback .loopback,"       //
+                  ".xantifreeze .antifreeze,"   //
+                  ".xcontrol .control," //
+                  ".isremote .remote,"  //
+                  ".xoffline .offline {display:none;}"  //
                   "</style>"    //
                   "<script>"    //
                   "var ws=0;"   //
@@ -2048,11 +2048,11 @@ web_control (httpd_req_t *req)
                   "ws.onerror=function(v){ws.close();};"        //
                   "ws.onmessage=function(v){"   //
                   "o=JSON.parse(v.data);"       //
-                  "c=(!o.online&&o.protocol!='loopback'?'':'xoffline ')+" //
+                  "c=(!o.online&&o.protocol!='loopback'?'':'xoffline ')+"       //
                   "(o.protocol=='loopback'?'':'xloopback ')+"   //
                   "(o.control?'':'xcontrol ')+" //
                   "(o.slave?'':'xslave ')+"     //
-                  "(o.remote?'isremote ':'')+"   //
+                  "(o.remote?'isremote ':'')+"  //
                   "(o.antifreeze?'':'xantifreeze ')+"   //
                   "(o.autor>0?'':'xautor ')+"   //
                   " (o.autoe?'':'xautoe ');"    //
@@ -3088,7 +3088,7 @@ revk_state_extra (jo_t j)
    if (daikin.status_known & CONTROL_mode)
    {
       const char *modes[] = { "fan_only", "heat", "cool", "heat_cool", "4", "5", "6", "dry" };  // FHCA456D
-      jo_string (j, "mode", daikin.power ? autoe && autor && !lockmode ? "heat_cool" : modes[daikin.mode] : "off");     // If we are controlling, it is auto
+      jo_string (j, "mode", daikin.power ? autoe && autor && !lockmode && !noauto ? "heat_cool" : modes[daikin.mode] : "off");  // If we are controlling, it is auto (if we have auto)
    }
    if (!nohvacaction)
       jo_string (j, "action", hvac_action[daikin.action]);
@@ -3358,9 +3358,9 @@ app_main ()
       esp_wifi_set_ps (WIFI_PS_NONE);
 #endif
 #ifdef FAIKOUT_I2C_SENSOR
-   if(i2cen && !faikout_i2c_init(i2cslsda, i2cslscl, i2cmasda, i2cmassl)) // init I2C master and slave
+   if (i2cen && !faikout_i2c_init (i2cslsda, i2cslscl, i2cmasda, i2cmassl))     // init I2C master and slave
    {
-      faikout_i2c_start(); // start to reply to Daikin motherboard
+      faikout_i2c_start ();     // start to reply to Daikin motherboard
    }
 #endif
    if (!uart_enabled ())
@@ -3539,40 +3539,40 @@ app_main ()
          }
 #endif
 #ifdef FAIKOUT_I2C_SENSOR
-         if(i2cen)
+         if (i2cen)
          {
-            if(faikout_i2c_is_init_done() || !faikout_i2c_init(i2cslsda, i2cslscl, i2cmasda, i2cmassl)) // first init probably failed, try again...
+            if (faikout_i2c_is_init_done () || !faikout_i2c_init (i2cslsda, i2cslscl, i2cmasda, i2cmassl))      // first init probably failed, try again...
             {
-               if(faikout_i2c_is_started() || !faikout_i2c_start()) // not yet started, start it...
+               if (faikout_i2c_is_started () || !faikout_i2c_start ())  // not yet started, start it...
                {
                   // Start by reading inlet sensor values
-                  float inlet_temp, inlet_hum;
+                  float inlet_temp,
+                    inlet_hum;
                   bool inlet_valid_values = false;
-                  if(!faikout_i2c_get_inlet_sensor_values(&inlet_temp, &inlet_hum))
+                  if (!faikout_i2c_get_inlet_sensor_values (&inlet_temp, &inlet_hum))
                   {
                      // we have inlet values
                      inlet_valid_values = true;
                   }
                   // let's check if we have env sensor values to use...
-                  if(daikin.status_known & CONTROL_env) // temp
+                  if (daikin.status_known & CONTROL_env)        // temp
                   {
-                     if(daikin.heat)
+                     if (daikin.heat)
                      {
-                        inlet_temp = daikin.env + (float) i2chtemp / i2chtemp_scale; // add offset for heating mode
-                     }
-                     else
+                        inlet_temp = daikin.env + (float) i2chtemp / i2chtemp_scale;    // add offset for heating mode
+                     } else
                      {
-                        inlet_temp = daikin.env + (float) i2cctemp / i2cctemp_scale; // add offset for cooling mode
+                        inlet_temp = daikin.env + (float) i2cctemp / i2cctemp_scale;    // add offset for cooling mode
                      }
                   }
-                  if(daikin.status_known & CONTROL_hum) // hum
+                  if (daikin.status_known & CONTROL_hum)        // hum
                   {
                      inlet_hum = daikin.hum;
                   }
                   if (inlet_valid_values || ((daikin.status_known & CONTROL_env) && (daikin.status_known & CONTROL_hum)))
                   {
                      // we have both temp and hum, let's provide them to Daikin motherboard!
-                     faikout_i2c_set_external_sensor_values(inlet_temp, inlet_hum);
+                     faikout_i2c_set_external_sensor_values (inlet_temp, inlet_hum);
                   }
                }
             }
