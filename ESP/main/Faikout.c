@@ -2303,29 +2303,34 @@ static esp_err_t
 legacy_web_set_demand_control (httpd_req_t *req)
 {
    const char *err = NULL;
-   jo_t j = revk_web_query (req);
-   if (!j)
-      err = "Query failed";
+   if (nodemand)
+      err = "nodemand set";
    else
    {
-      int on = 0,
-         demand = 100;
-      if (jo_find (j, "en_demand"))
+      jo_t j = revk_web_query (req);
+      if (!j)
+         err = "Query failed";
+      else
       {
-         char *v = jo_strdup (j);
-         if (v)
-            on = atoi (v);
-         free (v);
+         int on = 0,
+            demand = 50;        // Pick a default if no max_pow
+         if (jo_find (j, "en_demand"))
+         {
+            char *v = jo_strdup (j);
+            if (v)
+               on = atoi (v);
+            free (v);
+         }
+         if (jo_find (j, "max_pow"))
+         {
+            char *v = jo_strdup (j);
+            if (v)
+               demand = atoi (v);
+            free (v);
+         }
+         daikin_set_i_e (err, demand, on ? demand : 100);
+         jo_free (&j);
       }
-      if (jo_find (j, "max_pow"))
-      {
-         char *v = jo_strdup (j);
-         if (v)
-            demand = atoi (v);
-         free (v);
-      }
-      daikin_set_i_e (err, demand, on ? demand : 100);
-      jo_free (&j);
    }
    return legacy_simple_response (req, err);
 }
