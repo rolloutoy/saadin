@@ -3872,7 +3872,7 @@ app_main ()
                if (daikin.control_changed & (CONTROL_demand | CONTROL_econo))
                {                // D7
                   xSemaphoreTake (daikin.mutex, portMAX_DELAY);
-                  temp[0] = '0' + 100 - daikin.demand;
+                  temp[0] = '0' + (nodemand ? 0 : 100 - daikin.demand);
                   temp[1] = '0' + (daikin.econo ? 2 : 0);
                   temp[2] = '0';
                   temp[3] = '0';
