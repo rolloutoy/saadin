@@ -3386,11 +3386,17 @@ app_main ()
    {                            // Main loop
       // We're (re)starting comms from scratch, so set "talking" flag.
       // This signals protocol integrity and actually enables communicating with the AC.
+      static uint8_t backoff = 1;
       if (!b.protocol_set && !b.loopback)
       {                         // Scanning protocols - more to next protocol
          proto++;
          if (proto >= PROTO_TYPE_MAX * PROTO_SCALE)
+         {                      // And again... exponential backoff in case a/c gets upset
             proto = 0;
+            if (backoff <= 120)
+               backoff *= 2;
+            sleep (backoff);
+         }
          if (proto_type () == PROTO_TYPE_CN_WIRED)
          {
             uint8_t invert_mask;
@@ -3414,7 +3420,8 @@ app_main ()
             usleep (1000);      // Yeh, silly, but someone could configure to do nothing
             continue;
          }
-      }
+      } else
+         backoff = 1;
       daikin.talking = 1;
       if (uart_enabled ())
       {                         // Poke UART
