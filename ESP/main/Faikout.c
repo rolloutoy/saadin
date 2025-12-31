@@ -20,6 +20,10 @@ static const char TAG[] = "Faikout";
 #include "daikin_s21.h"
 #include "halib.h"
 
+#if defined(CONFIG_IDF_TARGET_ESP32C5) && (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 5, 2))
+#error Need ESP-IDF >= 5.5.2 for ESP32-C5 target (includes fix for https://github.com/espressif/esp-idf/issues/18011)
+#endif
+
 #ifdef  CONFIG_IDF_TARGET_ESP32S3
 #include <driver/usb_serial_jtag.h>
 #else
@@ -3149,10 +3153,6 @@ uart_setup (void)
       err = cn_wired_driver_install (rx.num, tx.num, invert_rx_line (), invert_tx_line ());
    } else
    {
-#ifdef CONFIG_IDF_TARGET_ESP32C5        // before ESP-IDF v5.5.2 don't install UART driver several times. See https://github.com/espressif/esp-idf/issues/18011
-      if (!err && !uart_is_driver_installed (uart))
-         err = uart_driver_install (uart, 1024, 0, 0, NULL, 0);
-#endif
       uart_config_t uart_config = {
          .baud_rate = (proto_type () == PROTO_TYPE_S21) ? 2400 : 9600,
          .data_bits = UART_DATA_8_BITS,
@@ -3176,10 +3176,8 @@ uart_setup (void)
             i |= UART_SIGNAL_TXD_INV;
          err = uart_set_line_inverse (uart, i);
       }
-#ifndef CONFIG_IDF_TARGET_ESP32C5       // before ESP-IDF v5.5.2 don't install UART driver several times. See https://github.com/espressif/esp-idf/issues/18011
       if (!err)
          err = uart_driver_install (uart, 1024, 0, 0, NULL, 0);
-#endif
       if (!err)
          err = uart_set_rx_full_threshold (uart, 1);
       if (!err)
@@ -4365,9 +4363,7 @@ app_main ()
       // in detection phase.
       if (proto_type () == PROTO_TYPE_CN_WIRED)
          cn_wired_driver_delete ();
-#ifndef CONFIG_IDF_TARGET_ESP32C5       // before ESP-IDF v5.5.2 don't install/delete UART driver several times. See https://github.com/espressif/esp-idf/issues/18011
       else
          uart_driver_delete (uart);
-#endif
    }
 }
