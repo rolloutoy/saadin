@@ -3395,9 +3395,9 @@ app_main ()
          if (proto >= PROTO_TYPE_MAX * PROTO_SCALE)
          {                      // And again... exponential backoff in case a/c gets upset
             proto = 0;
-            if (backoff <= 120)
-               backoff *= 2;
-            sleep (backoff);
+            if (backoff < 11)
+               backoff++;
+            usleep (146484LL << backoff);
          }
          if (proto_type () == PROTO_TYPE_CN_WIRED)
          {
