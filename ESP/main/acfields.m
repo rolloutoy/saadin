@@ -39,6 +39,8 @@ t(inlet)
 t(liquid)
 i(anglev)
 t(hum)
-i(Wh)
+i(Whoutside)
+i(Whheating)
+i(Whcooling)
 
 #include "accontrols.m"

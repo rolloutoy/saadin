@@ -21,7 +21,7 @@ static const char TAG[] = "Faikout";
 #include "halib.h"
 
 #if defined(CONFIG_IDF_TARGET_ESP32C5) && (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 5, 2))
-#error Need ESP-IDF >= 5.5.2 for ESP32-C5 target (includes fix for https://github.com/espressif/esp-idf/issues/18011)
+#error Need ESP-IDF >= 5.5.2 for ESP32-C5 target (includes fix for https:       //github.com/espressif/esp-idf/issues/18011)
 #endif
 
 #ifdef  CONFIG_IDF_TARGET_ESP32S3
@@ -88,6 +88,7 @@ struct
    poll_t FQ;
    poll_t FS;
    poll_t FT;
+   poll_t FU04;
    poll_t RD;
    poll_t RG;
    poll_t RI;
@@ -655,7 +656,15 @@ daikin_s21_response (uint8_t cmd, uint8_t cmd2, int len, uint8_t *payload)
          }
          break;
       case 'M':                // Power meter
-         report_int (Wh, s21_decode_hex_sensor (payload) * 100);        // 100Wh units
+         if (check_length (cmd, cmd2, len, 4, payload))
+            report_int (Whoutside, s21_decode_hex_sensor (payload) * 100);      // 100Wh units
+         break;
+      case 'U':                // Per device power
+         if (check_length (cmd, cmd2, len, 8, payload))
+         {
+            report_int (Whcooling, s21_decode_hex_sensor (payload) * 100);      // 100Wh units
+            report_int (Whheating, s21_decode_hex_sensor (payload + 4) * 100);  // 100Wh units
+         }
          break;
       }
    if (cmd == 'S')
@@ -2591,9 +2600,9 @@ static esp_err_t
 legacy_web_get_year_power (httpd_req_t *req)
 {
    jo_t j = legacy_ok ();
-   jo_stringf (j, "curr_year_heat", "%u/0/0/0/0/0/0/0/0/0/0/0", daikin.Wh / 100);       // Bodge, does not resent each year yet
+   jo_stringf (j, "curr_year_heat", "%u/0/0/0/0/0/0/0/0/0/0/0", daikin.Whheating / 100);        // Bodge, does not resent each year yet
    jo_string (j, "prev_year_heat", "0/0/0/0/0/0/0/0/0/0/0/0");
-   jo_string (j, "curr_year_cool", "0/0/0/0/0/0/0/0/0/0/0/0");
+   jo_stringf (j, "curr_year_cool", "%u/0/0/0/0/0/0/0/0/0/0/0", daikin.Whcooling / 100);
    jo_string (j, "prevyear_cool", "0/0/0/0/0/0/0/0/0/0/0/0");
    return legacy_send (req, &j);
 }
@@ -3010,23 +3019,30 @@ send_ha_config (void)
       free (topic);
    }
 #endif
-   if (asprintf (&topic, "%s/sensor/%senergy/config", topicha, revk_id) >= 0)
+   void addwh (uint64_t ok, const char *tag, const char *name, const char *icon)
    {
-      if (!(daikin.status_known & CONTROL_Wh))
-         revk_mqtt_send_str (topic);
-      else
+      if (asprintf (&topic, "%s/sensor/%s%s/config", topicha, revk_id, tag) >= 0)
       {
-         jo_t j = make ("energy", NULL);
-         jo_string (j, "name", "Lifetime energy");
-         jo_string (j, "dev_cla", "energy");
-         jo_string (j, "stat_t", hastatus);
-         jo_string (j, "unit_of_meas", "kWh");
-         jo_string (j, "state_class", "total_increasing");
-         jo_stringf (j, "val_tpl", "{{(value_json.Wh|float)/1000}}");
-         revk_mqtt_send (NULL, 1, topic, &j);
+         if (!ok)
+            revk_mqtt_send_str (topic);
+         else
+         {
+            jo_t j = make ("energy", icon);
+            jo_string (j, "name", name);
+            jo_string (j, "dev_cla", "energy");
+            jo_string (j, "stat_t", hastatus);
+            jo_string (j, "unit_of_meas", "kWh");
+            jo_string (j, "state_class", "total_increasing");
+            jo_stringf (j, "val_tpl", "{{(value_json.Wh|float)/1000}}");
+            revk_mqtt_send (NULL, 1, topic, &j);
+         }
+         free (topic);
       }
-      free (topic);
    }
+   addwh (daikin.status_known & CONTROL_Whoutside, "energy", "Lifetime outside energy", NULL);
+   addwh (daikin.status_known & CONTROL_Whheating, "energyheat", "Lifetime heating energy", NULL);
+   addwh (daikin.status_known & CONTROL_Whcooling, "energycool", "Lifetime cooling energy", NULL);
+
    // TODO change above over gradually to new HA library stuff to make way neater
    ha_config_sensor ("ram",.name = "RAM",.field = "mem",.unit = "B",.delete = !haram);
    ha_config_sensor ("spi",.name = "PSRAM",.field = "spi",.unit = "B",.delete = !haram);
@@ -3072,8 +3088,12 @@ revk_state_extra (jo_t j)
       jo_litf (j, "liquid", "%.2f", daikin.liquid);
    if (daikin.status_known & CONTROL_demand)
       jo_int (j, "demand", daikin.demand);
-   if ((daikin.status_known & CONTROL_Wh) && daikin.Wh)
-      jo_int (j, "Wh", daikin.Wh);
+   if ((daikin.status_known & CONTROL_Whoutside) && daikin.Whoutside)
+      jo_int (j, "Wh", daikin.Whoutside);
+   if ((daikin.status_known & CONTROL_Whheating) && daikin.Whheating)
+      jo_int (j, "Wh-heat", daikin.Whheating);
+   if ((daikin.status_known & CONTROL_Whcooling) && daikin.Whcooling)
+      jo_int (j, "Wh-cool", daikin.Whcooling);
    if (daikin.status_known & CONTROL_fanrpm)
    {
       if (hafanrpm)
@@ -3695,7 +3715,6 @@ app_main ()
                   poll (F, G, 0,);
                if (s21extra)
                   poll (F, K, 0,);
-               poll (F, M, 0,);
                if (s21extra)
                   poll (F, N, 0,);
                if (s21extra)
@@ -3707,7 +3726,6 @@ app_main ()
                if (s21extra)
                   poll (F, T, 0,);
                //if(s21extra)poll (F, U, 2, 02);
-               //if(s21extra)poll (F, U, 2, 04);
                if (!nohourly)
                {
                   uint8_t n = ((time (0) / 3600) & 1);
@@ -3720,8 +3738,9 @@ app_main ()
                if (s21.rgfan)
                   poll (R, G, 0,);      // Needed to confirm fan changes.
 
-               static uint8_t rcycle = 0;       // R polling one per cycle
-               switch (rcycle++)
+               // The following are polled one per cycle - this is mainly for read only status/meters
+               static uint8_t slowcycle = 0;
+               switch (slowcycle++)
                {
                case 0:
                   poll (R, H, 0,);
@@ -3740,40 +3759,38 @@ app_main ()
                   break;
                case 5:
                   poll (R, N, 0,);      // Angle
-                  if (!s21extra && s21.rgfan)
-                  {
-                     rcycle = 0;        // End as RG done anyway
-                     if (daikin.talking)
-                        b.startup = 0;  // End of startup
-                  }
                   break;
                case 6:
                   if (!s21.rgfan)
-                     poll (R, G, 0,);   // Fan
-                  if (!s21extra)
                   {
-                     rcycle = 0;        // End of normal R polling - the following are extra/debug only
-                     if (daikin.talking)
-                        b.startup = 0;  // End of startup
+                     poll (R, G, 0,);   // Fan (but only if we did not already do this to confirm fan change
                      break;
                   }
-                  if (s21.rgfan)
-                     break;
-                  rcycle++;
+                  slowcycle++;  // Skipped step
                   __attribute__((fallthrough));
                case 7:
-                  poll (R, M, 0,);
+                  poll (F, M, 0,);      // Outside power
                   break;
                case 8:
-                  poll (R, X, 0,);
+                  poll (F, U, 2, 04);   // Inside power
+                  // From here on are all s21extra
+                  if (!s21extra)
+                     slowcycle = 0;
                   break;
                case 9:
+                  poll (R, M, 0,);
+                  break;
+               case 10:
+                  poll (R, X, 0,);
+                  break;
+               case 11:
                   poll (R, D, 0,);
-                  rcycle = 0;   // End of extra/debug cycle
-                  if (daikin.talking)
-                     b.startup = 0;     // End of startup
+                  // End
+                  slowcycle = 0;        // End of extra/debug cycle
                   break;
                }
+               if (!slowcycle && daikin.talking)
+                  b.startup = 0;        // End of startup
 
                if (!s21.RH.bad && !s21.Ra.bad)
                   s21.F9.bad = 1;       // Don't use F9
