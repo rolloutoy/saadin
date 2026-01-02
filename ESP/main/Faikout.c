@@ -3033,7 +3033,7 @@ send_ha_config (void)
             jo_string (j, "stat_t", hastatus);
             jo_string (j, "unit_of_meas", "kWh");
             jo_string (j, "state_class", "total_increasing");
-            jo_stringf (j, "val_tpl", "{{(value_json.Wh|float)/1000}}");
+            jo_stringf (j, "val_tpl", "{{(value_json.%s|float)/1000}}",tag);
             revk_mqtt_send (NULL, 1, topic, &j);
          }
          free (topic);
@@ -3089,11 +3089,11 @@ revk_state_extra (jo_t j)
    if (daikin.status_known & CONTROL_demand)
       jo_int (j, "demand", daikin.demand);
    if ((daikin.status_known & CONTROL_Whoutside) && daikin.Whoutside)
-      jo_int (j, "Wh", daikin.Whoutside);
+      jo_int (j, "energy", daikin.Whoutside);
    if ((daikin.status_known & CONTROL_Whheating) && daikin.Whheating)
-      jo_int (j, "Wh-heat", daikin.Whheating);
+      jo_int (j, "energyheat", daikin.Whheating);
    if ((daikin.status_known & CONTROL_Whcooling) && daikin.Whcooling)
-      jo_int (j, "Wh-cool", daikin.Whcooling);
+      jo_int (j, "energycool", daikin.Whcooling);
    if (daikin.status_known & CONTROL_fanrpm)
    {
       if (hafanrpm)
