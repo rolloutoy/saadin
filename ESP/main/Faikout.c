@@ -660,10 +660,10 @@ daikin_s21_response (uint8_t cmd, uint8_t cmd2, int len, uint8_t *payload)
             report_int (Whoutside, s21_decode_hex_sensor (payload) * 100);      // 100Wh units
          break;
       case 'U':                // Per device power
-         if (check_length (cmd, cmd2, len, 16, payload))
-         {
-            report_int (Whcooling, s21_decode_hex_sensor (payload) * 100);      // 100Wh units
-            report_int (Whheating, s21_decode_hex_sensor (payload + 8) * 100);  // 100Wh units
+         if (payload[0] == '0' && payload[1] == '4' && check_length (cmd, cmd2, len, 18, payload))
+         {                      // Not fully understood - maybe these are 8 byte values?
+            report_int (Whcooling, s21_decode_hex_sensor (payload + 2) * 100);  // 100Wh units
+            report_int (Whheating, s21_decode_hex_sensor (payload + 10) * 100); // 100Wh units
          }
          break;
       }
@@ -3033,7 +3033,7 @@ send_ha_config (void)
             jo_string (j, "stat_t", hastatus);
             jo_string (j, "unit_of_meas", "kWh");
             jo_string (j, "state_class", "total_increasing");
-            jo_stringf (j, "val_tpl", "{{(value_json.%s|float)/1000}}",tag);
+            jo_stringf (j, "val_tpl", "{{(value_json.%s|float)/1000}}", tag);
             revk_mqtt_send (NULL, 1, topic, &j);
          }
          free (topic);
