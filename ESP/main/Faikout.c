@@ -660,10 +660,10 @@ daikin_s21_response (uint8_t cmd, uint8_t cmd2, int len, uint8_t *payload)
             report_int (Whoutside, s21_decode_hex_sensor (payload) * 100);      // 100Wh units
          break;
       case 'U':                // Per device power
-         if (check_length (cmd, cmd2, len, 8, payload))
+         if (check_length (cmd, cmd2, len, 16, payload))
          {
             report_int (Whcooling, s21_decode_hex_sensor (payload) * 100);      // 100Wh units
-            report_int (Whheating, s21_decode_hex_sensor (payload + 4) * 100);  // 100Wh units
+            report_int (Whheating, s21_decode_hex_sensor (payload + 8) * 100);  // 100Wh units
          }
          break;
       }
