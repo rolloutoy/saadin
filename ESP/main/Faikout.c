@@ -3027,7 +3027,7 @@ send_ha_config (void)
             revk_mqtt_send_str (topic);
          else
          {
-            jo_t j = make ("energy", icon);
+            jo_t j = make (tag, icon);
             jo_string (j, "name", name);
             jo_string (j, "dev_cla", "energy");
             jo_string (j, "stat_t", hastatus);
