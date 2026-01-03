@@ -42,5 +42,6 @@ t(hum)
 i(Whoutside)
 i(Whheating)
 i(Whcooling)
+i(consumption)
 
 #include "accontrols.m"

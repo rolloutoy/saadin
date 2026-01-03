@@ -89,6 +89,7 @@ struct
    poll_t FS;
    poll_t FT;
    poll_t FU04;
+   poll_t FX60;
    poll_t RD;
    poll_t RG;
    poll_t RI;
@@ -665,6 +666,10 @@ daikin_s21_response (uint8_t cmd, uint8_t cmd2, int len, uint8_t *payload)
             report_int (Whcooling, s21_decode_hex_sensor (payload + 2) * 100);  // 100Wh units
             report_int (Whheating, s21_decode_hex_sensor (payload + 10) * 100); // 100Wh units
          }
+         break;
+      case 'X':
+         if (payload[0] == '6' && payload[1] == '0' && check_length (cmd, cmd2, len, 6, payload))
+            report_int (consumption, s21_decode_hex_sensor (payload + 2) * 10);      // Seems to be 10W units
          break;
       }
    if (cmd == 'S')
@@ -2104,7 +2109,7 @@ web_control (httpd_req_t *req)
                   "n('autot',o.autot);" //
                   "s('Tautot',(o.autot?cf(o.autot):''));"       //
                   "s('0/1',(o.slave?'❋':'')+(o.antifreeze?'❄':''));"        //
-                  "s('Fan',(o.fanrpm?o.fanrpm+'RPM':'')+(o.antifreeze?'❄':'')+(o.control?'✷':''));" //
+                  "s('Fan',(o.antifreeze?'❄':'')+(o.control?'✷':'')+(o.fanrpm?' '+o.fanrpm+'RPM':'')+(o.consumption?' '+o.consumption+'W':''));"  //
                   "e('fan',o.fan);"     //
                   "if(o.shutdown){reboot=true;s('shutdown','Restarting: '+o.shutdown);g('shutdown').style.display='';};"        //
                   "};};c();"    //
@@ -3042,6 +3047,27 @@ send_ha_config (void)
    addwh (daikin.status_known & CONTROL_Whoutside, "energy", "Lifetime outside energy", NULL);
    addwh (daikin.status_known & CONTROL_Whheating, "energyheat", "Lifetime heating energy", NULL);
    addwh (daikin.status_known & CONTROL_Whcooling, "energycool", "Lifetime cooling energy", NULL);
+   void addw (uint64_t ok, const char *tag, const char *name, const char *icon)
+   {
+      if (asprintf (&topic, "%s/sensor/%s%s/config", topicha, revk_id, tag) >= 0)
+      {
+         if (!ok)
+            revk_mqtt_send_str (topic);
+         else
+         {
+            jo_t j = make (tag, icon);
+            jo_string (j, "name", name);
+            jo_string (j, "dev_cla", "power");
+            jo_string (j, "stat_t", hastatus);
+            jo_string (j, "unit_of_meas", "W");
+            jo_string (j, "state_class", "total_increasing");
+            jo_stringf (j, "val_tpl", "{{(value_json.%s|float)/1000}}", tag);
+            revk_mqtt_send (NULL, 1, topic, &j);
+         }
+         free (topic);
+      }
+   }
+   addw (daikin.status_known & CONTROL_consumption, "consumption", "Power consumption", NULL);
 
    // TODO change above over gradually to new HA library stuff to make way neater
    ha_config_sensor ("ram",.name = "RAM",.field = "mem",.unit = "B",.delete = !haram);
@@ -3088,12 +3114,14 @@ revk_state_extra (jo_t j)
       jo_litf (j, "liquid", "%.2f", daikin.liquid);
    if (daikin.status_known & CONTROL_demand)
       jo_int (j, "demand", daikin.demand);
-   if ((daikin.status_known & CONTROL_Whoutside) && daikin.Whoutside)
+   if ((daikin.status_known & CONTROL_Whoutside))
       jo_int (j, "energy", daikin.Whoutside);
-   if ((daikin.status_known & CONTROL_Whheating) && daikin.Whheating)
+   if ((daikin.status_known & CONTROL_Whheating))
       jo_int (j, "energyheat", daikin.Whheating);
-   if ((daikin.status_known & CONTROL_Whcooling) && daikin.Whcooling)
+   if ((daikin.status_known & CONTROL_Whcooling))
       jo_int (j, "energycool", daikin.Whcooling);
+   if ((daikin.status_known & CONTROL_consumption))
+      jo_int (j, "consumption", daikin.consumption);
    if (daikin.status_known & CONTROL_fanrpm)
    {
       if (hafanrpm)
@@ -3769,21 +3797,24 @@ app_main ()
                   slowcycle++;  // Skipped step
                   __attribute__((fallthrough));
                case 7:
-                  poll (F, M, 0,);      // Outside power
+                  poll (F, M, 0,);      // Outside energy
                   break;
                case 8:
-                  poll (F, U, 2, 04);   // Inside power
+                  poll (F, U, 2, 04);   // Inside energy
+                  break;
+               case 9:
+                  poll (F, X, 2, 60);   // Inside power
                   // From here on are all s21extra
                   if (!s21extra)
                      slowcycle = 0;
                   break;
-               case 9:
+               case 10:
                   poll (R, M, 0,);
                   break;
-               case 10:
+               case 11:
                   poll (R, X, 0,);
                   break;
-               case 11:
+               case 12:
                   poll (R, D, 0,);
                   // End
                   slowcycle = 0;        // End of extra/debug cycle
