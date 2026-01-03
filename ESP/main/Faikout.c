@@ -3060,8 +3060,8 @@ send_ha_config (void)
             jo_string (j, "dev_cla", "power");
             jo_string (j, "stat_t", hastatus);
             jo_string (j, "unit_of_meas", "W");
-            jo_string (j, "state_class", "total_increasing");
-            jo_stringf (j, "val_tpl", "{{(value_json.%s|float)/1000}}", tag);
+            jo_string (j, "state_class", "measurement");
+            jo_stringf (j, "val_tpl", "{{(value_json.%s)}}", tag);
             revk_mqtt_send (NULL, 1, topic, &j);
          }
          free (topic);
