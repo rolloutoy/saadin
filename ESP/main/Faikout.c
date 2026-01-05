@@ -100,6 +100,7 @@ struct
    poll_t RX;
    poll_t Ra;
    poll_t Rd;
+   poll_t Re;
    uint8_t rgfan:1;             // Use RG for fan
 } s21 = { 0 };
 
@@ -695,7 +696,7 @@ daikin_s21_response (uint8_t cmd, uint8_t cmd2, int len, uint8_t *payload)
                break;
             }
          }
-      } else if (cmd2 == 'L' || cmd2 == 'd' || cmd2 == 'D' || cmd2 == 'N' || cmd2 == 'M')
+      } else if (cmd2 == 'L' || cmd2 == 'd' || cmd2 == 'D' || cmd2 == 'N' || cmd2 == 'M' || cmd2 == 'e')
       {                         // These responses are always only 3 bytes long
          if (check_length (cmd, cmd2, len, 3, payload))
          {
@@ -710,6 +711,9 @@ daikin_s21_response (uint8_t cmd, uint8_t cmd2, int len, uint8_t *payload)
                break;
             case 'N':          // Angle vertical swing
                report_int (anglev, v);
+               break;
+            case 'e':          // Humidity
+               report_float (hum, v);
                break;
             }
          }
@@ -1929,6 +1933,8 @@ web_control (httpd_req_t *req)
       addt ("Inlet", "Inlet temperature");
    if (daikin.status_known & CONTROL_home)
       addt ("Home", "Inlet temperature");
+   if (daikin.status_known & CONTROL_hum)
+      addt ("Humidity", "Indoor humidity");
    if (daikin.status_known & CONTROL_liquid)
       addt ("Liquid", "Liquid coolant temperature");
    if (daikin.status_known & CONTROL_outside)
@@ -2091,6 +2097,7 @@ web_control (httpd_req_t *req)
                   "t('Env',o.env);"     //
                   "t('Outside',o.outside);"     //
                   "t('Liquid',o.liquid);"       //
+                  "s('Humidity',o.hum+'%%');"       //
                   "if(o.ble){"  //
                   "t('Temp',o.ble.temp);"       //
                   "s('Hum',o.ble.hum?o.ble.hum+'%%':'---');"    //
@@ -2815,6 +2822,26 @@ send_ha_config (void)
          free (topic);
       }
    }
+   void addhum (uint64_t ok, const char *tag, const char *name, const char *icon)
+   {
+      if (asprintf (&topic, "%s/sensor/%s%s/config", topicha, revk_id, tag) >= 0)
+      {
+         if (!ok)
+            revk_mqtt_send_str (topic);
+         else
+         {
+            jo_t j = make (tag, icon);
+            jo_string (j, "name", name);
+            jo_string (j, "dev_cla", "humidity");
+            jo_string (j, "state_class", "measurement");
+            jo_string (j, "stat_t", hastatus);
+            jo_string (j, "unit_of_meas", "%");
+            jo_stringf (j, "val_tpl", "{{value_json.%s}}", tag);
+            revk_mqtt_send (NULL, 1, topic, &j);
+         }
+         free (topic);
+      }
+   }
    void addfreq (uint64_t ok, const char *tag, const char *name, const char *unit, const char *icon)
    {
       if (asprintf (&topic, "%s/sensor/%s%s/config", topicha, revk_id, tag) >= 0)
@@ -2873,6 +2900,11 @@ send_ha_config (void)
       {
          jo_string (j, "curr_temp_t", hastatus);
          jo_string (j, "curr_temp_tpl", "{{value_json.temp}}");
+      }
+      if (daikin.status_known & CONTROL_hum)
+      {
+         jo_string (j, "curr_hum_t", hastatus);
+         jo_string (j, "curr_hum_tpl", "{{value_json.humidity}}");
       }
       if (daikin.status_known & CONTROL_mode)
       {
@@ -2948,6 +2980,7 @@ send_ha_config (void)
    addtemp (daikin.status_known & CONTROL_home, "achome", "AC-Home", "mdi:thermometer");
    addtemp (daikin.status_known & CONTROL_outside, "outside", "Outside", "mdi:thermometer");
    addtemp (daikin.status_known & CONTROL_liquid, "liquid", "Liquid", "mdi:coolant-temperature");
+   addhum (daikin.status_known & CONTROL_hum, "hum", "Humidity", "mdi:water-percent");
    addfreq (daikin.status_known & CONTROL_comp, "comp", "Compressor", hacomprpm ? "rpm" : "Hz", "mdi:sine-wave");
    addfreq (daikin.status_known & CONTROL_fanrpm, "fanfreq", "Fan", hafanrpm ? "rpm" : "Hz", "mdi:fan");
    addswitch (haswitches && (daikin.status_known & CONTROL_power), "power", "Power", "mdi:power");
@@ -2959,26 +2992,6 @@ send_ha_config (void)
    addswitch (haswitches && (daikin.status_known & CONTROL_econo), "econo", "Econo mode", "mdi:home-battery");
    addswitch (haswitches, "autoe", "Auto mode", "mdi:power");
 #ifdef ELA
-   void addhum (uint64_t ok, const char *tag, const char *name, const char *icon)
-   {
-      if (asprintf (&topic, "%s/sensor/%s%s/config", topicha, revk_id, tag) >= 0)
-      {
-         if (!ok)
-            revk_mqtt_send_str (topic);
-         else
-         {
-            jo_t j = make (tag, icon);
-            jo_string (j, "name", name);
-            jo_string (j, "dev_cla", "humidity");
-            jo_string (j, "state_class", "measurement");
-            jo_string (j, "stat_t", hastatus);
-            jo_string (j, "unit_of_meas", "%");
-            jo_stringf (j, "val_tpl", "{{value_json.%s}}", tag);
-            revk_mqtt_send (NULL, 1, topic, &j);
-         }
-         free (topic);
-      }
-   }
    void addbat (uint64_t ok, const char *tag, const char *name, const char *icon)
    {
       if (asprintf (&topic, "%s/sensor/%s%s/config", topicha, revk_id, tag) >= 0)
@@ -3104,6 +3117,8 @@ revk_state_extra (jo_t j)
       jo_litf (j, "temp", "%.2f", daikin.home); // We use home if present, else inlet
    else if (daikin.status_known & CONTROL_inlet)
       jo_litf (j, "temp", "%.2f", daikin.inlet);
+   if (daikin.status_known & CONTROL_hum)
+      jo_litf (j, "hum", "%.2f", daikin.hum);  // The indoor humidity
    if (daikin.status_known & CONTROL_home)
       jo_litf (j, "achome", "%.2f", daikin.home);       // The actual home temp
    if ((daikin.status_known & CONTROL_home) && (daikin.status_known & CONTROL_inlet))
@@ -3804,17 +3819,20 @@ app_main ()
                   break;
                case 9:
                   poll (F, X, 2, 60);   // Inside power
+                  break;
+               case 10:
+                  poll (R, e, 0,); // Humidity
                   // From here on are all s21extra
                   if (!s21extra)
                      slowcycle = 0;
                   break;
-               case 10:
+               case 11:
                   poll (R, M, 0,);
                   break;
-               case 11:
+               case 12:
                   poll (R, X, 0,);
                   break;
-               case 12:
+               case 13:
                   poll (R, D, 0,);
                   // End
                   slowcycle = 0;        // End of extra/debug cycle
