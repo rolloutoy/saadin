@@ -471,7 +471,7 @@ set_float (const char *name, float *ptr, uint64_t flag, float val)
       daikin.status_changed = 1;
       daikin.ha_send = 1;
    }
-   if ((isnan(*ptr)&&isnan(val))||lroundf (*ptr * 10) == lroundf (val * 10))
+   if ((isnan (*ptr) && isnan (val)) || lroundf (*ptr * 10) == lroundf (val * 10))
    {                            // No change (allow within 0.1C)
       if (daikin.control_changed & flag)
       {
@@ -670,7 +670,7 @@ daikin_s21_response (uint8_t cmd, uint8_t cmd2, int len, uint8_t *payload)
          break;
       case 'X':
          if (payload[0] == '6' && payload[1] == '0' && check_length (cmd, cmd2, len, 6, payload))
-            report_int (consumption, s21_decode_hex_sensor (payload + 2) * 10);      // Seems to be 10W units
+            report_int (consumption, s21_decode_hex_sensor (payload + 2) * 10); // Seems to be 10W units
          break;
       }
    if (cmd == 'S')
@@ -2097,7 +2097,7 @@ web_control (httpd_req_t *req)
                   "t('Env',o.env);"     //
                   "t('Outside',o.outside);"     //
                   "t('Liquid',o.liquid);"       //
-                  "s('Humidity',o.hum+'%%');"       //
+                  "s('Humidity',o.hum+'%%');"   //
                   "if(o.ble){"  //
                   "t('Temp',o.ble.temp);"       //
                   "s('Hum',o.ble.hum?o.ble.hum+'%%':'---');"    //
@@ -2116,7 +2116,7 @@ web_control (httpd_req_t *req)
                   "n('autot',o.autot);" //
                   "s('Tautot',(o.autot?cf(o.autot):''));"       //
                   "s('0/1',(o.slave?'❋':'')+(o.antifreeze?'❄':''));"        //
-                  "s('Fan',(o.antifreeze?'❄':'')+(o.control?'✷':'')+(o.fanrpm?' '+o.fanrpm+'RPM':'')+(o.consumption?' '+o.consumption+'W':''));"  //
+                  "s('Fan',(o.antifreeze?'❄':'')+(o.control?'✷':'')+(o.fanrpm?' '+o.fanrpm+'RPM':'')+(o.consumption?' '+o.consumption+'W':''));"    //
                   "e('fan',o.fan);"     //
                   "if(o.shutdown){reboot=true;s('shutdown','Restarting: '+o.shutdown);g('shutdown').style.display='';};"        //
                   "};};c();"    //
@@ -3118,7 +3118,7 @@ revk_state_extra (jo_t j)
    else if (daikin.status_known & CONTROL_inlet)
       jo_litf (j, "temp", "%.2f", daikin.inlet);
    if (daikin.status_known & CONTROL_hum)
-      jo_litf (j, "hum", "%.2f", daikin.hum);  // The indoor humidity
+      jo_litf (j, "hum", "%.2f", daikin.hum);   // The indoor humidity
    if (daikin.status_known & CONTROL_home)
       jo_litf (j, "achome", "%.2f", daikin.home);       // The actual home temp
    if ((daikin.status_known & CONTROL_home) && (daikin.status_known & CONTROL_inlet))
@@ -3821,7 +3821,7 @@ app_main ()
                   poll (F, X, 2, 60);   // Inside power
                   break;
                case 10:
-                  poll (R, e, 0,); // Humidity
+                  poll (R, e, 0,);      // Humidity
                   // From here on are all s21extra
                   if (!s21extra)
                      slowcycle = 0;

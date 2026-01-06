@@ -82,8 +82,7 @@ s21_encode_target_temp (float temp)
 static inline int
 s21_valid_int_sensor (const unsigned char *payload)
 {
-   return payload[0] >= '0' && payload[0] <= '9' && payload[1] >= '0' && payload[1] <= '9' && payload[2] >= '0' && payload[2] <= '9'
-      && (payload[3] == '-' || payload[3] == '+');
+   return payload[0] >= '0' && payload[0] <= '9' && payload[1] >= '0' && payload[1] <= '9' && payload[2] >= '0' && payload[2] <= '9';
 }
 
 static inline int
