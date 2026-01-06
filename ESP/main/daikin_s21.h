@@ -51,7 +51,7 @@
 
 // Calculate packet checksum
 static inline uint8_t
-s21_checksum (uint8_t * buf, int len)
+s21_checksum (uint8_t *buf, int len)
 {
    uint8_t c = 0;
 
@@ -80,8 +80,17 @@ s21_encode_target_temp (float temp)
 }
 
 static inline int
+s21_valid_int_sensor (const unsigned char *payload)
+{
+   return payload[0] >= '0' && payload[0] <= '9' && payload[1] >= '0' && payload[1] <= '9' && payload[2] >= '0' && payload[2] <= '9'
+      && (payload[3] == '-' || payload[3] == '+');
+}
+
+static inline int
 s21_decode_int_sensor (const unsigned char *payload)
 {
+   if (!s21_valid_int_sensor (payload))
+      return 0;
    int v = (payload[0] - '0') + (payload[1] - '0') * 10 + (payload[2] - '0') * 100;
    if (payload[3] == '-')
       v = -v;
@@ -99,6 +108,8 @@ s21_decode_hex_sensor (const unsigned char *payload)
 static inline float
 s21_decode_float_sensor (const unsigned char *payload)
 {
+   if (!s21_valid_int_sensor (payload))
+      return NAN;
    return (float) s21_decode_int_sensor (payload) * 0.1;
 }
 

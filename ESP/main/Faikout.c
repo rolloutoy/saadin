@@ -471,7 +471,7 @@ set_float (const char *name, float *ptr, uint64_t flag, float val)
       daikin.status_changed = 1;
       daikin.ha_send = 1;
    }
-   if (lroundf (*ptr * 10) == lroundf (val * 10))
+   if ((isnan(*ptr)&&isnan(val))||lroundf (*ptr * 10) == lroundf (val * 10))
    {                            // No change (allow within 0.1C)
       if (daikin.control_changed & flag)
       {
