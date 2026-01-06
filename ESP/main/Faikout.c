@@ -2904,7 +2904,7 @@ send_ha_config (void)
       if (daikin.status_known & CONTROL_hum)
       {
          jo_string (j, "curr_hum_t", hastatus);
-         jo_string (j, "curr_hum_tpl", "{{value_json.humidity}}");
+         jo_string (j, "curr_hum_tpl", "{{value_json.hum}}");
       }
       if (daikin.status_known & CONTROL_mode)
       {
