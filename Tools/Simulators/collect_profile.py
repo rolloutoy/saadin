@@ -1,6 +1,6 @@
 # This script collects replies for listed commands from the A/C and outputs
 # dump, suitable for .settings file
-# Usage: collect_profile.py <host> <Faikin name>
+# Usage: collect_profile.py <MQTT host> <Faikin name> <MQTT username> <MQTT password>. MQTT user/pass is optional.
 # Works reliably only with Faikin debug turned off
 # Prerequisites: pip install paho-mqtt
 
@@ -142,7 +142,7 @@ def on_message(client, userdata, msg):
     send_command(client)
 
 if len(sys.argv) < 3:
-    print("Usage: {} <host> <Faikin name>".format(sys.argv[0]))
+    print("Usage: {} <MQTT host> <Faikin name> <MQTT username> <MQTT password>. MQTT user/pass is optional.".format(sys.argv[0]))
     sys.exit(255)
 
 faikin_name = sys.argv[2]
@@ -151,6 +151,8 @@ mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 mqttc.on_connect = on_connect
 mqttc.on_message = on_message
 
+if len(sys.argv) > 4:
+    mqttc.username_pw_set(sys.argv[3], sys.argv[4])
 mqttc.connect(sys.argv[1], 1883, 60)
 
 # Blocking call that processes network traffic, dispatches callbacks and

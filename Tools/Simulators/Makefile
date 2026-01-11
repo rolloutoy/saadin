@@ -17,6 +17,9 @@ endif
 ifneq (,$(findstring MINGW,${OS}))
 LIBS := -lintl -liconv -static
 endif
+ifeq (${OS},Linux)
+LIBS := -lm
+endif
 
 CFLAGS := -g -O
 
