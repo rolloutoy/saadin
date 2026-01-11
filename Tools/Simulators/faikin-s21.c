@@ -157,7 +157,7 @@ static unsigned int parse_program_option(const char *progname, int argc, const c
 		dump = 1;
 		return 1;
 	} else if (opt[0] == '-') {
-		fprintf(stderr, "%s: unknown option\n");
+		fprintf(stderr, "%s: unknown option\n", opt);
 		exit(255);
 	}
 	return 0;
@@ -595,7 +595,7 @@ main(int argc, const char *argv[])
 		}
 	  } else if (state->protocol_major > 2 && len >= S21_MIN_V3_PKT_LEN &&
 	             buf[S21_CMD0_OFFSET] == 'F' && buf[S21_CMD1_OFFSET] == 'Y' && buf[S21_V3_CMD3_OFFSET] == '0') {
-		char fmt_buffer[5];
+		char fmt_buffer[7];
 		// FYx0 v3 commands. BRP069B41 polls these only once per session and caches values, so
 		// these are clearly some immutable identification codes.
 		switch (buf[S21_V3_CMD2_OFFSET])
@@ -606,7 +606,13 @@ main(int argc, const char *argv[])
 			// to this command.
 			snprintf(fmt_buffer, sizeof(fmt_buffer), "%02u%02u", state->protocol_major, state->protocol_minor);
 			if (debug)
+			{
 	   			printf(" -> Protocol version (new) = %s\n", fmt_buffer);
+				if (state->protocol_major > 99 || state->protocol_minor > 99)
+				{
+					printf(" -> Protocol version will be truncated as major and/or minor is larger than 2 digits!\n");
+				}
+			}
 
 			// Order traditionally inverted
 			response[S21_V3_PAYLOAD_OFFSET + 0] = fmt_buffer[3];
