@@ -13,7 +13,10 @@
 #define SLAVE_READ_TIMEOUT_MS 1000
 #define INLET_SENSOR_ADDR 0x18
 #define I2C_BUFFER_LENGTH 16
-#define SENSOR_COMMAND (0x10)
+#define SENSOR_HUMI1_COMMAND (0x10)
+#define SENSOR_HUMI2_COMMAND (0x11)
+#define SENSOR_TEMP1_COMMAND (0x12)
+#define SENSOR_TEMP2_COMMAND (0x13)
 
 static const char TAG[] = "Faikout_i2c";
 
@@ -23,9 +26,9 @@ typedef struct
     QueueHandle_t event_queue; // Queue to handle I2C requests from Daikin motherboard
     TaskHandle_t i2cTask;      // Task to handle I2C requests from Daikin motherboard
     // Data
-    uint8_t command_data;       // To store command from I2C requests from Daikin motherboard
-    float temp;                 // To store temp value to reply to I2C requests from Daikin motherboard
-    float hum;                  // To store hum value to reply to I2C requests from Daikin motherboard
+    uint8_t command_data; // To store command from I2C requests from Daikin motherboard
+    float temp;           // To store temp value to reply to I2C requests from Daikin motherboard
+    float hum;            // To store hum value to reply to I2C requests from Daikin motherboard
     // Handles
     i2c_master_bus_handle_t master_bus_handle;
     i2c_master_dev_handle_t master_dev_handle;
@@ -58,10 +61,7 @@ esp_err_t faikout_i2c_init(revk_gpio_t i2cslsda, revk_gpio_t i2cslscl, revk_gpio
         return ESP_ERR_NOT_ALLOWED;
     }
     // Check GPIO are valid (both input and output)
-    if (!(((gpio_ok (i2cslsda.num) & 3) == 3)
-        && ((gpio_ok (i2cslscl.num) & 3) == 3)
-        && ((gpio_ok (i2cmasda.num) & 3) == 3)
-        && ((gpio_ok (i2cmassl.num) & 3) == 3)))
+    if (!(((gpio_ok(i2cslsda.num) & 3) == 3) && ((gpio_ok(i2cslscl.num) & 3) == 3) && ((gpio_ok(i2cmasda.num) & 3) == 3) && ((gpio_ok(i2cmassl.num) & 3) == 3)))
     {
         ESP_LOGE(TAG, "Init with invalid GPIO!");
         return ESP_ERR_INVALID_ARG;
@@ -211,6 +211,8 @@ esp_err_t faikout_i2c_set_external_sensor_values(float temp, float hum)
     faikout_i2c_context.temp = temp;
     faikout_i2c_context.hum = hum;
 
+    ESP_LOGE(TAG, "faikout_i2c_set_external_sensor_values %02f %02f", temp, hum);
+
     return ESP_OK;
 }
 
@@ -222,7 +224,7 @@ esp_err_t faikout_i2c_get_inlet_sensor_values(float *temp, float *hum)
         return ESP_ERR_NOT_ALLOWED;
     }
     size_t len = 4;
-    uint8_t reg_addr = SENSOR_COMMAND;
+    uint8_t reg_addr = SENSOR_HUMI1_COMMAND;
     uint8_t data[4];
     uint16_t tmp;
     if (i2c_master_transmit_receive(faikout_i2c_context.master_dev_handle, &reg_addr, 1, data, len, MASTER_READ_TIMEOUT_MS / portTICK_PERIOD_MS))
@@ -260,20 +262,33 @@ static void faikout_i2c_slave_task(void *arg)
             if (evt == I2C_SLAVE_EVT_TX)
             {
                 uint8_t *data_buffer;
+                // Update buffer
+                tmp = (uint16_t)((faikout_i2c_context.temp + 41.92f) * 50.0f);
+                tmp_buffer_slave_sensor[2] = tmp & 0xFF;
+                tmp_buffer_slave_sensor[3] = (tmp >> 8) & 0x0F;
+
+                tmp = (uint16_t)((faikout_i2c_context.hum + 20.0f) * 64.0f);
+                tmp_buffer_slave_sensor[0] = tmp & 0xFF;
+                tmp_buffer_slave_sensor[1] = (tmp >> 8) & 0x1F;
+
+                // Assign
                 switch (context->command_data)
                 {
-                case SENSOR_COMMAND:
-                    // Update buffer
-                    tmp = (uint16_t)((faikout_i2c_context.temp + 41.92f) * 50.0f);
-                    tmp_buffer_slave_sensor[2] = tmp & 0xFF;
-                    tmp_buffer_slave_sensor[3] = (tmp >> 8) & 0x0F;
-
-                    tmp = (uint16_t)((faikout_i2c_context.hum + 20.0f) * 64.0f);
-                    tmp_buffer_slave_sensor[0] = tmp & 0xFF;
-                    tmp_buffer_slave_sensor[1] = (tmp >> 8) & 0x1F;
-                    // Assign
+                case SENSOR_HUMI1_COMMAND:
                     data_buffer = tmp_buffer_slave_sensor;
                     buffer_size = sizeof(tmp_buffer_slave_sensor);
+                    break;
+                case SENSOR_HUMI2_COMMAND:
+                    data_buffer = tmp_buffer_slave_sensor + 1;
+                    buffer_size = sizeof(tmp_buffer_slave_sensor) - 1;
+                    break;
+                case SENSOR_TEMP1_COMMAND:
+                    data_buffer = tmp_buffer_slave_sensor + 2;
+                    buffer_size = sizeof(tmp_buffer_slave_sensor) - 2;
+                    break;
+                case SENSOR_TEMP2_COMMAND:
+                    data_buffer = tmp_buffer_slave_sensor + 3;
+                    buffer_size = sizeof(tmp_buffer_slave_sensor) - 3;
                     break;
                 default:
                     ESP_LOGE(TAG, "faikout_i2c_slave: Invalid command");
