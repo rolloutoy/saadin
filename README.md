@@ -16,7 +16,7 @@ This code/module provides local control via web interface, MQTT, and HomeAssista
 
 * There is also a new [Faikout Remote Control](https://remote.revk.uk/) available, BLE linked to the Faikout, with environmental sensors, available on Tindie now.
 
-PCB designs are included, and also available to buy on [Tindie](https://www.tindie.com/stores/revk/), and on [Amazon UK](https://www.amazon.co.uk/dp/B0G1TP8XCQ). There are other people making and selling, e.g. on [eBay Australia](https://www.ebay.com.au/itm/186860658654).
+PCB designs are included, and also available to buy on [Tindie](https://tindie.uk/), and on [Amazon UK](https://www.amazon.co.uk/dp/B0G1TP8XCQ). There are other people making and selling, e.g. on [eBay Australia](https://www.ebay.com.au/itm/186860658654).
 
 I'd like to thank the contributors, but contributions are made and accepted on basis that you issue your contribution under the same GPL licence as the project. Forks are allowed on the basis that your forks are on the same GPL licence as the project.
 
@@ -40,7 +40,7 @@ For support, see issues and discussions.
 
 ## PCB and case
 
-The boards from [Tindie](https://www.tindie.com/stores/revk/), [eBay](https://www.ebay.com.au/itm/186860658654), and [Amazon UK](https://www.amazon.co.uk/dp/B0G1TP8XCQ) works with Daikin modules via an `S21` connector, or `X50A` and `X35A` connectors, or similar. The design is updated from time to time so may not look exactly like this.
+The boards from [Tindie](https://tindie.uk), [eBay](https://www.ebay.com.au/itm/186860658654), and [Amazon UK](https://www.amazon.co.uk/dp/B0G1TP8XCQ) works with Daikin modules via an `S21` connector, or `X50A` and `X35A` connectors, or similar. The design is updated from time to time so may not look exactly like this.
 
 <img src=PCB/Faikout/Faikout.png width=49%><img src=PCB/Faikout/Faikout-bottom.png width=49%>
 
@@ -60,7 +60,7 @@ This whole project is almost entirely by me, but with some valuable contribution
 
 ## How to get one
 
-As mentioned, [Tindie](https://www.tindie.com/stores/revk/), [eBay](https://www.ebay.com.au/itm/186860658654), and [Amazon UK](https://www.amazon.co.uk/dp/B0G1TP8XCQ).
+As mentioned, [Tindie](https://tindie.uk), [eBay](https://www.ebay.com.au/itm/186860658654), and [Amazon UK](https://www.amazon.co.uk/dp/B0G1TP8XCQ).
 
 But also, the PCB designs are published, including production files for [JLCPCB](https://jlcpcb.com). You need to remove trademarks, etc, and you would also need something to program them (TC2030 lead). Obviously you need some experience with PCB ordering and diagnostics if getting your own boards made.
 
@@ -109,7 +109,7 @@ The code is normally set up to automatically upgrade the software, checking roug
 
 If you build yourself, you either need no code signing, or your own signing key. This will break auto-updates which try to load my code releases, so you need to adjuist settings `otahost` and `otaauto` accordingly. You can set these in the build config, along with WiFi settings, etc.
 
-If you want to purchase a pre-loaded assembled PCB, see [Tindie](https://www.tindie.com/stores/revk/), and [Amazon UK](https://www.amazon.co.uk/dp/B0C2ZYXNYQ).
+If you want to purchase a pre-loaded assembled PCB, see [Tindie](https://tindie.uk), and [Amazon UK](https://www.amazon.co.uk/dp/B0C2ZYXNYQ).
 
 ## Flashing code
 
