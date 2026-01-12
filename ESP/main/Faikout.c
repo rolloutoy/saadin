@@ -1841,7 +1841,11 @@ settings_autob (httpd_req_t *req)
 static esp_err_t
 web_control (httpd_req_t *req)
 {
-   web_head (req, hostname == revk_id ? revk_app : hostname);
+   web_head (req,
+#ifdef CONFIG_MDNS_MAX_INTERFACES
+             *instance ? instance :
+#endif
+             hostname == revk_id ? revk_app : hostname);
    revk_web_send (req, "<div id=top class=off><form name=F><table id=live>");
    void tre (void)
    {
@@ -2778,7 +2782,11 @@ send_ha_config (void)
       jo_array (j, "ids");
       jo_string (j, NULL, revk_id);
       jo_close (j);
-      jo_string (j, "name", hostname);
+      jo_string (j, "name",
+#ifdef CONFIG_MDNS_MAX_INTERFACES
+                 *instance ? instance :
+#endif
+                 hostname);
       if (*daikin.model)
          jo_string (j, "mdl", daikin.model);
       jo_string (j, "sw", revk_version);
