@@ -9,3 +9,4 @@ managed_components
 *.bin
 settings.c
 settings.h
+sdconfig
