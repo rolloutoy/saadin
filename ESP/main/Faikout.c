@@ -3373,14 +3373,14 @@ app_main ()
          revk_gpio_set (tx, 1);
       }
    }
-   if (usb_serial_jtag_is_connected ())
-   {                            // ATE mode
-      if (!b.loopback)
-         revk_ate_fail ("Loopback fail");
-      revk_blink (1, 0, b.loopback ? "G" : "R");
-   } else
-      revk_blink (1, 0, b.loopback ? "B" : "G");
+   if (usb_serial_jtag_is_connected () && !b.loopback)
+      revk_ate_fail ("Loopback fail");
    revk_ate_pass ();
+
+   if (revk_ate_failed ())
+      revk_blink (1, 0, b.loopback ? "G" : "R");
+   else
+      revk_blink (1, 0, b.loopback ? "B" : "G");
    revk_blink_do ();            // Show LED ASAP
 
    if (*autotopic)
