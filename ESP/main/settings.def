@@ -79,6 +79,8 @@ u8	heat.back	6		.live	.unit="℃"			// For heating, pull (decrease) target sent 
 
 s8	min.outside	-100		.live	.unit="℃"			// Lowest allowed outside temp allowed for operation (if known)
 
+s8	frosttemp	-100		.live	.unit="℃"			// Frost protect (below this, turn on hot regardless)
+
 bit	temp.track	0		.live					// Set target temp based on Daikin measured temp not required target
 bit	temp.adjust	1		.live					// Adjust target temp allowing for different Daikin measure to external measure
 u16	temp.noflap	0		.live	.unit="s"			// Min time between target temp changes
