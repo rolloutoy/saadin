@@ -3373,14 +3373,15 @@ app_main ()
          revk_gpio_set (tx, 1);
       }
    }
-   if (usb_serial_jtag_is_connected () && !b.loopback)
-      revk_ate_fail ("Loopback fail");
+   if (usb_serial_jtag_is_connected ())
+   {
+      if (!b.loopback)
+         revk_ate_fail ("Loopback fail");
+      revk_blink (1, 0, revk_ate_failed ()? "R" : "G");
+   } else
+      revk_blink (1, 0, b.loopback ? "B" : "G");
    revk_ate_pass ();
 
-   if (revk_ate_failed ())
-      revk_blink (1, 0, b.loopback ? "G" : "R");
-   else
-      revk_blink (1, 0, b.loopback ? "B" : "G");
    revk_blink_do ();            // Show LED ASAP
 
    if (*autotopic)
@@ -4038,7 +4039,7 @@ app_main ()
             daikin.control_count = 0;
          }
          if (usb_serial_jtag_is_connected ())
-            revk_blink (18, 2, b.loopback ? "G" : "R");
+            revk_blink (18, 2, revk_ate_failed ()? "R" : "G");
          else
             revk_blink (0, 0, b.loopback ? "RGB" : !daikin.online ? "M" : dark ? "" : !daikin.power ? "y" : daikin.mode == 0 ? "O" : daikin.mode == 7 ? "C" : daikin.heat ? "R" : "B"); // FHCA456D
          uint32_t now = uptime ();
