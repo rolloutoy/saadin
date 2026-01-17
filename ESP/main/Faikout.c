@@ -175,6 +175,7 @@ struct
    uint8_t protocol_set:1;
    uint8_t faikouton:1;         // Last faikout power state
    uint8_t startup:1;           // In a startup phase (i.e. full comms not yet confirmed)
+   uint8_t frost:1;             // Frost override
 } b = { 0 };
 
 static httpd_handle_t webserver = NULL;
@@ -4151,13 +4152,19 @@ app_main ()
          }
          // END OF controlstop()
 
-         if (isnan (measured_temp) && measured_temp < frosttemp)
+         if (!isnan (measured_temp) && measured_temp < frosttemp)
          {                      // Power on hot if below frost level
             if (!daikin.power)
             {
                daikin_set_v (power, 1);
                daikin_set_e (mode, "H");
+               min = max = frosttemp + (float) pushtemp / pushtemp_scale;
+               b.frost = 1;
             }
+         } else if (b.frost)
+         {
+            b.frost = 0;
+            daikin_set_v (power, 0);
          } else if (!daikin.remote && autoe && (auto0 || auto1) && (auto0 != auto1))
          {                      // Auto on/off, 00:00 is not considered valid, use 00:01. Also setting same on and off is not considered valid
             static int last = 0;
