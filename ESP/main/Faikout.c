@@ -2060,8 +2060,8 @@ web_control (httpd_req_t *req)
                   ".xoffline .offline {display:none;}"  //
                   "</style>"    //
                   "<script>"    //
-                  "var ws=false;"   //
-                  "var reboot=false;"       //
+                  "var ws=false;"       //
+                  "var reboot=false;"   //
                   "function cf(v){return %s;}"  //
                   "function g(n){return document.getElementById(n);};"  //
                   "function b(n,v){var d=g(n);if(d)d.checked=v;}"       //
@@ -2073,11 +2073,11 @@ web_control (httpd_req_t *req)
                   "function c(){"       //
                   "ws=new WebSocket((location.protocol=='https:'?'wss:':'ws:')+'//'+window.location.host+'/status');"   //
                   "ws.onopen=function(v){g('top').className='on';};"    //
-                  "ws.onclose=function(v){g('top').className='off';if(reboot)location.reload();};" //
+                  "ws.onclose=function(v){g('top').className='off';if(reboot)location.reload();};"      //
                   "ws.onerror=function(v){ws.close();};"        //
                   "ws.onmessage=function(v){"   //
                   "o=JSON.parse(v.data);"       //
-                  "cl=(!o.online&&o.protocol!='loopback'?'':'xoffline ')+"       //
+                  "cl=(!o.online&&o.protocol!='loopback'?'':'xoffline ')+"      //
                   "(o.protocol=='loopback'?'':'xloopback ')+"   //
                   "(o.control?'':'xcontrol ')+" //
                   "(o.slave?'':'xslave ')+"     //
@@ -2085,7 +2085,7 @@ web_control (httpd_req_t *req)
                   "(o.antifreeze?'':'xantifreeze ')+"   //
                   "(o.autor>0?'':'xautor ')+"   //
                   " (o.autoe?'':'xautoe ');"    //
-                  "if(document.F.className!=cl)document.F.className=cl;"  //
+                  "if(document.F.className!=cl)document.F.className=cl;"        //
                   "b('power',o.power);" //
                   "b('swingh',o.swingh);"       //
                   "b('swingv',o.swingv);"       //
@@ -2124,9 +2124,9 @@ web_control (httpd_req_t *req)
                   "s('Fan',(o.antifreeze?'❄':'')+(o.control?'✷':'')+(o.fanrpm?' '+o.fanrpm+'RPM':'')+(o.consumption?' '+o.consumption+'W':''));"    //
                   "e('fan',o.fan);"     //
                   "if(o.shutdown){reboot=true;s('shutdown','Restarting: '+o.shutdown);g('shutdown').style.display='';};"        //
-                  "};};" //
-		  "c();" //
-                  "setInterval(function() {if(ws.readyState==3)c();else if(ws.readyState==1)ws.send('');},1000);"        //
+                  "};};"        //
+                  "c();"        //
+                  "setInterval(function() {if(ws.readyState==3)c();else if(ws.readyState==1)ws.send('');},1000);"       //
                   "</script>", fahrenheit ? "Math.round(10*((v*9/5)+32))/10+'℉'" : "v+'℃'");
    return revk_web_foot (req, 0, websettings, b.protocol_set ? proto_name () : NULL);
 }
@@ -4155,7 +4155,7 @@ app_main ()
 
          if (!isnan (measured_temp) && measured_temp < frosttemp)
          {                      // Power on hot if below frost level
-            if (!daikin.power)
+            if (!daikin.power || daikin.mode != FAIKIN_MODE_HEAT)
             {
                daikin_set_v (power, 1);
                daikin_set_e (mode, "H");
