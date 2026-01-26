@@ -35,6 +35,7 @@ bit	no.quiet								// Unit does not have quiet mode
 bit	no.led		1							// Unit does not have LED control
 bit	no.flap									// Unit does not have flap mode
 bit	no.antifreeze								// Unit does not have antifreeze mode
+bit	no.humidity								// Unit does not have humitity
 bit	no.hourly	1		.live					// Do not do hourly S21 poll (DH)
 
 bit	no.faikoutauto			.live.old="nofaikinauto"		// Do not show Faikout auto controls (unless already set up and no password)

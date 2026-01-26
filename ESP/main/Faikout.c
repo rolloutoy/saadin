@@ -2465,7 +2465,7 @@ legacy_web_get_control_info (httpd_req_t *req)
    jo_stringf (j, "mode", "%c", mode);
    legacy_adv (j);
    jo_litf (j, "stemp", "%.1f", daikin.temp);
-   jo_int (j, "shum", 0);
+   jo_int (j, "shum", daikin.hum);
    for (int i = 1; i <= 7; i++)
    {                            // Temp setting in mode
       char tag[4] = { 'd', 't', '0' + i };
@@ -2480,7 +2480,7 @@ legacy_web_get_control_info (httpd_req_t *req)
    if (daikin.mode <= 7)
       jo_stringf (j, "b_mode", "%c", "64370002"[daikin.mode]);
    jo_litf (j, "b_stemp", "%.1f", daikin.temp);
-   jo_int (j, "b_shum", 0);
+   jo_int (j, "b_shum", daikin.hum);
    jo_int (j, "alert", 255);
    if (daikin.fan <= 6)
       jo_stringf (j, "f_rate", "%c", "A34567B"[daikin.fan]);
@@ -3832,7 +3832,8 @@ app_main ()
                   poll (F, X, 2, 60);   // Inside power
                   break;
                case 10:
-                  poll (R, e, 0,);      // Humidity
+                  if (!nohumidity)
+                     poll (R, e, 0,);   // Humidity
                   // From here on are all s21extra
                   if (!s21extra)
                      slowcycle = 0;
