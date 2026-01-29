@@ -665,8 +665,12 @@ daikin_s21_response (uint8_t cmd, uint8_t cmd2, int len, uint8_t *payload)
       case 'U':                // Per device power
          if (payload[0] == '0' && payload[1] == '4' && check_length (cmd, cmd2, len, 18, payload))
          {                      // Not fully understood - maybe these are 8 byte values?
-            report_int (Whcooling, s21_decode_hex_sensor (payload + 2) * 100);  // 100Wh units
-            report_int (Whheating, s21_decode_hex_sensor (payload + 10) * 100); // 100Wh units
+            uint16_t v = s21_decode_hex_sensor (payload + 2);
+            if (v != 65535)
+               report_int (Whcooling, v * 100); // 100Wh units
+            v = s21_decode_hex_sensor (payload + 10);
+            if (v != 65535)
+               report_int (Whheating, v * 100); // 100Wh units
          }
          break;
       case 'X':
