@@ -1,6 +1,6 @@
 ### Name change
 
-Yes, it seems Daikin don't like Faikin, and I don't have the time or money to argue.
+Yes, it seems Daikin don't like Faikin, and I don't have the time or money to argue. Given (ongoing) issues with Amazon, Faikout is now a registered trademark.
 
 # ESP32-Faikout
 
