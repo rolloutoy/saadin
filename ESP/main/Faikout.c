@@ -3752,7 +3752,7 @@ app_main ()
         	s21.a##b##d.nak=0;            		\
         	s21.a##b##d.bad=0;            		\
 	    }                         	 		\
-      	    else if(r==RES_NAK)                     	\
+      	    else if(r==RES_NAK||r==RES_TIMEOUT)      	\
       	    {                         	 		\
          	s21.a##b##d.nak++;                      \
 		if(!s21.a##b##d.nak)			\
