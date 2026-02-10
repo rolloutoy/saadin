@@ -329,6 +329,7 @@ struct
    uint8_t mode_changed:1;      // Status or control has changed for enum or bool
    uint8_t status_report:1;     // Send status report
    uint8_t ha_send:1;           // Send HA config
+   uint8_t ha_sent:1;           // Sent HA config
    uint8_t remote:1;            // Remote control via MQTT
    uint8_t hysteresis:1;        // Thermostat hysteresis state
    uint8_t cnresend:2;          // Resends
@@ -2774,9 +2775,12 @@ addmodes (jo_t j, const struct FanMode *modes)
 static void
 send_ha_config (void)
 {
+   if (!revk_mqtt (0))
+      return;                   // Not on MQTT
    daikin.ha_send = 0;
    if (!haenable)
       return;
+   daikin.ha_sent = 1;
    char *hastatus = revk_topic (topicstate, NULL, NULL);
    char *cmd = revk_topic (topiccommand, NULL, NULL);
    char *topic;
@@ -3309,6 +3313,12 @@ register_ws_uri (const char *uri, esp_err_t (*handler) (httpd_req_t *r))
 void
 revk_web_extra (httpd_req_t *req, int page)
 {
+   if (*mqtthost[0] && !revk_mqtt (0))
+      revk_web_setting_info (req, "Note, MQTT not connected: %s", mqtthost[0]);
+   if (daikin.ha_sent)
+      revk_web_setting_info (req, "Note, HA config sent (%s/…)", topicha);
+   else if (haenable)
+      revk_web_setting_info (req, "Note, HA config not yet sent%s", *mqtthost[0] ? "" : " (no MQTT config)");
    revk_web_setting (req, "Fahrenheit", "fahrenheit");
    revk_web_setting (req, "Text rather than icons", "noicons");
    revk_web_setting (req, "Home Assistant", "haenable");
