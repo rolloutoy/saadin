@@ -4473,6 +4473,7 @@ app_main ()
       {
          jo_t j = jo_comms_alloc ();
          jo_bool (j, "failed-loop", 1);
+         jo_int (j, "poll", poll);
          revk_error ("comms", &j);
       }
       // We're here if protocol has been broken. We'll reconfigure the UART
