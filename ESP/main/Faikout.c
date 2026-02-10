@@ -4470,6 +4470,11 @@ app_main ()
          }
       }
       while (daikin.talking);
+      {
+         jo_t j = jo_comms_alloc ();
+         jo_bool (j, "failed-loop", 1);
+         revk_error ("comms", &j);
+      }
       // We're here if protocol has been broken. We'll reconfigure the UART
       // and restart from scratch, possibly changing the protocol, if we're
       // in detection phase.
