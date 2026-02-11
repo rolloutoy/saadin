@@ -3006,6 +3006,7 @@ send_ha_config (void)
    addswitch (haswitches && (daikin.status_known & CONTROL_comfort), "comfort", "Comfort mode", "mdi:teddy-bear");
    addswitch (haswitches && (daikin.status_known & CONTROL_quiet), "quiet", "Quiet outdoor", "mdi:volume-minus");
    addswitch (haswitches && (daikin.status_known & CONTROL_econo), "econo", "Econo mode", "mdi:home-battery");
+   addswitch (haswitches && (daikin.status_known & CONTROL_led), "led", "LED", "mdi:lightbulb");
    addswitch (haswitches, "autoe", "Auto mode", "mdi:power");
 #ifdef ELA
    void addbat (uint64_t ok, const char *tag, const char *name, const char *icon)
@@ -3033,7 +3034,7 @@ send_ha_config (void)
    addbat (bleenable && *autob && bletemp && bletemp->batset, "blebat", "BLE Battery", "mdi:battery-bluetooth-variant");
 #endif
 #if 1
-   if (asprintf (&topic, "%s/select/%sdemand/config", topicha, revk_id) >= 0)
+   if (asprintf (&topic, "%s/sellightbulb/%sdemand/config", topicha, revk_id) >= 0)
    {
       if (!(daikin.status_known & CONTROL_demand))
          revk_mqtt_send_str (topic);
