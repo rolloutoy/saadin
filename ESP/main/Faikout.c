@@ -3198,6 +3198,8 @@ revk_state_extra (jo_t j)
       jo_bool (j, "powerful", daikin.powerful);
    if (daikin.status_known & CONTROL_sensor)
       jo_bool (j, "sensor", daikin.sensor);
+   if (daikin.status_known & CONTROL_led)
+      jo_bool (j, "led", daikin.led);
    if (daikin.status_known & (CONTROL_swingh | CONTROL_swingv | CONTROL_comfort))
       jo_string (j, "swing", daikin.comfort ? SWING_COMFORT :   //
                  daikin.swingh && daikin.swingv ? SWING_BOTH :  //
