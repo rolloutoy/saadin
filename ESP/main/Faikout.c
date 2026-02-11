@@ -59,48 +59,48 @@ static const char TAG[] = "Faikout";
 #define	daikin_set_e(name,value)	daikin_set_enum(#name,&daikin.name,CONTROL_##name,value,CONTROL_##name##_VALUES)
 #define	daikin_set_t(name,value)	daikin_set_temp(#name,&daikin.name,CONTROL_##name,value)
 
-typedef struct poll_s
+typedef struct s21poll_s
 {
    uint8_t nak:3;               //      Count of NAKs in a row - if too many we set bad
    uint8_t ack:1;               //      We got an ACK so this is valid
    uint8_t bad:1;               //      Too many NAKs, assume not supported
-} poll_t;
+} s21poll_t;
 struct
 {                               // Status of S21 messages that get a valid response - this is a count of NAKs, so 0 means working...
-   poll_t DH1000;
-   poll_t F1;
-   poll_t F2;
-   poll_t F3;
-   poll_t F4;
-   poll_t F5;
-   poll_t F6;
-   poll_t F7;
-   poll_t F8;
-   poll_t F9;
-   poll_t FA;
-   poll_t FB;
-   poll_t FC;
-   poll_t FG;
-   poll_t FK;
-   poll_t FN;
-   poll_t FM;
-   poll_t FP;
-   poll_t FQ;
-   poll_t FS;
-   poll_t FT;
-   poll_t FU04;
-   poll_t FX60;
-   poll_t RD;
-   poll_t RG;
-   poll_t RI;
-   poll_t RM;
-   poll_t RL;
-   poll_t RN;
-   poll_t RH;
-   poll_t RX;
-   poll_t Ra;
-   poll_t Rd;
-   poll_t Re;
+   s21poll_t DH1000;
+   s21poll_t F1;
+   s21poll_t F2;
+   s21poll_t F3;
+   s21poll_t F4;
+   s21poll_t F5;
+   s21poll_t F6;
+   s21poll_t F7;
+   s21poll_t F8;
+   s21poll_t F9;
+   s21poll_t FA;
+   s21poll_t FB;
+   s21poll_t FC;
+   s21poll_t FG;
+   s21poll_t FK;
+   s21poll_t FN;
+   s21poll_t FM;
+   s21poll_t FP;
+   s21poll_t FQ;
+   s21poll_t FS;
+   s21poll_t FT;
+   s21poll_t FU04;
+   s21poll_t FX60;
+   s21poll_t RD;
+   s21poll_t RG;
+   s21poll_t RI;
+   s21poll_t RM;
+   s21poll_t RL;
+   s21poll_t RN;
+   s21poll_t RH;
+   s21poll_t RX;
+   s21poll_t Ra;
+   s21poll_t Rd;
+   s21poll_t Re;
    uint8_t rgfan:1;             // Use RG for fan
 } s21 = { 0 };
 
@@ -536,7 +536,6 @@ check_length (uint8_t cmd, uint8_t cmd2, int len, int required, const uint8_t *p
 static void
 comm_timeout (uint8_t *buf, int rxlen)
 {
-   daikin.talking = 0;
    b.loopback = 0;
    jo_t j = jo_comms_alloc ();
    jo_bool (j, "timeout", 1);
@@ -1136,6 +1135,7 @@ jo_s21_alloc (char cmd, char cmd2, const char *payload, int payload_len)
 int
 daikin_s21_command (uint8_t cmd, uint8_t cmd2, int payload_len, char *payload)
 {
+   // Note this does not set talking = 0 as handled at the poll loop instead
    // A payload len of -1 means cmd1 and not cmd2 which is special for M and V commands
    if (debug && payload_len > 2 && !b.dumping)
    {
@@ -1205,7 +1205,6 @@ daikin_s21_command (uint8_t cmd, uint8_t cmd2, int payload_len, char *payload)
          {
             // Unexpected reply, protocol broken
             jo_t j = jo_s21_alloc (cmd, cmd2, payload, payload_len);
-            daikin.talking = 0;
             jo_bool (j, "noack", 1);
             jo_stringf (j, "value", "%02X", temp);
             revk_error ("comms", &j);
@@ -1291,7 +1290,6 @@ daikin_s21_command (uint8_t cmd, uint8_t cmd2, int payload_len, char *payload)
       if (!snoop && rxlen == txlen && is_valid_s21_response (buf, rxlen, cmd, cmd2) &&
           (payload_len == 0 || !memcmp (payload, buf + S21_PAYLOAD_OFFSET, payload_len)))
       {                         // Loop back
-         daikin.talking = 0;
          if (!b.loopback)
          {
             ESP_LOGE (TAG, "Loopback");
@@ -1311,7 +1309,6 @@ daikin_s21_command (uint8_t cmd, uint8_t cmd2, int payload_len, char *payload)
       // incremented by 1, the second character is left intact
       if (!snoop && !is_valid_s21_response (buf, rxlen, r, cmd2))
       {                         // Malformed response, no proper S21
-         daikin.talking = 0;    // Protocol is broken, will restart communication
          jo_t j = jo_comms_alloc ();
          jo_stringf (j, "cmd", "%c%c", cmd, cmd2);
          if (buf[0] != STX)
@@ -1362,6 +1359,7 @@ daikin_x50a_command (uint8_t cmd, int txlen, uint8_t *payload)
    int rxlen = uart_read_bytes (uart, buf, sizeof (buf), READ_TIMEOUT);
    if (rxlen <= 0)
    {
+      daikin.talking = 0;
       comm_timeout (NULL, 0);
       return;
    }
@@ -3539,11 +3537,11 @@ app_main ()
       }
       if (!b.loopback)
          daikin.ha_send = 1;
-      int poll = 0;
+      memset (&s21, sizeof (s21), 0);   // Clear all S21 message status
+      int polls = 0;
       do
       {
          // Polling loop. We exit from here only if we get a protocol error
-         poll++;
          if (proto_type () != PROTO_TYPE_CN_WIRED)
          {
             /* wait for next second. For CN_WIRED we don't need to actively poll the
@@ -3689,6 +3687,7 @@ app_main ()
          {
             if (proto_type () == PROTO_TYPE_ALTHERMA_S)
             {
+               polls++;
 #define poll(a)                         \
    static uint8_t a=2;                  \
    if(a){                               \
@@ -3709,11 +3708,13 @@ app_main ()
 #undef poll
             } else if (proto_type () == PROTO_TYPE_CN_WIRED)
             {                   // CN WIRED
+               polls++;
                uint8_t buf[CNW_PKT_LEN];
                esp_err_t e = cn_wired_read_bytes (buf, protofix ? 20000 : 5000);
                if (e == ESP_ERR_TIMEOUT)
                {
                   daikin.online = false;
+                  daikin.talking = 0;
                   comm_timeout (NULL, 0);
                } else if (e == ESP_OK)
                {
@@ -3732,139 +3733,145 @@ app_main ()
                   daikin.talking = 0;   // Not ready?
                }
             } else if (proto_type () == PROTO_TYPE_S21)
-            {                   // Older S21
+            {                   // S21
                char temp[5];
                if (debug)
                   s21debug = jo_object_alloc ();
                // Poll the AC status.
                // Each value has a smart NAK counter (see macro below), which allows
                // for autodetecting unsupported commands
-               // Not the do{}while(0); logic is so this works as a single C statement can so can  be used as if()poll(); safely
-#define poll(a,b,c,d)                         		\
-   do							\
-   {							\
-   	if(!s21.a##b##d.bad)				\
-	{						\
-      	    int r=daikin_s21_command(*#a,*#b,c,#d);	\
-      	    if (r==RES_OK)                          	\
-      	    {                         	 		\
-        	s21.a##b##d.ack=1;            		\
-        	s21.a##b##d.nak=0;            		\
-        	s21.a##b##d.bad=0;            		\
-	    }                         	 		\
-      	    else if(r==RES_NAK||r==RES_TIMEOUT||r==RES_NOACK)      	\
-      	    {                         	 		\
-		if(s21.a##b##d.nak++>7)			\
-		    s21.a##b##d.bad=1;			\
-	    }                         	 		\
-   	}                                          	\
-   	if(!daikin.talking)                        	\
-      	    s21.a##b##d.ack=s21.a##b##d.nak=s21.a##b##d.bad=0;\
-    } while(0)
-               poll (F, 1, 0,);
+               uint8_t ok = 0;  // Count good replies
+               void dopoll (s21poll_t * p, char a, char b, char *d)
+               {
+                  if (!p->bad)
+                  {
+                     int r = daikin_s21_command (a, b, strlen (d), d);
+                     if (r == RES_OK)
+                     {
+                        ok++;
+                        p->ack = 1;
+                        p->nak = 0;
+                     } else if (r == RES_NAK || r == RES_TIMEOUT || r == RES_NOACK)
+                     {          // Give up
+                        if (p->nak++ >= 7)
+                        {
+                           p->bad = 1;
+                           jo_t j = jo_comms_alloc ();
+                           jo_stringf (j, "S21", "%s%s%s", a, b, d);
+                           revk_error ("unsupported", &j);
+                        }
+                     }
+                  }
+               }
+#define poll(a,b,d) dopoll(&s21.a##b##d,*#a,*#b,#d)
+               poll (F, 1,);
                if (s21extra)
-                  poll (F, 2, 0,);
+                  poll (F, 2,);
                if (s21.F6.bad || s21extra)
-                  poll (F, 3, 0,);      // If F6 works we assume we don't need F3
+                  poll (F, 3,); // If F6 works we assume we don't need F3
                if (s21extra)
-                  poll (F, 4, 0,);
-               poll (F, 5, 0,);
-               poll (F, 6, 0,);
-               poll (F, 7, 0,);
+                  poll (F, 4,);
+               poll (F, 5,);
+               poll (F, 6,);
+               poll (F, 7,);
                if (!s21.F8.ack)
-                  poll (F, 8, 0,);      // One time static value
-               poll (F, 9, 0,);
+                  poll (F, 8,); // One time static value
+               poll (F, 9,);
                if (s21extra)
-                  poll (F, A, 0,);
+                  poll (F, A,);
                if (s21extra)
-                  poll (F, B, 0,);
+                  poll (F, B,);
                if (!s21.FC.ack)
-                  poll (F, C, 0,);      // One time static value
+                  poll (F, C,); // One time static value
                if (s21extra)
-                  poll (F, G, 0,);
+                  poll (F, G,);
                if (s21extra)
-                  poll (F, K, 0,);
+                  poll (F, K,);
                if (s21extra)
-                  poll (F, N, 0,);
+                  poll (F, N,);
                if (s21extra)
-                  poll (F, P, 0,);
+                  poll (F, P,);
                if (s21extra)
-                  poll (F, Q, 0,);
+                  poll (F, Q,);
                if (s21extra)
-                  poll (F, S, 0,);
+                  poll (F, S,);
                if (s21extra)
-                  poll (F, T, 0,);
-               //if(s21extra)poll (F, U, 2, 02);
+                  poll (F, T,);
+               //if(s21extra)poll (F, U, 02);
                if (!nohourly)
                {
                   uint8_t n = ((time (0) / 3600) & 1);
                   if (n != b.hourly)
                   {             // Hourly
                      b.hourly = n;
-                     poll (D, H, 4, 1000);
+                     poll (D, H, 1000);
                   }
                }
                if (s21.rgfan)
-                  poll (R, G, 0,);      // Needed to confirm fan changes.
+                  poll (R, G,); // Needed to confirm fan changes.
 
                // The following are polled one per cycle - this is mainly for read only status/meters
                static uint8_t slowcycle = 0;
+               if (!slowcycle)
+                  polls++;
                switch (slowcycle++)
                {
                case 0:
-                  poll (R, H, 0,);
+                  poll (R, H,);
                   break;
                case 1:
-                  poll (R, I, 0,);
+                  poll (R, I,);
                   break;
                case 2:
-                  poll (R, a, 0,);
+                  poll (R, a,);
                   break;
                case 3:
-                  poll (R, L, 0,);      // Fan speed
+                  poll (R, L,); // Fan speed
                   break;
                case 4:
-                  poll (R, d, 0,);      // Compressor
+                  poll (R, d,); // Compressor
                   break;
                case 5:
-                  poll (R, N, 0,);      // Angle
+                  poll (R, N,); // Angle
                   break;
                case 6:
                   if (!s21.rgfan)
                   {
-                     poll (R, G, 0,);   // Fan (but only if we did not already do this to confirm fan change
+                     poll (R, G,);      // Fan (but only if we did not already do this to confirm fan change
                      break;
                   }
                   slowcycle++;  // Skipped step
                   __attribute__((fallthrough));
                case 7:
-                  poll (F, M, 0,);      // Outside energy
+                  poll (F, M,); // Outside energy
                   break;
                case 8:
-                  poll (F, U, 2, 04);   // Inside energy
+                  poll (F, U, 04);      // Inside energy
                   break;
                case 9:
-                  poll (F, X, 2, 60);   // Inside power
+                  poll (F, X, 60);      // Inside power
                   break;
                case 10:
                   if (!nohumidity)
-                     poll (R, e, 0,);   // Humidity
+                     poll (R, e,);      // Humidity
                   // From here on are all s21extra
                   if (!s21extra)
                      slowcycle = 0;
                   break;
                case 11:
-                  poll (R, M, 0,);
+                  poll (R, M,);
                   break;
                case 12:
-                  poll (R, X, 0,);
+                  poll (R, X,);
                   break;
                case 13:
-                  poll (R, D, 0,);
+                  poll (R, D,);
                   // End
                   slowcycle = 0;        // End of extra/debug cycle
                   break;
                }
+               if (!ok)
+                  daikin.talking = 0;   // Not replying
                if (!slowcycle && daikin.talking)
                   b.startup = 0;        // End of startup
 
@@ -3984,6 +3991,7 @@ app_main ()
                }
             } else if (proto_type () == PROTO_TYPE_X50A)
             {                   // Newer protocol
+               polls++;
                //daikin_x50a_command(0xB7, 0, NULL);       // Not sure this is actually meaningful
                daikin_x50a_command (0xBD, 0, NULL);
                daikin_x50a_command (0xBE, 0, NULL);
@@ -4462,18 +4470,16 @@ app_main ()
                }
             }
          }
-         if (daikin.ha_send && (b.loopback || (poll > 10 && b.protocol_set && daikin.talking)))
+         if (daikin.ha_send && (b.loopback || (polls > 1 && b.protocol_set && daikin.talking)))
          {
             send_ha_config ();
             ha_status ();       // Update status now sent
          }
       }
       while (daikin.talking);
-      {
+      {                         // Stopped talking
          jo_t j = jo_comms_alloc ();
-         jo_bool (j, "failed-loop", 1);
-         jo_int (j, "poll", poll);
-         revk_error ("comms", &j);
+         revk_error ("not-responding", &j);
       }
       // We're here if protocol has been broken. We'll reconfigure the UART
       // and restart from scratch, possibly changing the protocol, if we're
