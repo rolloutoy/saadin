@@ -1717,6 +1717,8 @@ mqtt_client_callback (int client, const char *prefix, const char *target, const 
          jo_bool (s, "streamer", checkbool ());
       if (!strcmp (suffix, "autoe"))
          jo_bool (s, "autoe", checkbool ());
+      if (!strcmp (suffix, "led"))
+         jo_bool (s, "led", checkbool ());
    }
    jo_close (s);
    jo_rewind (s);
