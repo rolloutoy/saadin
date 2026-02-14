@@ -24,7 +24,7 @@ I'd like to thank the contributors, but contributions are made and accepted on b
 
 This is an open source project, but bear in mind you cannot sell boards bearing the Andrews & Arnold Ltd name, the A&A logo, the registered trademark Faikout, the registered trademark AJK logo, or the GS1 allocated EANs assigned to Andrews & Arnold Ltd.
 
-Note the name change from Faikin to Faikout as Daikin complained to Amazon and caused a lot of issues. As such Faikout is now a registered trademark to avoid such issues.
+Note the name change from Faikin to Faikout as Daikin complained to Amazon and caused a lot of issues. As such Faikout is now a registered trademark to avoid such issues. We fully understand people not wishing to support Amazon, so we have Tindie and direct sales as well.
 
 ## Further manuals / links
 
