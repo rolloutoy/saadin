@@ -1,6 +1,6 @@
-### Name change
+# Support
 
-Yes, it seems Daikin don't like Faikin, and I don't have the time or money to argue. Given (ongoing) issues with Amazon, Faikout is now a registered trademark.
+You can supprot this project in many ways, including testing and diagnostics, merge requests, clearly described issues, and buying Faikout boards from us. Thank you all for yoru support.
 
 # ESP32-Faikout
 
@@ -23,6 +23,8 @@ I'd like to thank the contributors, but contributions are made and accepted on b
 ## Trademark
 
 This is an open source project, but bear in mind you cannot sell boards bearing the Andrews & Arnold Ltd name, the A&A logo, the registered trademark Faikout, the registered trademark AJK logo, or the GS1 allocated EANs assigned to Andrews & Arnold Ltd.
+
+Note the name change from Faikin to Faikout as Daikin complained to Amazon and caused a lot of issues. As such Faikout is now a registered trademark to avoid such issues.
 
 ## Further manuals / links
 
