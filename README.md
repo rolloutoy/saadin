@@ -1,6 +1,6 @@
 # Support
 
-You can supprot this project in many ways, including testing and diagnostics, merge requests, clearly described issues, and buying Faikout boards from us. Thank you all for yoru support.
+You can support this project in many ways, including testing and diagnostics, merge requests, clearly described issues, and buying Faikout boards from us. Thank you all for yoru support.
 
 # ESP32-Faikout
 
