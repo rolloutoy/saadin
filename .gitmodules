@@ -12,7 +12,7 @@
 	url = https://github.com/revk/AXL
 [submodule "ESP32/components/ESP32-RevK"]
 	path = ESP/components/ESP32-RevK
-	url = https://github.com/revk/ESP32-RevK
+	url = https://codeberg.org/RevK/ESP32-RevK
 [submodule "ESP32/ESP32-BLE-Env"]
 	path = ESP/ESP32-BLE-Env
 	url = https://github.com/revk/ESP32-BLE-Env
