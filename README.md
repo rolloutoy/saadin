@@ -1,6 +1,6 @@
-### Name change
+## Support
 
-Yes, it seems Daikin don't like Faikin, and I don't have the time or money to argue. Given (ongoing) issues with Amazon, Faikout is now a registered trademark.
+You can support this project in many ways, including testing and diagnostics, merge requests, clearly described issues and suggestions, and buying Faikout boards from us. Thank you all for your support. This is open source so others can make and sell (with trademark restrictions).
 
 # ESP32-Faikout
 
@@ -16,13 +16,15 @@ This code/module provides local control via web interface, MQTT, and HomeAssista
 
 * There is also a new [Faikout Remote Control](https://remote.revk.uk/) available, BLE linked to the Faikout, with environmental sensors, available on Tindie now.
 
-PCB designs are included, and also available to buy on [Tindie](https://tindie.uk/), and on [Amazon UK](https://www.amazon.co.uk/dp/B0G1TP8XCQ). There are other people making and selling, e.g. on [eBay Australia](https://www.ebay.com.au/itm/186860658654).
+PCB designs are included, and also available to buy on [Tindie](https://tindie.uk/), [eBay UK](https://www.ebay.co.uk/itm/297655849543), and [Amazon UK](https://www.amazon.co.uk/dp/B0G1TP8XCQ). There are other people making and selling, e.g. on [eBay Australia](https://www.ebay.com.au/itm/186860658654).
 
 I'd like to thank the contributors, but contributions are made and accepted on basis that you issue your contribution under the same GPL licence as the project. Forks are allowed on the basis that your forks are on the same GPL licence as the project.
 
 ## Trademark
 
 This is an open source project, but bear in mind you cannot sell boards bearing the Andrews & Arnold Ltd name, the A&A logo, the registered trademark Faikout, the registered trademark AJK logo, or the GS1 allocated EANs assigned to Andrews & Arnold Ltd.
+
+Note the name change from Faikin to Faikout as Daikin complained to Amazon and caused a lot of issues. As such Faikout is now a registered trademark to avoid such issues. We fully understand people not wishing to support Amazon, so we have [Tindie](https://tindie.uk/) and [direct](https://www.aa.net.uk/goods/?initial_product=RkFJS0lOP0ZBSUtJTi1DQVNFP0ZBSUtJTi1TMjE=) for UK sales as well.
 
 ## Further manuals / links
 
@@ -40,7 +42,7 @@ For support, see issues and discussions.
 
 ## PCB and case
 
-The boards from [Tindie](https://tindie.uk), [eBay](https://www.ebay.com.au/itm/186860658654), and [Amazon UK](https://www.amazon.co.uk/dp/B0G1TP8XCQ) works with Daikin modules via an `S21` connector, or `X50A` and `X35A` connectors, or similar. The design is updated from time to time so may not look exactly like this.
+The boards from [Tindie](https://tindie.uk), [eBay UK](https://www.ebay.co.uk/itm/297655849543), [Amazon UK](https://www.amazon.co.uk/dp/B0G1TP8XCQ), and [eBay Aus](https://www.ebay.com.au/itm/186860658654) works with Daikin modules via an `S21` connector, or `X50A` and `X35A` connectors, or similar. The design is updated from time to time so may not look exactly like this.
 
 <img src=PCB/Faikout/Faikout.png width=49%><img src=PCB/Faikout/Faikout-bottom.png width=49%>
 
@@ -60,7 +62,7 @@ This whole project is almost entirely by me, but with some valuable contribution
 
 ## How to get one
 
-As mentioned, [Tindie](https://tindie.uk), [eBay](https://www.ebay.com.au/itm/186860658654), and [Amazon UK](https://www.amazon.co.uk/dp/B0G1TP8XCQ).
+As mentioned, [Tindie](https://tindie.uk), [ebay UK](https://www.ebay.co.uk/itm/297655849543), [Amazon UK](https://www.amazon.co.uk/dp/B0G1TP8XCQ), and [eBay Aus](https://www.ebay.com.au/itm/186860658654).
 
 But also, the PCB designs are published, including production files for [JLCPCB](https://jlcpcb.com). You need to remove trademarks, etc, and you would also need something to program them (TC2030 lead). Obviously you need some experience with PCB ordering and diagnostics if getting your own boards made.
 
