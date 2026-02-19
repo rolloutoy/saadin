@@ -3,13 +3,13 @@
 	url = https://codeberg.org/RevK/PCBCase
 [submodule "Tools/SQLlib"]
 	path = Tools/SQLlib
-	url = https://github.com/revk/SQLlib
+	url = https://codeberg.org/RevK/SQLlib
 [submodule "Tools/AJL"]
 	path = Tools/AJL
-	url = https://github.com/revk/AJL
+	url = https://codeberg.org/RevK/AJL
 [submodule "Tools/AXL"]
 	path = Tools/AXL
-	url = https://github.com/revk/AXL
+	url = https://codeberg.org/RevK/AXL
 [submodule "ESP32/components/ESP32-RevK"]
 	path = ESP/components/ESP32-RevK
 	url = https://codeberg.org/RevK/ESP32-RevK
