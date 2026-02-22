@@ -15,4 +15,4 @@
 	url = https://codeberg.org/RevK/ESP32-RevK
 [submodule "ESP32/ESP32-BLE-Env"]
 	path = ESP/ESP32-BLE-Env
-	url = https://github.com/revk/ESP32-BLE-Env
+	url = https://codeberg.org/RevK/ESP32-BLE-Env
