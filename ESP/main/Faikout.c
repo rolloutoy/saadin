@@ -3763,7 +3763,7 @@ app_main ()
                         {
                            p->bad = 1;
                            jo_t j = jo_comms_alloc ();
-                           jo_stringf (j, "S21", "%s%s%s", a, b, d);
+                           jo_stringf (j, "S21", "%c%c%s", a, b, d);
                            revk_error ("unsupported", &j);
                         }
                      }
