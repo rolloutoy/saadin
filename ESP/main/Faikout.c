@@ -3213,8 +3213,8 @@ revk_state_extra (jo_t j)
       jo_string (j, "preset", daikin.econo ? "eco" : daikin.powerful ? "boost" : nohomepreset ? "none" : "home");       // Limited modes
    if (haswitches)
       jo_bool (j, "autoe", autoe);
-   { // Extra debug for web lock up
-      int clients[20];
+   {                            // Extra debug for web lock up
+      int clients[30];
       size_t fds = sizeof (clients) / sizeof (*clients);
       if (!httpd_get_client_list (&webserver, &fds, clients))
          jo_int (j, "httpd", fds);
