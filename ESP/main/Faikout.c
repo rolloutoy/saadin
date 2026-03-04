@@ -3213,6 +3213,12 @@ revk_state_extra (jo_t j)
       jo_string (j, "preset", daikin.econo ? "eco" : daikin.powerful ? "boost" : nohomepreset ? "none" : "home");       // Limited modes
    if (haswitches)
       jo_bool (j, "autoe", autoe);
+   { // Extra debug for web lock up
+      int clients[20];
+      size_t fds = sizeof (clients) / sizeof (*clients);
+      if (!httpd_get_client_list (&webserver, &fds, clients))
+         jo_int (j, "httpd", fds);
+   }
 }
 
 void
@@ -3418,10 +3424,13 @@ app_main ()
    {
       // Web interface
       httpd_config_t config = HTTPD_DEFAULT_CONFIG ();
+      config.lru_purge_enable = true;
       config.stack_size += 4096;        // Being on the safe side
+      config.max_open_sockets += 5;     // More sockets
       // When updating the code below, make sure this is enough
       // Note that we're also adding revk's own web config handlers
       config.max_uri_handlers = 16 + revk_num_web_handlers ();
+      ESP_LOGE (TAG, "HTTPD stack %u sockets %u handlers %u", config.stack_size, config.max_open_sockets, config.max_uri_handlers);
       if (!httpd_start (&webserver, &config))
       {
          if (websettings)
