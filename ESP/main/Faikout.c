@@ -2066,7 +2066,7 @@ web_control (httpd_req_t *req)
                   ".xoffline .offline {display:none;}"  //
                   "</style>"    //
                   "<script>"    //
-                  "var ws=false;"       //
+                  "var ws=undefined;"       //
                   "var reboot=false;"   //
                   "function cf(v){return %s;}"  //
                   "function g(n){return document.getElementById(n);};"  //
@@ -2079,7 +2079,7 @@ web_control (httpd_req_t *req)
                   "function c(){"       //
                   "ws=new WebSocket((location.protocol=='https:'?'wss:':'ws:')+'//'+window.location.host+'/status');"   //
                   "ws.onopen=function(v){g('top').className='on';};"    //
-                  "ws.onclose=function(v){g('top').className='off';if(reboot)location.reload();};"      //
+                  "ws.onclose=function(v){g('top').className='off';if(reboot)location.reload();else c();};"      //
                   "ws.onerror=function(v){ws.close();};"        //
                   "ws.onmessage=function(v){"   //
                   "o=JSON.parse(v.data);"       //
@@ -2132,7 +2132,7 @@ web_control (httpd_req_t *req)
                   "if(o.shutdown){reboot=true;s('shutdown','Restarting: '+o.shutdown);g('shutdown').style.display='';};"        //
                   "};};"        //
                   "c();"        //
-                  "setInterval(function() {console.log('ws '+ws.readyState);if(ws.readyState==3)c();else if(ws.readyState==1)ws.send('');},1000);"       //
+                  "setInterval(function() {if(!ws.readyState)ws.close();else if(ws.readyState==1)ws.send('');},1000);"       //
                   "</script>", fahrenheit ? "Math.round(10*((v*9/5)+32))/10+'℉'" : "v+'℃'");
    return revk_web_foot (req, 0, websettings, b.protocol_set ? proto_name () : NULL);
 }
