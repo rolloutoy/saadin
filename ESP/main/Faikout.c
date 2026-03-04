@@ -2132,7 +2132,7 @@ web_control (httpd_req_t *req)
                   "if(o.shutdown){reboot=true;s('shutdown','Restarting: '+o.shutdown);g('shutdown').style.display='';};"        //
                   "};};"        //
                   "c();"        //
-                  "setInterval(function() {if(ws.readyState==3)c();else if(ws.readyState==1)ws.send('');},1000);"       //
+                  "setInterval(function() {console.log('ws '+ws.readyState);if(ws.readyState==3)c();else if(ws.readyState==1)ws.send('');},1000);"       //
                   "</script>", fahrenheit ? "Math.round(10*((v*9/5)+32))/10+'℉'" : "v+'℃'");
    return revk_web_foot (req, 0, websettings, b.protocol_set ? proto_name () : NULL);
 }
@@ -2168,6 +2168,8 @@ web_root (httpd_req_t *req)
 static esp_err_t
 web_status (httpd_req_t *req)
 {                               // Web socket status report
+   if (req->method == HTTP_GET)
+      return ESP_OK; // pre handshake
    int fd = httpd_req_to_sockfd (req);
    void wsend (jo_t * jp)
    {
@@ -2193,8 +2195,6 @@ web_status (httpd_req_t *req)
       wsend (&j);
       return ESP_OK;
    }
-   if (req->method == HTTP_GET)
-      return status ();         // Send status on initial connect
    // received packet
    httpd_ws_frame_t ws_pkt;
    uint8_t *buf = NULL;
