@@ -25,6 +25,7 @@ beta:
 	cp $(PROJECT_NAME)*.bin release/beta
 	git commit -a -m Beta
 	git push
+	git lfs prune
 	rsync -az release/beta/$(PROJECT_NAME)* ota.faikout.uk:/var/www/ota/beta/
 
 issue:	
@@ -33,6 +34,7 @@ issue:
 	cp -f release/beta/$(PROJECT_NAME)*.bin release
 	git commit -a -m Release
 	git push
+	git lfs prune
 	rsync -az release/$(PROJECT_NAME)* ota.faikout.uk:/var/www/ota/
 
 main/settings.h:     components/ESP32-RevK/revk_settings main/settings.def components/ESP32-RevK/settings.def
