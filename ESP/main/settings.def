@@ -87,8 +87,8 @@ bit	temp.adjust	1		.live					// Adjust target temp allowing for different Daikin
 u16	temp.noflap	0		.live	.unit="s"			// Min time between target temp changes
 
 #ifdef CONFIG_BT_NIMBLE_ENABLED
-bit	ble.enable			.old="ble"				// Enable BLE for sensors or remote
-s	auto.b				.live					// BLE sensor ID
+bit	ble.enable			.hide .old="ble"				// Enable BLE for sensors or remote
+s	auto.b				.hide .live					// BLE sensor ID
 #endif
 
 bit	auto.e		1		.live					// Enable auto time and power operations
