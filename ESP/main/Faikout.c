@@ -2066,7 +2066,7 @@ web_control (httpd_req_t *req)
                   ".xoffline .offline {display:none;}"  //
                   "</style>"    //
                   "<script>"    //
-                  "var ws=undefined;"       //
+                  "var ws=undefined;"   //
                   "var reboot=false;"   //
                   "function cf(v){return %s;}"  //
                   "function g(n){return document.getElementById(n);};"  //
@@ -2079,7 +2079,7 @@ web_control (httpd_req_t *req)
                   "function c(){"       //
                   "ws=new WebSocket((location.protocol=='https:'?'wss:':'ws:')+'//'+window.location.host+'/status');"   //
                   "ws.onopen=function(v){g('top').className='on';};"    //
-                  "ws.onclose=function(v){g('top').className='off';if(reboot)location.reload();else c();};"      //
+                  "ws.onclose=function(v){g('top').className='off';if(reboot)location.reload();else c();};"     //
                   "ws.onerror=function(v){ws.close();};"        //
                   "ws.onmessage=function(v){"   //
                   "o=JSON.parse(v.data);"       //
@@ -2132,7 +2132,7 @@ web_control (httpd_req_t *req)
                   "if(o.shutdown){reboot=true;s('shutdown','Restarting: '+o.shutdown);g('shutdown').style.display='';};"        //
                   "};};"        //
                   "c();"        //
-                  "setInterval(function() {if(!ws.readyState)ws.close();else if(ws.readyState==1)ws.send('');},1000);"       //
+                  "setInterval(function() {if(!ws.readyState)ws.close();else if(ws.readyState==1)ws.send('');},1000);"  //
                   "</script>", fahrenheit ? "Math.round(10*((v*9/5)+32))/10+'℉'" : "v+'℃'");
    return revk_web_foot (req, 0, websettings, b.protocol_set ? proto_name () : NULL);
 }
@@ -2169,7 +2169,7 @@ static esp_err_t
 web_status (httpd_req_t *req)
 {                               // Web socket status report
    if (req->method == HTTP_GET)
-      return ESP_OK; // pre handshake
+      return ESP_OK;            // pre handshake
    int fd = httpd_req_to_sockfd (req);
    void wsend (jo_t * jp)
    {
@@ -3213,13 +3213,6 @@ revk_state_extra (jo_t j)
       jo_string (j, "preset", daikin.econo ? "eco" : daikin.powerful ? "boost" : nohomepreset ? "none" : "home");       // Limited modes
    if (haswitches)
       jo_bool (j, "autoe", autoe);
-   if(webserver)
-   {                            // Extra debug for web lock up - does not seem to work, grrr - TODO
-      int clients[30];
-      size_t fds = sizeof (clients) / sizeof (*clients);
-      if (!httpd_get_client_list (&webserver, &fds, clients))
-         jo_int (j, "httpd", fds);
-   }
 }
 
 void
@@ -4353,91 +4346,79 @@ app_main ()
             daikin.remote = 0;
             controlstop ();
          }
+         if (isnan (min) || isnan (max))
+            controlstop ();     // Does nothing if stopped already
          // Local auto controls
          if (daikin.power && daikin.controlvalid && !revk_shutting_down (NULL))
          {                      // Local auto controls
-            // Get the settings atomically
-            if (isnan (min) || isnan (max))
-               controlstop ();
-            else
-            {                   // Control
-               controlstart (); // Will do nothing if control already active
-               // What the A/C is using as current temperature
-               float reference = NAN;
-               if ((daikin.status_known & (CONTROL_home | CONTROL_inlet)) == (CONTROL_home | CONTROL_inlet))    // Both values are known
-                  reference = (daikin.home * thermref + daikin.inlet * (100 - thermref)) / 100; // thermref is how much inlet and home are used as reference
-               else if (daikin.status_known & CONTROL_home)
-                  reference = daikin.home;
-               else if (daikin.status_known & CONTROL_inlet)
-                  reference = daikin.inlet;
-               // It looks like the ducted units are using inlet in some way, even when field settings say controller.
-               if (daikin.mode == 3)
-                  daikin_set_e (mode, hot ? "H" : "C"); // Out of auto
-               // Temp set
-               float set = (min + max) / 2.0;   // Target temp we will be setting (before adjust for reference error and before limiting)
+            controlstart ();    // Will do nothing if control already active
+            // What the A/C is using as current temperature
+            float reference = NAN;
+            if ((daikin.status_known & (CONTROL_home | CONTROL_inlet)) == (CONTROL_home | CONTROL_inlet))       // Both values are known
+               reference = (daikin.home * thermref + daikin.inlet * (100 - thermref)) / 100;    // thermref is how much inlet and home are used as reference
+            else if (daikin.status_known & CONTROL_home)
+               reference = daikin.home;
+            else if (daikin.status_known & CONTROL_inlet)
+               reference = daikin.inlet;
+            // It looks like the ducted units are using inlet in some way, even when field settings say controller.
+            if (daikin.mode == 3)
+               daikin_set_e (mode, hot ? "H" : "C");    // Out of auto
+            // Temp set
+            float set = (min + max) / 2.0;      // Target temp we will be setting (before adjust for reference error and before limiting)
+            if (thermostat)
+               set = (((hot && daikin.hysteresis) || (!hot && !daikin.hysteresis)) ? max : min);
+            if (temptrack)
+               set = reference; // Base target on current Daikin measured temp instead.
+            else if (tempadjust)
+               set += reference - measured_temp;        // Adjust for reference not being measured_temp
+            if ((hot && measured_temp < (daikin.hysteresis ? max : min))
+                || (!hot && measured_temp > (daikin.hysteresis ? min : max)))
+            {                   // Apply heat/cool - i.e. force heating or cooling to definitely happen
                if (thermostat)
-                  set = (((hot && daikin.hysteresis) || (!hot && !daikin.hysteresis)) ? max : min);
-               if (temptrack)
-                  set = reference;      // Base target on current Daikin measured temp instead.
-               else if (tempadjust)
-                  set += reference - measured_temp;     // Adjust for reference not being measured_temp
-               if ((hot && measured_temp < (daikin.hysteresis ? max : min))
-                   || (!hot && measured_temp > (daikin.hysteresis ? min : max)))
-               {                // Apply heat/cool - i.e. force heating or cooling to definitely happen
-                  if (thermostat)
-                     daikin.hysteresis = 1;     // We're on, so keep going to "beyond"
-                  if (hot)
-                  {
-                     set += heatover;   // Ensure heating by applying A/C offset to force it
-                     daikin.action = HVAC_HEATING;
-                  } else
-                  {
-                     set -= coolover;   // Ensure cooling by applying A/C offset to force it
-                     daikin.action = HVAC_COOLING;
-                  }
-                  if (!noled && autolcontrol)
-                  {
-                     daikin_set_v (led, 1);
-                  }
-               } else
-               {                // At or beyond temp - stop heat/cool - try and ensure it stops heating or cooling
-                  daikin.action = HVAC_IDLE;
-                  daikin.hysteresis = 0;        // We're off, so keep falling back until "approaching" (default when thermostat not set)
-                  if (daikin.fansaved)
-                  {
-                     daikin_set_v (fan, daikin.fansaved);       // revert fan speed (if set, which nofanauto would not do)
-                     daikin.fansaved = 0;
-                     samplestart ();    // Initial phase complete, start samples again.
-                  }
-                  if (hot)
-                     set -= heatback;   // Heating mode but apply negative offset to not actually heat any more than this
-                  else
-                     set += coolback;   // Cooling mode but apply positive offset to not actually cool any more than this
-                  if (!noled && autolcontrol)
-                  {
-                     daikin_set_v (led, 0);
-                  }
-               }
-
-               // Limit settings to acceptable values
-               if (proto_type () == PROTO_TYPE_CN_WIRED)
-                  set = roundf (set);   // CN_WIRED only does 1C steps
-               else if (proto_type () == PROTO_TYPE_S21)
-                  set = roundf (set * 2.0) / 2.0;       // S21 only does 0.5C steps
-               if (set < (hot ? tmin : tcoolmin))
-                  set = (hot ? tmin : tcoolmin);
-               if (set > (hot ? theatmax : tmax))
-                  set = (hot ? theatmax : tmax);
-               static uint32_t flap = 0;
-               static uint8_t lastaction = 0;
-               static float lastset = 0;
-               if (!isnan (set) && (daikin.action != lastaction || (set != lastset && now > flap)))
+                  daikin.hysteresis = 1;        // We're on, so keep going to "beyond"
+               if (hot)
+                  set += heatover;      // Ensure heating by applying A/C offset to force it - note user may have changed mode, which is annoying
+               else
+                  set -= coolover;      // Ensure cooling by applying A/C offset to force it - note user may have changed mode, which is annoying
+               daikin.action = (hot ? HVAC_HEATING : HVAC_COOLING);
+               if (!noled && autolcontrol)
+                  daikin_set_v (led, 1);
+            } else
+            {                   // At or beyond temp - stop heat/cool - try and ensure it stops heating or cooling
+               daikin.action = HVAC_IDLE;
+               daikin.hysteresis = 0;   // We're off, so keep falling back until "approaching" (default when thermostat not set)
+               if (daikin.fansaved)
                {
-                  flap = now + tempnoflap;      // Hold off changes for preset time, unless change of mode
-                  lastaction = daikin.action;
-                  lastset = set;
-                  daikin_set_t (temp, set);     // Apply temperature setting
+                  daikin_set_v (fan, daikin.fansaved);  // revert fan speed (if set, which nofanauto would not do)
+                  daikin.fansaved = 0;
+                  samplestart ();       // Initial phase complete, start samples again.
                }
+               if (hot)
+                  set -= heatback;      // Heating mode but apply negative offset to not actually heat any more than this
+               else
+                  set += coolback;      // Cooling mode but apply positive offset to not actually cool any more than this
+               if (!noled && autolcontrol)
+                  daikin_set_v (led, 0);
+            }
+
+            // Limit settings to acceptable values
+            if (proto_type () == PROTO_TYPE_CN_WIRED)
+               set = roundf (set);      // CN_WIRED only does 1C steps
+            else if (proto_type () == PROTO_TYPE_S21)
+               set = roundf (set * 2.0) / 2.0;  // S21 only does 0.5C steps
+            if (set < (hot ? tmin : tcoolmin))
+               set = (hot ? tmin : tcoolmin);
+            if (set > (hot ? theatmax : tmax))
+               set = (hot ? theatmax : tmax);
+            static uint32_t flap = 0;
+            static uint8_t lastaction = 0;
+            static float lastset = 0;
+            if (!isnan (set) && (daikin.action != lastaction || (set != lastset && now > flap)))
+            {
+               flap = now + tempnoflap; // Hold off changes for preset time, unless change of mode
+               lastaction = daikin.action;
+               lastset = set;
+               daikin_set_t (temp, set);        // Apply temperature setting
             }
          } else
          {
