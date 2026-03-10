@@ -1936,7 +1936,7 @@ web_control (httpd_req_t *req)
    addslider (NULL, "Set", "temp", tmin, tmax, get_temp_step ());
    void addt (const char *tag, const char *help)
    {
-      revk_web_send (req, "<td title=\"%s\" align=right>%s<br><span id=\"%s\"></span></td>", help, tag, tag);
+      revk_web_send (req, "<td title=\"%s\" align=right>%s<br><span id=\"%s\">…</span></td>", help, tag, tag);
    }
    tr (NULL);
    revk_web_send (req, "<td>Temps</td>");
