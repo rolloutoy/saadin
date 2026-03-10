@@ -28,7 +28,7 @@ Note the name change from Faikin to Faikout as Daikin complained to Amazon and c
 
 ## Further manuals / links
 
-- [Work in progress / release notes](./wiki/Work-in-progress)
+- [Work in progress / release notes](/RevK/ESP32-Faikout/wiki/Work-in-progress)
 - [Wiring](wiki/Wiring)
 - [Setup](Manuals/Setup.md) Manual
 - [Controls](Manuals/Controls.md) Manual
