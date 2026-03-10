@@ -70,15 +70,14 @@ But also, the PCB designs are published, including production files for [JLCPCB]
 
 Appears as access point with simple web page to set up on local WiFI. On iPhone the setup page auto-loads.
 
-![WiFi1](Manuals/WiFi1.png)
-
-![WiFi2](Manuals/WiFi2.png)
+<img src="Manuals/WiFi1.png" width=49%>
+<img src="Manuals/WiFi2.png" width=49%>
 
 # Operation
 
 Local interactive web control page using *hostname*.local, no app required, no external internet required.
 
-![WiFi3](Manuals/WiFi3.png)
+<img src="Manuals/WiFi3.png" width=49%>
 
 - [Setup](Manuals/Setup.md) Manual
 - [Controls](Manuals/Controls.md) Manual
