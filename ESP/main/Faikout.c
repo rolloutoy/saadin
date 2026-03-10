@@ -1853,7 +1853,7 @@ web_control (httpd_req_t *req)
              *instance ? instance :
 #endif
              hostname == revk_id ? revk_app : hostname);
-   revk_web_send (req, "<div id=top class=off><form name=F><table id=live>");
+   revk_web_send (req, "<div id=top class=off><form name=F class='xautoe xautor xslave xloopback xantifreeze xcontrol xoffline'><table id=live>");
    void tre (void)
    {
       revk_web_send (req, "</tr>");
