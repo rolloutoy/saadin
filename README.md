@@ -38,7 +38,7 @@ Note the name change from Faikin to Faikout as Daikin complained to Amazon and c
 - [DoC](Manuals/DoC.md) and Vulnerability disclosure policy
 - [S21](Manuals/S21.md) reverse engineered details of `S21` protocol
 
-For support, see issues and discussions.
+For support, see issues.
 
 ## PCB and case
 
