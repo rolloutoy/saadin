@@ -4,4 +4,6 @@ build
 *.exe
 *.o
 PCB/home
+PCB/*/.history
+PCB/*/fp-lib-table
 .vscode
