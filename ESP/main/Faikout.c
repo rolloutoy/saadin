@@ -1853,7 +1853,8 @@ web_control (httpd_req_t *req)
              *instance ? instance :
 #endif
              hostname == revk_id ? revk_app : hostname);
-   revk_web_send (req, "<div id=top class=off><form name=F class='xautoe xautor xslave xloopback xantifreeze xcontrol xoffline'><table id=live>");
+   revk_web_send (req,
+                  "<div id=top class=off><form name=F class='xautoe xautor xslave xloopback xantifreeze xcontrol xoffline'><table id=live>");
    void tre (void)
    {
       revk_web_send (req, "</tr>");
@@ -3785,7 +3786,8 @@ app_main ()
                poll (F, 7,);
                if (!s21.F8.ack)
                   poll (F, 8,); // One time static value
-               poll (F, 9,);
+               if (s21.RH.bad || s21.Ra.bad)
+                  poll (F, 9,); // Don't use F9 if we have RH and Ra
                if (s21extra)
                   poll (F, A,);
                if (s21extra)
@@ -3883,9 +3885,6 @@ app_main ()
                   daikin.talking = 0;   // Not replying
                if (!slowcycle && daikin.talking)
                   b.startup = 0;        // End of startup
-
-               if (!s21.RH.bad && !s21.Ra.bad)
-                  s21.F9.bad = 1;       // Don't use F9
                if (debugsend)
                {
                   b.dumping = 1;        // Force dumping
