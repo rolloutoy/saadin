@@ -3547,7 +3547,7 @@ app_main ()
       }
       if (!b.loopback)
          daikin.ha_send = 1;
-      memset (&s21, sizeof (s21), 0);   // Clear all S21 message status
+      memset (&s21, 0, sizeof (s21));   // Clear all S21 message status
       int polls = 0;
       do
       {
