@@ -3102,7 +3102,16 @@ send_ha_config (void)
       }
    }
    addw (daikin.status_known & CONTROL_consumption, "consumption", "Power consumption", NULL);
-
+   if (asprintf (&topic, "%s/sensor/%s%s/config", topicha, revk_id, "restart") >= 0)
+   {
+      jo_t j = make ("restart", NULL);
+      jo_string (j, "name", "Restart");
+      jo_string (j, "dev_cla", "restart");
+      jo_stringf (j, "cmd_t", "%s/%s", cmd, "restart");
+      jo_string (j, "payload_press", "");
+      revk_mqtt_send (NULL, 1, topic, &j);
+      free (topic);
+   }
    // TODO change above over gradually to new HA library stuff to make way neater
    ha_config_sensor ("ram",.name = "RAM",.field = "mem",.unit = "B",.delete = !haram);
    ha_config_sensor ("spi",.name = "PSRAM",.field = "spi",.unit = "B",.delete = !haram);
