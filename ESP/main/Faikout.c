@@ -1789,7 +1789,7 @@ web_head (httpd_req_t *req, const char *title)
                   ".on{opacity:1;transition:1s;}"       // 
                   ".off{opacity:0;transition:1s;}"      // 
                   "select{min-height:34px;border-radius:34px;background-color:#ccc;border:1px solid gray;color:black;box-shadow:3px 3px 3px #0008;}"    //
-                  "input.temp{min-width:230px;}"        //
+                  "input.temp{width:100%;max-width:230px;}"        //
                   "input.time{min-height:34px;min-width:64px;border-radius:34px;background-color:#ccc;border:1px solid gray;color:black;box-shadow:3px 3px 3px #0008;}" //
                   "a.pn{min-height:34px;min-width:34px;border-radius:30px;background-color:#ccc;border:1px solid gray;color:black;box-shadow:3px 3px 3px #0008;margin:3px;padding:3px 10px;font-size:100%%;}"   //
                   "</style><body><h1>%s</h1>", title ? : "");
@@ -2026,7 +2026,7 @@ web_control (httpd_req_t *req)
                         "<td align=right>%s</td><td><input class=time type=time title=\"Set 00:00 to disable\" id='%s' onchange=\"w('%s',this.value);\"></td>",
                         tag, field, field);
       }
-      revk_web_send (req, "<div class=remote><hr><table>");
+      revk_web_send (req, "<div class=remote><hr><table width=100%%>");
       tr (NULL);
       if (!*password)
       {
