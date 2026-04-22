@@ -3038,7 +3038,7 @@ send_ha_config (void)
    addbat (bleenable && *autob && bletemp && bletemp->batset, "blebat", "BLE Battery", "mdi:battery-bluetooth-variant");
 #endif
 #if 1
-   if (asprintf (&topic, "%s/sellightbulb/%sdemand/config", topicha, revk_id) >= 0)
+   if (asprintf (&topic, "%s/select/%sdemand/config", topicha, revk_id) >= 0)
    {
       if (!(daikin.status_known & CONTROL_demand))
          revk_mqtt_send_str (topic);
