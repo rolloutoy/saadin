@@ -14,7 +14,7 @@ This code/module provides local control via web interface, MQTT, and HomeAssista
 
 <img src="image/remote.jpg" width=33% align=right>
 
-* There is also a new [Faikout Remote Control](https://remote.revk.uk/) available, BLE linked to the Faikout, with environmental sensors, available on Tindie now.
+* There is also a new [Faikout Remote Control](https://remote.revk.uk/) available, BLE linked to the Faikout, with environmental sensors, available now.
 
 PCB designs are included, and also available to buy on [Lectronz](https://lectronz.uk/) with no hassle for UK/EU VAT or US tariffs, [Tindie](https://tindie.uk/), [eBay UK](https://www.ebay.co.uk/itm/297655849543), and [Amazon UK](https://www.amazon.co.uk/dp/B0G1TP8XCQ). There are other people making and selling, e.g. on [eBay Australia](https://www.ebay.com.au/itm/186860658654).
 
