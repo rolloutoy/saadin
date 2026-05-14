@@ -1848,6 +1848,10 @@ settings_autob (httpd_req_t *req)
 static esp_err_t
 web_control (httpd_req_t *req)
 {
+#ifdef  CONFIG_REVK_WEB_AUTH
+   if (!web_auth_check (req))
+      return ESP_OK;
+#endif
    web_head (req,
 #ifdef CONFIG_MDNS_MAX_INTERFACES
              *instance ? instance :
@@ -2169,6 +2173,10 @@ web_root (httpd_req_t *req)
 static esp_err_t
 web_status (httpd_req_t *req)
 {                               // Web socket status report
+#ifdef  CONFIG_REVK_WEB_AUTH
+   if (!web_auth_check (req))
+      return ESP_OK;
+#endif
    if (req->method == HTTP_GET)
       return ESP_OK;            // pre handshake
    int fd = httpd_req_to_sockfd (req);
