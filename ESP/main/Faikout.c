@@ -2026,12 +2026,12 @@ web_control (httpd_req_t *req)
                         "<td align=right>%s</td><td><input class=time type=time title=\"Set 00:00 to disable\" id='%s' onchange=\"w('%s',this.value);\"></td>",
                         tag, field, field);
       }
-      revk_web_send (req, "<div class=remote><hr><table width=100%%>");
+      revk_web_send (req, "<div class=remote><hr><table>");
       tr (NULL);
       if (!*password)
       {
          addb ("Enable", "autoe", "Enable");
-         revk_web_send (req, "<td colspan=3>Auto functions...</td>");
+         revk_web_send (req, "<td colspan=4>Auto functions...</td>");
       }
       add ("autoe", "Auto temp", "autor", "Off", "0", fahrenheit ? "±0.9℉" : "±½℃", "0.5",
            fahrenheit ? "±1.8℉" : "±1℃", "1", fahrenheit ? "±3.6℉" : "±2℃", "2", NULL);
