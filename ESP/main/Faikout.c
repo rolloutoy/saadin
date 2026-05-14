@@ -3012,13 +3012,13 @@ send_ha_config (void)
    addfreq (daikin.status_known & CONTROL_comp, "comp", "Compressor", hacomprpm ? "rpm" : "Hz", "mdi:sine-wave");
    addfreq (daikin.status_known & CONTROL_fanrpm, "fanfreq", "Fan", hafanrpm ? "rpm" : "Hz", "mdi:fan");
    addswitch (haswitches && (daikin.status_known & CONTROL_power), "power", "Power", "mdi:power");
-   addswitch (haswitches && (daikin.status_known & CONTROL_streamer), "streamer", "Streamer", "mdi:air-filter");
-   addswitch (haswitches && (daikin.status_known & CONTROL_sensor), "sensor", "Sensor mode", "mdi:motion-sensor");
-   addswitch (haswitches && (daikin.status_known & CONTROL_powerful), "powerful", "Powerful", "mdi:arm-flex");
-   addswitch (haswitches && (daikin.status_known & CONTROL_comfort), "comfort", "Comfort mode", "mdi:teddy-bear");
-   addswitch (haswitches && (daikin.status_known & CONTROL_quiet), "quiet", "Quiet outdoor", "mdi:volume-minus");
-   addswitch (haswitches && (daikin.status_known & CONTROL_econo), "econo", "Econo mode", "mdi:home-battery");
-   addswitch (haswitches && (daikin.status_known & CONTROL_led), "led", "LED", "mdi:lightbulb");
+   addswitch (haswitches && !nostreamer && (daikin.status_known & CONTROL_streamer), "streamer", "Streamer", "mdi:air-filter");
+   addswitch (haswitches && !nosensor && (daikin.status_known & CONTROL_sensor), "sensor", "Sensor mode", "mdi:motion-sensor");
+   addswitch (haswitches && !nopowerful && (daikin.status_known & CONTROL_powerful), "powerful", "Powerful", "mdi:arm-flex");
+   addswitch (haswitches && !nocomfort && (daikin.status_known & CONTROL_comfort), "comfort", "Comfort mode", "mdi:teddy-bear");
+   addswitch (haswitches && !noquiet && (daikin.status_known & CONTROL_quiet), "quiet", "Quiet outdoor", "mdi:volume-minus");
+   addswitch (haswitches && !noecono && (daikin.status_known & CONTROL_econo), "econo", "Econo mode", "mdi:home-battery");
+   addswitch (haswitches && !noled && (daikin.status_known & CONTROL_led), "led", "LED", "mdi:lightbulb");
    addswitch (haswitches && !nofaikoutauto, "autoe", "Auto mode", "mdi:power");
 #ifdef ELA
    void addbat (uint64_t ok, const char *tag, const char *name, const char *icon)
