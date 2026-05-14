@@ -1689,10 +1689,12 @@ mqtt_client_callback (int client, const char *prefix, const char *target, const 
             jo_bool (s, "comfort", 1);
          else
          {
-            jo_bool (s, "swingh", !strcmp (value, SWING_HORIZONTAL) || !strcmp (value, SWING_BOTH)
-                     || !strcmp (value, SWING_ON) ? 1 : 0);
-            jo_bool (s, "swingv", !strcmp (value, SWING_VERTICAL) || !strcmp (value, SWING_BOTH)
-                     || !strcmp (value, SWING_ON) ? 1 : 0);
+            if (!noswingh)
+               jo_bool (s, "swingh", !strcmp (value, SWING_HORIZONTAL) || !strcmp (value, SWING_BOTH)
+                        || !strcmp (value, SWING_ON) ? 1 : 0);
+            if (!noswingv)
+               jo_bool (s, "swingv", !strcmp (value, SWING_VERTICAL) || !strcmp (value, SWING_BOTH)
+                        || !strcmp (value, SWING_ON) ? 1 : 0);
          }
       }
       if (!strcmp (suffix, "preset"))
