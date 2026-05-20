@@ -268,10 +268,12 @@ get_temp_step (void)
 
 #ifdef ELA
 static bleenv_t *bletemp = NULL;
+static SemaphoreHandle_t blemutex = NULL;
 
 static int
 ble_sensor_connected (void)
 {                               // We actually have BLE configured and connected and not missing
+   // Assumes within mutex, though a test for not connected it probably OK
    return (bleenable && bletemp && !bletemp->missing) ? 1 : 0;
 }
 
@@ -1511,14 +1513,12 @@ autosub (void *json, const char *topic, jo_t j)
 {
    if (!ble_sensor_connected () && jo_find (j, (char *) json) == JO_NUMBER)
    {
-      xSemaphoreTake (daikin.mutex, portMAX_DELAY);
       daikin.controlvalid = uptime () + tcontrol;
       float env = jo_read_float (j);
       if (daikin.env != env)
          daikin.status_changed = 1;
       daikin.env = env;
       daikin.status_known |= CONTROL_env;       // So we report it
-      xSemaphoreGive (daikin.mutex);
    }
 }
 
@@ -1746,6 +1746,7 @@ daikin_status (void)
 #define s(name,len)     if((daikin.status_known&CONTROL_##name)&&*daikin.name)jo_string(j,#name,daikin.name);
 #include "acextras.m"
 #ifdef	ELA
+   xSemaphoreTake (blemutex, portMAX_DELAY);
    if (ble_sensor_connected ())
    {
       jo_object (j, "ble");
@@ -1759,6 +1760,7 @@ daikin_status (void)
          jo_litf (j, "volt", "%.3f", bletemp->volt / 1000.0);
       jo_close (j);
    }
+   xSemaphoreGive (blemutex);
    if (ble_sensor_enabled ())
       jo_string (j, "autob", autob);
 #endif
@@ -1960,8 +1962,9 @@ web_control (httpd_req_t *req)
    if ((daikin.status_known & CONTROL_env) && !ble_sensor_connected ())
       addt ("Env", "External reference temperature");
 #ifdef ELA
-   if (bleenable && *autob)
+   if (ble_sensor_enabled ())
    {
+      xSemaphoreTake (blemutex, portMAX_DELAY);
       tre ();
       tr (NULL);
       revk_web_send (req, "<td>%s</td>", bletemp && bletemp->faikoutset ? "BLE<br>Remote" : "BLE");
@@ -1971,6 +1974,7 @@ web_control (httpd_req_t *req)
          addt ("Hum", "External BLE humidity");
       if (!bletemp || bletemp->batset || bletemp->voltset)
          addt ("Bat", "External BLE battery");
+      xSemaphoreGive (blemutex);
    }
 #endif
    tre ();
@@ -3043,9 +3047,11 @@ send_ha_config (void)
          free (topic);
       }
    }
+   xSemaphoreTake (blemutex, portMAX_DELAY);
    addtemp (bleenable && *autob && bletemp && bletemp->tempset, "bletemp", "BLE Temp", "mdi:thermometer");
    addhum (bleenable && *autob && bletemp && bletemp->humset, "blehum", "BLE Humidity", "mdi:water-percent");
    addbat (bleenable && *autob && bletemp && bletemp->batset, "blebat", "BLE Battery", "mdi:battery-bluetooth-variant");
+   xSemaphoreGive (blemutex);
 #endif
 #if 1
    if (asprintf (&topic, "%s/select/%sdemand/config", topicha, revk_id) >= 0)
@@ -3186,7 +3192,8 @@ revk_state_extra (jo_t j)
    if (daikin.status_known & CONTROL_comp)
       jo_int (j, "comp", (hacomprpm ? 60 : 1) * daikin.comp);
 #ifdef ELA
-   if (bleenable && bletemp)
+   xSemaphoreTake (blemutex, portMAX_DELAY);
+   if (ble_sensor_connected ())
    {
       if (bletemp->tempset)
          jo_litf (j, "bletemp", "%.2f", bletemp->temp / 100.0);
@@ -3195,6 +3202,7 @@ revk_state_extra (jo_t j)
       if (bletemp->batset)
          jo_int (j, "blebat", bletemp->bat);
    }
+   xSemaphoreGive (blemutex);
 #endif
    if (daikin.status_known & CONTROL_mode)
    {
@@ -3376,6 +3384,7 @@ app_main ()
       gpio_config (&c);
    }
 #endif
+   blemutex = xSemaphoreCreateMutex ();
    daikin.mutex = xSemaphoreCreateMutex ();
    b.startup = 1;
    daikin.status_known = CONTROL_online;
@@ -3580,16 +3589,19 @@ app_main ()
 #ifdef ELA
          if (ble_sensor_enabled ())
          {                      // Automatic external temperature logic - only really useful if autor/autot set, or Faikout remote
+            xSemaphoreTake (blemutex, portMAX_DELAY);
             bleenv_expire (120);
             if (!bletemp || (strcmp (bletemp->name, autob) && strcmp (bletemp->mac, autob)))
             {
+               bleenv_t *was = bletemp;
                bletemp = NULL;
                bleenv_clean ();
                for (bleenv_t * e = bleenv; e; e = e->next)
                   if (!strcmp (e->name, autob) || !strcmp (e->mac, autob))
                   {
                      bletemp = e;
-                     daikin.ha_send = 1;
+                     if (bletemp != was)
+                        daikin.ha_send = 1;
                      break;
                   }
             }
@@ -3662,6 +3674,7 @@ app_main ()
                bleenv_faikout (hostname, daikin.home, daikin.temp, daikin.temp, daikin.power, daikin.antifreeze | daikin.slave,
                                map[daikin.mode], daikin.fan + 1);
             }
+            xSemaphoreGive (blemutex);
          }
 #endif
 #ifdef FAIKOUT_I2C_SENSOR
