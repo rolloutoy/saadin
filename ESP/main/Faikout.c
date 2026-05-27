@@ -3234,7 +3234,7 @@ revk_state_extra (jo_t j)
       jo_bool (j, "led", daikin.led);
    if (daikin.status_known & (CONTROL_swingh | CONTROL_swingv | CONTROL_comfort))
       jo_string (j, "swing", daikin.comfort ? SWING_COMFORT :   //
-                 daikin.swingh && daikin.swingv ? SWING_BOTH :  //
+                 (daikin.status_known & (CONTROL_swingv | CONTROL_swingh)) == (CONTROL_swingv | CONTROL_swingh) && daikin.swingh && daikin.swingv ? SWING_BOTH :        //
                  daikin.swingh ? (daikin.status_known & CONTROL_swingv) ? SWING_HORIZONTAL : SWING_ON : //
                  daikin.swingv ? (daikin.status_known & CONTROL_swingh) ? SWING_VERTICAL : SWING_ON :   //
                  SWING_OFF);
