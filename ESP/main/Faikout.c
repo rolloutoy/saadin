@@ -2196,7 +2196,10 @@ web_status (httpd_req_t *req)
          ws_pkt.payload = (uint8_t *) js;
          ws_pkt.len = strlen (js);
          ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-         httpd_ws_send_frame_async (req->handle, fd, &ws_pkt);
+         // If the async send fails the peer is gone; close the session so its socket slot is freed
+         // rather than leaked (a leaked slot is invisible to the select() loop forever).
+         if (httpd_ws_send_frame_async (req->handle, fd, &ws_pkt))
+            httpd_sess_trigger_close (req->handle, fd);
          free (js);
       }
    }
@@ -3449,6 +3452,12 @@ app_main ()
       // Web interface
       httpd_config_t config = HTTPD_DEFAULT_CONFIG ();
       config.lru_purge_enable = true;
+      // Reap dead WebSocket peers (closed tab / lost link with no clean FIN) via TCP keep-alive
+      // so their /status session does not hold a socket slot forever (see #299/#997).
+      config.keep_alive_enable = true;
+      config.keep_alive_idle = 5;
+      config.keep_alive_interval = 5;
+      config.keep_alive_count = 3;
       config.stack_size += 4096;        // Being on the safe side
       config.max_open_sockets += 5;     // More sockets
       // When updating the code below, make sure this is enough
