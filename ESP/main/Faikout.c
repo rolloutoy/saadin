@@ -2827,10 +2827,17 @@ send_ha_config (void)
       else
       {
          char ip[40];
-         if (revk_ipv6 (sta_netif,ip))
+#ifdef	CONFIG_REVK_ETHERNET
+         if (revk_ipv6 (eth_netif, ip) || revk_ipv6 (sta_netif, ip))
             jo_stringf (j, "cu", "http://[%s]/", ip);
-         else if (revk_ipv4 (sta_netif,ip))
+         else if (revk_ipv4 (eth_netif, ip) || revk_ipv4 (sta_netif, ip))
             jo_stringf (j, "cu", "http://%s/", ip);
+#else
+         if (revk_ipv6 (sta_netif, ip))
+            jo_stringf (j, "cu", "http://[%s]/", ip);
+         else if (revk_ipv4 (sta_netif, ip))
+            jo_stringf (j, "cu", "http://%s/", ip);
+#endif
       }
       jo_close (j);
       if (icon)
