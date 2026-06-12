@@ -2827,9 +2827,9 @@ send_ha_config (void)
       else
       {
          char ip[40];
-         if (revk_ipv6 (ip))
+         if (revk_ipv6 (sta_netif,ip))
             jo_stringf (j, "cu", "http://[%s]/", ip);
-         else if (revk_ipv4 (ip))
+         else if (revk_ipv4 (sta_netif,ip))
             jo_stringf (j, "cu", "http://%s/", ip);
       }
       jo_close (j);
