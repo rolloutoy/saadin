@@ -143,10 +143,15 @@ gpio    i2c.slsda    2                                      // GPIO to use for I
 gpio    i2c.slscl    3                                      // GPIO to use for I2C slave with Daikin board - SCL
 gpio    i2c.masda    6      .fix .hide                      // GPIO to use for I2C master with inlet sensor - SDA - always LP I2C pins on this target
 gpio    i2c.massl    7      .fix .hide                      // GPIO to use for I2C master with inlet sensor - SCL - always LP I2C pins on this target
-#else
+#elif !defined(CONFIG_REVK_ETHERNET)
 gpio    i2c.slsda    9                                      // GPIO to use for I2C slave with Daikin board - SDA
 gpio    i2c.slscl   10                                      // GPIO to use for I2C slave with Daikin board - SCL
 gpio    i2c.masda   11                                      // GPIO to use for I2C master with inlet sensor - SDA
 gpio    i2c.massl   12                                      // GPIO to use for I2C master with inlet sensor - SCL
+#else
+gpio    i2c.slsda                                          // GPIO to use for I2C slave with Daikin board - SDA
+gpio    i2c.slscl                                         // GPIO to use for I2C slave with Daikin board - SCL
+gpio    i2c.masda                                         // GPIO to use for I2C master with inlet sensor - SDA
+gpio    i2c.massl                                         // GPIO to use for I2C master with inlet sensor - SCL
 #endif
 #endif
