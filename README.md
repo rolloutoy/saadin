@@ -42,15 +42,16 @@ For support, see issues.
 
 Buy from [shop.revk.uk](https://shop.revk.uk/). Also available from a third party in Australia eBay.
 
-<img src=PCB/Faikout/Faikout.png width=49%><img src=PCB/Faikout/Faikout-bottom.png width=49%>
+<img src=PCB/Faikout/Faikout.png width=25%><img src=PCB/Faikout/Faikout-bottom.png width=25%><img src=PCB/Faikout/FaikoutC.png width=25%>
 
-The case design matches the PCB (check dates match). Designed for resin printing.
+New Ethernet option
 
-<img src=PCB/Faikout/FaikoutB.png width=32%><img src=PCB/Faikout/FaikoutT.png width=32%><img src=PCB/Faikout/FaikoutC.png width=32%>
+<img src=PCB/FaikoutETH/Faikout-90.png width=25%><img src=PCB/FaikoutETH/Faikout-bottom.png width=25%><img src=PCB/FaikoutETH/FaikoutC.png width=25%>
 
-Supplied in a 70x70 panel as an assembled PCB with snap off parts down to two sizes. 45x36mm or 40x16mm.
+Supplied in a 70x70 panel as an assembled PCB with snap off parts down to two sizes. 45x36mm or 40x16mm (non Ethernet).
 
-<img src=PCB/Faikout/Faikout-panel.png width=49%><img src=PCB/Faikout/Faikout-alt-bottom.png width=49%>
+<img src=PCB/Faikout/Faikout-panel.png width=25%><img src=PCB/FaikoutETH/Faikout-panel.png width=25%>
+
 
 ## Why I made this
 
