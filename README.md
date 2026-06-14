@@ -48,9 +48,13 @@ New Ethernet option
 
 <img src=PCB/FaikoutETH/Faikout-90.png width=25%><img src=PCB/FaikoutETH/Faikout-bottom.png width=25%><img src=PCB/FaikoutETH/FaikoutC.png width=25%>
 
+New Opto-isiolated PoE Ethernet option
+
+<img src=PCB/FaikoutPOE/Faikout-90.png width=25%><img src=PCB/FaikoutPOE/Faikout-bottom.png width=25%><img src=PCB/FaikoutPOE/FaikoutC.png width=25%>
+
 Supplied in a 70x70 panel as an assembled PCB with snap off parts down to two sizes. 45x36mm or 40x16mm (non Ethernet).
 
-<img src=PCB/Faikout/Faikout-panel.png width=25%><img src=PCB/FaikoutETH/Faikout-panel.png width=25%>
+<img src=PCB/Faikout/Faikout-panel.png width=25%><img src=PCB/FaikoutETH/Faikout-panel.png width=25%><img src=PCB/FaikoutPOE/Faikout-panel.png width=25%>
 
 
 ## Why I made this
