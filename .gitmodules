@@ -1,6 +1,6 @@
 [submodule "PCB/PCBCase"]
 	path = PCB/PCBCase
-	url = https://codeberg.org/RevK/PCBCase
+	url = https://codeberg.org/RevK/PCBCase.git
 [submodule "Tools/SQLlib"]
 	path = Tools/SQLlib
 	url = https://codeberg.org/RevK/SQLlib
