@@ -26,7 +26,7 @@ beta:
 	git commit -a -m Beta
 	git push
 	git lfs prune
-	rsync -az release/beta/$(PROJECT_NAME)* ota.faikout.uk:/var/www/ota/beta/
+	rsync -az release/beta/$(PROJECT_NAME)* ota.faikout.uk:/www/uk/faikout/ota/beta/
 
 issue:	
 	-git pull
@@ -35,7 +35,7 @@ issue:
 	git commit -a -m Release
 	git push
 	git lfs prune
-	rsync -az release/$(PROJECT_NAME)* ota.faikout.uk:/var/www/ota/
+	rsync -az release/$(PROJECT_NAME)* ota.faikout.uk:/www/uk/faikout/ota
 
 main/settings.h:     components/ESP32-RevK/revk_settings main/settings.def components/ESP32-RevK/settings.def
 	components/ESP32-RevK/revk_settings $^
