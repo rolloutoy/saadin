@@ -585,10 +585,12 @@ daikin_s21_response (uint8_t cmd, uint8_t cmd2, int len, uint8_t *payload)
                report_float (temp, daikin.temp);        // Does not have temp in other modes
             if (!s21.rgfan)
             {                   // RG is better, so we only look at G1 if RG does not work
-               if (payload[3] != 'A')   // Set fan speed
+               if (payload[3] == 'B')   // Some actually report quiet in G1
+                  report_uint8 (fan, 6);        // Quiet mode set (it returns as auto, so we assume it should be quiet if fan speed is low)
+	       else if (payload[3] != 'A')   // Set fan speed
                   report_uint8 (fan, "00012345"[payload[3] & 0x7] - '0');       // XXX12345 mapped to A12345Q
                else if (daikin.fan == 6)
-                  report_uint8 (fan, 6);        // Quiet mode set (it returns as auto, so we assume it should be quiet if fan speed is low)
+                  report_uint8 (fan, 6);        // Quiet mode set and returned as auto, so assume really is quiet
                else
                   report_uint8 (fan, 0);        // Auto as fan too fast to be quiet mode
             }
