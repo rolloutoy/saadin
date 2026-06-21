@@ -1442,7 +1442,7 @@ daikin_control (jo_t j, uint8_t insecure)
    {
       const char *err = NULL;
       char tag[20] = "",
-         val[20] = "";
+         val[30] = "";
       jo_strncpy (j, tag, sizeof (tag));
       t = jo_next (j);
       jo_strncpy (j, val, sizeof (val));
@@ -1484,6 +1484,9 @@ daikin_control (jo_t j, uint8_t insecure)
       }
       if (!strcmp (tag, "autot") || !strcmp (tag, "autor"))
       {                         // Stored settings
+         char *d = strrchr (val, '.');
+         if (d && strlen (d) > 2)
+            d[2] = 0; // One decimal place
          if (!s)
             s = jo_object_alloc ();
          jo_lit (s, tag, val);
