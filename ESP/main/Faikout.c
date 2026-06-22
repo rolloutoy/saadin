@@ -143,23 +143,23 @@ struct FanMode
 
 const struct FanMode fans_5_auto[] = {
    {'A', "auto"},
+   {'Q', "night"},
    {'1', "low"},
    {'2', "lowMedium"},
    {'3', "medium"},
    {'4', "mediumHigh"},
    {'5', "high"},
-   {'Q', "night"},
    {0, NULL}
 };
 
 const struct FanMode fans_3_auto[] = {
    {'A', "auto"},
+   {'Q', "quiet"},
    {'1', "low"},
    {0, "lowMedium"},            // Not used
    {'3', "medium"},
    {0, "mediumHigh"},           // Not used
    {'5', "high"},
-   {'Q', "quiet"},
    {0, NULL}
 };
 
