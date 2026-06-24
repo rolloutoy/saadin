@@ -3462,19 +3462,7 @@ app_main ()
    if (webcontrol || websettings)
    {
       // Web interface
-      httpd_config_t config = HTTPD_DEFAULT_CONFIG ();
-      config.lru_purge_enable = true;
-      // Reap dead WebSocket peers (closed tab / lost link with no clean FIN) via TCP keep-alive
-      // so their /status session does not hold a socket slot forever (see #299/#997).
-      config.keep_alive_enable = true;
-      config.keep_alive_idle = 5;
-      config.keep_alive_interval = 5;
-      config.keep_alive_count = 3;
-      config.stack_size += 4096;        // Being on the safe side
-      config.max_open_sockets += 5;     // More sockets
-      // When updating the code below, make sure this is enough
-      // Note that we're also adding revk's own web config handlers
-      config.max_uri_handlers = 16 + revk_num_web_handlers ();
+      httpd_config_t config = revk_httpd_config(16);
       ESP_LOGE (TAG, "HTTPD stack %u sockets %u handlers %u", config.stack_size, config.max_open_sockets, config.max_uri_handlers);
       if (!httpd_start (&webserver, &config))
       {
