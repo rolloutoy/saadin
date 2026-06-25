@@ -141,25 +141,25 @@ struct FanMode
    const char *name;
 };
 
-const struct FanMode fans_5_auto[] = {
+const struct FanMode fans_5_auto[] = {  // Order matches S21
    {'A', "auto"},
-   {'Q', "night"},
    {'1', "low"},
    {'2', "lowMedium"},
    {'3', "medium"},
    {'4', "mediumHigh"},
    {'5', "high"},
+   {'Q', "night"},
    {0, NULL}
 };
 
-const struct FanMode fans_3_auto[] = {
+const struct FanMode fans_3_auto[] = {  // Order matches S21
    {'A', "auto"},
-   {'Q', "quiet"},
    {'1', "low"},
    {0, "lowMedium"},            // Not used
    {'3', "medium"},
    {0, "mediumHigh"},           // Not used
    {'5', "high"},
+   {'Q', "quiet"},
    {0, NULL}
 };
 
@@ -587,7 +587,7 @@ daikin_s21_response (uint8_t cmd, uint8_t cmd2, int len, uint8_t *payload)
             {                   // RG is better, so we only look at G1 if RG does not work
                if (payload[3] == 'B')   // Some actually report quiet in G1
                   report_uint8 (fan, 6);        // Quiet mode set (it returns as auto, so we assume it should be quiet if fan speed is low)
-	       else if (payload[3] != 'A')   // Set fan speed
+               else if (payload[3] != 'A')      // Set fan speed
                   report_uint8 (fan, "00012345"[payload[3] & 0x7] - '0');       // XXX12345 mapped to A12345Q
                else if (daikin.fan == 6)
                   report_uint8 (fan, 6);        // Quiet mode set and returned as auto, so assume really is quiet
@@ -1486,7 +1486,7 @@ daikin_control (jo_t j, uint8_t insecure)
       {                         // Stored settings
          char *d = strrchr (val, '.');
          if (d && strlen (d) > 2)
-            d[2] = 0; // One decimal place
+            d[2] = 0;           // One decimal place
          if (!s)
             s = jo_object_alloc ();
          jo_lit (s, tag, val);
@@ -2783,16 +2783,19 @@ legacy_discovery_task (void *pvParameters)
 
 static void
 addmodes (jo_t j, const struct FanMode *modes)
-{
+{                               // HA fan modes, order adjusted
    const struct FanMode *f;
 
    jo_array (j, "fan_modes");
    for (f = modes; f->name; f++)
-   {
-      // Only list modes, which are valid for current protocol
-      if (f->mode)
+      if (f->mode == 'A')
          jo_string (j, NULL, f->name);
-   }
+   for (f = modes; f->name; f++)
+      if (f->mode == 'Q')
+         jo_string (j, NULL, f->name);
+   for (f = modes; f->name; f++)
+      if (f->mode && f->mode != 'A' && f->mode != 'Q')
+         jo_string (j, NULL, f->name);
    jo_close (j);
 }
 
@@ -3462,7 +3465,7 @@ app_main ()
    if (webcontrol || websettings)
    {
       // Web interface
-      httpd_config_t config = revk_httpd_config(16);
+      httpd_config_t config = revk_httpd_config (16);
       ESP_LOGE (TAG, "HTTPD stack %u sockets %u handlers %u", config.stack_size, config.max_open_sockets, config.max_uri_handlers);
       if (!httpd_start (&webserver, &config))
       {
