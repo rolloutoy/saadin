@@ -24,6 +24,8 @@ beta:
 	@make set
 	cp $(PROJECT_NAME)*.bin release/beta
 	git commit -a -m Beta
+	git push
+	git lfs prune
 	@make send
 
 issue:	
@@ -31,11 +33,11 @@ issue:
 	-git commit -a
 	cp -f release/beta/$(PROJECT_NAME)*.bin release
 	git commit -a -m Release
+	git push
+	git lfs prune
 	@make send
 
 send:
-	git push
-	git lfs prune
 	rsync -dz release/* ota.revk.uk:/www/uk/revk/ota/
 
 main/settings.h:     components/ESP32-RevK/revk_settings main/settings.def components/ESP32-RevK/settings.def
