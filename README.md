@@ -64,7 +64,7 @@ New Opto-isiolated PoE Ethernet option (design not finished)
 
 <img src=PCB/FaikoutPOE/Faikout-90.png width=25%><img src=PCB/FaikoutPOE/Faikout-bottom.png width=25%><img src=PCB/FaikoutPOE/FaikoutC.png width=25%>
 
-Supplied in a 70x70 panel as an assembled PCB with snap off parts down to two sizes. 45x36mm or 40x16mm (non Ethernet).
+Board are supplied in a panel, with snap off parts. The basic Faikout board can be two sizes 45x36mm or 40x16mm.
 
 <img src=PCB/Faikout/Faikout-panel.png width=25%><img src=PCB/FaikoutETH/Faikout-panel.png width=25%><img src=PCB/FaikoutPOE/Faikout-panel.png width=25%>
 
