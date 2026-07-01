@@ -56,11 +56,11 @@ Buy from [shop.revk.uk](https://shop.revk.uk/). Also available from a third part
 
 <img src=PCB/Faikout/Faikout.png width=25%><img src=PCB/Faikout/Faikout-bottom.png width=25%><img src=PCB/Faikout/FaikoutC.png width=25%>
 
-New Ethernet option
+New Ethernet option.
 
 <img src=PCB/FaikoutETH/Faikout-90.png width=25%><img src=PCB/FaikoutETH/Faikout-bottom.png width=25%><img src=PCB/FaikoutETH/FaikoutC.png width=25%>
 
-New Opto-isiolated PoE Ethernet option (design not finished)
+New Opto-isiolated PoE Ethernet option.
 
 <img src=PCB/FaikoutPOE/Faikout-90.png width=25%><img src=PCB/FaikoutPOE/Faikout-bottom.png width=25%><img src=PCB/FaikoutPOE/FaikoutC.png width=25%>
 
