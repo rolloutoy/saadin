@@ -3148,8 +3148,10 @@ send_ha_config (void)
       free (topic);
    }
    // TODO change above over gradually to new HA library stuff to make way neater
-   ha_config_sensor ("ram",.name = "RAM",.field = "mem",.unit = "B",.diag=1,.delete = !haram);
-   ha_config_sensor ("spi",.name = "PSRAM",.field = "spi",.unit = "B",.diag=1,.delete = !haram);
+   ha_config_sensor ("ram",.name = "RAM",.field = "mem",.unit = "B",.diag = 1,.delete = !haram);
+   ha_config_sensor ("spi",.name = "PSRAM",.field = "spi",.unit = "B",.diag = 1,.delete = !haram);
+   ha_config_sensor ("uptime",.name = "Uptime",.field = "uptime",.unit = "s",.type = "duration",.stateclass = "measurement",
+		   .diag = 1,.delete = !hauptime);
    free (cmd);
    free (hastatus);
 }
