@@ -3447,8 +3447,10 @@ app_main ()
    }
    if (usb_serial_jtag_is_connected ())
    {
-      if (!b.loopback)
-         revk_ate_fail ("Loopback fail");
+#ifdef	CONFIG_REVK_ETHERNET
+      if (!b.loopback && !ethpoeload.set)
+         revk_ate_fail ("Loopback fail");	// PoE modules do not have loopback
+#endif
       revk_blink (1, 0, revk_ate_failed ()? "R" : "G");
    } else
       revk_blink (1, 0, b.loopback ? "B" : "G");
