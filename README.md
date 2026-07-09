@@ -50,6 +50,8 @@ The Ethernet board has an RJ45 10/100 Ethernet connector for improved reliabilit
 
 The PoE Ethernet board has an RJ45 10/100 Ethernet connector for improved reliability and privacy, with PoE power for the Faikout module. The PoE power module has electrical isolation. The board also has opto isolators for the S21 connection, electrically isolating it from the air conditioning unit. This adds extra layers of safety, however I have to stress **this is a prototype/dev board for specialist/hobbyist use only, and is NOT certified for grid power safety isolation.**
 
+I have new boards and not working - so still work in progress.
+
 ## PCB and case
 
 Buy from [shop.revk.uk](https://shop.revk.uk/). Also available from a third party in Australia eBay.
