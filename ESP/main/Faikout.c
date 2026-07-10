@@ -1541,7 +1541,7 @@ mqtt_client_callback (int client, const char *prefix, const char *target, const 
       daikin.talking = 0;       // Disconnect and reconnect
       return "";
    }
-   if (!strcmp (suffix, "connect") || !strcmp (suffix, "status"))
+   if (!strcmp (suffix, "connect"))
    {
       daikin.status_report = 1; // Report status on connect
       daikin.ha_send = 1;
@@ -3148,10 +3148,10 @@ send_ha_config (void)
       free (topic);
    }
    // TODO change above over gradually to new HA library stuff to make way neater
-   ha_config_sensor ("ram",.name = "RAM",.field = "mem",.unit = "B",.diag = 1,.fallback=1,.delete = !haram);
-   ha_config_sensor ("spi",.name = "PSRAM",.field = "spi",.unit = "B",.diag = 1,.fallback=1,.delete = !haram);
-   ha_config_sensor ("uptime",.name = "Uptime",.field = "uptime",.unit = "s",.type = "duration",.stateclass = "measurement",
-		   .diag = 1,.fallback=1,.delete = !hauptime);
+   ha_config_sensor ("ram",.name = "RAM",.field = "mem",.unit = "B",.diag = 1,.fallback = 1,.delete = !haram);
+   ha_config_sensor ("spi",.name = "PSRAM",.field = "spi",.unit = "B",.diag = 1,.fallback = 1,.delete = !haram);
+   ha_config_sensor ("uptime",.name = "Uptime",.field = "uptime",.unit = "s",.type = "duration",.stateclass = "measurement",.diag =
+                     1,.fallback = 1,.delete = !hauptime);
    free (cmd);
    free (hastatus);
 }
@@ -3449,7 +3449,7 @@ app_main ()
    {
 #ifdef	CONFIG_REVK_ETHERNET
       if (!b.loopback && !ethpoeload.set)
-         revk_ate_fail ("Loopback fail");	// PoE modules do not have loopback
+         revk_ate_fail ("Loopback fail");       // PoE modules do not have loopback
 #endif
       revk_blink (1, 0, revk_ate_failed ()? "R" : "G");
    } else
@@ -3634,17 +3634,6 @@ app_main ()
                daikin.status_known |= CONTROL_env;      // So we report it
             } else
                daikin.status_known &= ~CONTROL_env;     // So we don't report it
-            if (bletemp && !bletemp->missing && bletemp->humset)
-            {                   // Use temp
-               float hum = bletemp->hum / 100.0;
-               if (daikin.hum != hum)
-               {
-                  daikin.status_changed = 1;
-                  daikin.hum = hum;
-               }
-               daikin.status_known |= CONTROL_hum;      // So we report it
-            } else
-               daikin.status_known &= ~CONTROL_hum;     // So we don't report it
             if (bletemp && !bletemp->missing && bletemp->faikoutset)
             {
                float min = NAN,
@@ -4093,8 +4082,11 @@ app_main ()
             {
                jo_t j = daikin_status ();
                revk_state ("status", &j);
+               if (haperiodic)
+                  ha_status ();
             }
-            ha_status ();
+            if (!haperiodic)
+               ha_status ();
          }
          // Stats
 #define b(name)         if(daikin.name)daikin.total##name++;

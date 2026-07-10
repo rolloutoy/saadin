@@ -51,6 +51,7 @@ bit	ha.switches								// Set additional HA switches
 bit	ha.fanrpm								// Use RPM not Hz for HA fan speed
 bit	ha.comprpm								// Use RPM not Hz for HA comp speed
 bit	ha.1c									// Force 1C steps in HA temp setting
+bit	ha.periodic								// Reduce HA updates
 bit	ha.ram									// Log memory usage
 bit	ha.uptime								// Log uptime
 s	ha.domain	"local"							// Local domain for HA links (blank for IP)
