@@ -3608,16 +3608,13 @@ app_main ()
          if (ble_sensor_enabled ())
          {                      // Automatic external temperature logic - only really useful if autor/autot set, or Faikout remote
             xSemaphoreTake (blemutex, portMAX_DELAY);
-            bleenv_expire (300);        // Marks any as missing
+            bleenv_t *was = bletemp;
+            //bleenv_expire (300);        // Marks any as missing at 300 seconds
             if (bletemp && bletemp->missing)
-            {                   // Our BLE has gone missing
-               bletemp = NULL;
-               daikin.ha_send = 1;
-            }
-            bleenv_clean ();    // Flushes any missing
+               bletemp = NULL;  // We are missing
+            bleenv_clean ();    // Flushes any missing - not us as we just checked missing, and that is only set by bleenv_expire
             if (!bletemp || (strcmp (bletemp->name, autob) && strcmp (bletemp->mac, autob)))
             {                   // Our BLE does not exist, went missing, or is not a match to what we now expect
-               bleenv_t *was = bletemp;
                bletemp = NULL;
                for (bleenv_t * e = bleenv; e; e = e->next)
                   if (!strcmp (e->name, autob) || !strcmp (e->mac, autob))
@@ -3625,9 +3622,9 @@ app_main ()
                      bletemp = e;
                      break;
                   }
-               if (bletemp != was)
-                  daikin.ha_send = 1;
             }
+            if (bletemp != was)
+               daikin.ha_send = 1;      // Change
             if (bletemp && bletemp->tempset)
             {                   // Use temp
                float env = bletemp->temp / 100.0;
@@ -3679,9 +3676,6 @@ app_main ()
                   if (fan)
                      daikin_set_v (fan, fan - 1);
                }
-            }
-            if (bletemp && bletemp->faikoutset)
-            {
                static const uint8_t map[] = { 2, 5, 4, 1, 0, 0, 0, 3 }; // FHCA456D Unspecified,Auto,Fan,Dry,Cool,Heat,Reserved,Faikout
                bleenv_faikout (hostname, daikin.home, daikin.temp, daikin.temp, daikin.power, daikin.antifreeze | daikin.slave,
                                map[daikin.mode], daikin.fan + 1);
