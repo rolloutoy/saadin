@@ -3609,7 +3609,7 @@ app_main ()
          {                      // Automatic external temperature logic - only really useful if autor/autot set, or Faikout remote
             xSemaphoreTake (blemutex, portMAX_DELAY);
             bleenv_t *was = bletemp;
-            //bleenv_expire (300);        // Marks any as missing at 300 seconds
+            bleenv_expire (300);        // Marks any as missing at 300 seconds
             if (bletemp && bletemp->missing)
                bletemp = NULL;  // We are missing
             bleenv_clean ();    // Flushes any missing - not us as we just checked missing, and that is only set by bleenv_expire
