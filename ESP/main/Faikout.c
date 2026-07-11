@@ -2602,7 +2602,7 @@ legacy_web_set_control_info (httpd_req_t *req)
          {
             int n = atoi (v);
             if (!noswingv)
-               daikin_set_v_e (err, swingv, n);
+               daikin_set_v_e (err, swingv, !!(n & 1));
             if (!noswingh)
                daikin_set_v_e (err, swingh, !!(n & 2));
          }
