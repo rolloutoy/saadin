@@ -4064,6 +4064,23 @@ app_main ()
                }
                daikin_x50a_command (0xCA, sizeof (ca), ca);
                daikin_x50a_command (0xCB, sizeof (cb), cb);
+               if (debugsend)
+               {
+                  uint8_t cmd = 0,
+                     len = 0;
+                  uint8_t buf[20];
+                  jo_type_t t = jo_find (debugsend, "cmd");
+                  if (t == JO_NUMBER)
+                     cmd = jo_read_int (debugsend);
+                  else if (t == JO_STRING)
+                     jo_strncpy16 (debugsend, &cmd, 1);
+                  t = jo_find (debugsend, "data");
+                  if (t == JO_STRING)
+                     len = jo_strncpy16 (debugsend, buf, sizeof (buf));
+                  if (cmd && len)
+                     daikin_x50a_command (cmd, len, buf);
+                  jo_free (&debugsend);
+               }
                if (daikin.talking)
                   b.startup = 0;        // End of startup
             }

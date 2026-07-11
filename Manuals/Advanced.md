@@ -106,7 +106,11 @@ Some more advances settings which you are unlikely to need to ever change.
 |`temp`|Set target temp (argument is temp)|
 |`status`|Force a status report to be sent|
 |`control`|JSON payload with aircon controls, see below|
-|`send`|Force sending S21 message, e.g. `D62000`, can be a JSON string, or a JSON array of strings to be sent. Use \u0080 to \u00FF for high bit bytes|
+|`send`|Force sending message for debug / testing|
+
+The `send` command when used for S21 is normally a string, or an array of strings, and each string is the payload to send, e.g. `D62000`. Use `\u0080` to `\u00FF` for high bytes.
+
+The `send` command when used for X50A is an object with `"cmd"` the command (two byte hex string), and `"data"` (string of hex bytes).
 
 ## Status
 
