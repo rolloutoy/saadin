@@ -3608,22 +3608,27 @@ app_main ()
          if (ble_sensor_enabled ())
          {                      // Automatic external temperature logic - only really useful if autor/autot set, or Faikout remote
             xSemaphoreTake (blemutex, portMAX_DELAY);
-            bleenv_expire (120);
+            bleenv_expire (300);        // Marks any as missing
+            if (bletemp && bletemp->missing)
+            {                   // Our BLE has gone missing
+               bletemp = NULL;
+               daikin.ha_send = 1;
+            }
+            bleenv_clean ();    // Flushes any missing
             if (!bletemp || (strcmp (bletemp->name, autob) && strcmp (bletemp->mac, autob)))
-            {
+            {                   // Our BLE does not exist, went missing, or is not a match to what we now expect
                bleenv_t *was = bletemp;
                bletemp = NULL;
-               bleenv_clean ();
                for (bleenv_t * e = bleenv; e; e = e->next)
                   if (!strcmp (e->name, autob) || !strcmp (e->mac, autob))
-                  {
+                  {             // Found a match
                      bletemp = e;
-                     if (bletemp != was)
-                        daikin.ha_send = 1;
                      break;
                   }
+               if (bletemp != was)
+                  daikin.ha_send = 1;
             }
-            if (bletemp && !bletemp->missing && bletemp->tempset)
+            if (bletemp && bletemp->tempset)
             {                   // Use temp
                float env = bletemp->temp / 100.0;
                if (daikin.env != env)
@@ -3634,7 +3639,7 @@ app_main ()
                daikin.status_known |= CONTROL_env;      // So we report it
             } else
                daikin.status_known &= ~CONTROL_env;     // So we don't report it
-            if (bletemp && !bletemp->missing && bletemp->faikoutset)
+            if (bletemp && bletemp->faikoutset)
             {
                float min = NAN,
                   max = NAN;
