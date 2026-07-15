@@ -2095,7 +2095,7 @@ web_control (httpd_req_t *req)
                   "function c(){"       //
                   "ws=new WebSocket((location.protocol=='https:'?'wss:':'ws:')+'//'+window.location.host+'/status');"   //
                   "ws.onopen=function(v){g('top').className='on';};"    //
-                  "ws.onclose=function(v){g('top').className='off';if(reboot)location.reload();else setTimeout(function(){c();},500);};"     //
+                  "ws.onclose=function(v){g('top').className='off';if(reboot)location.reload();else setTimeout(function(){c();},5000);};"     //
                   "ws.onerror=function(v){ws.close();};"        //
                   "ws.onmessage=function(v){"   //
                   "o=JSON.parse(v.data);"       //
