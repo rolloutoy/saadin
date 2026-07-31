@@ -10,3 +10,4 @@ managed_components
 settings.c
 settings.h
 sdconfig
+.cache
