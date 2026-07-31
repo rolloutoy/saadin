@@ -38,6 +38,7 @@ b(streamer)
 b(sensor)
 b(led)
 b(quiet)
+e(humidify,XLSHC)
 
 #undef	e
 #undef	b
