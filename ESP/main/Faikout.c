@@ -163,6 +163,17 @@ const struct FanMode fans_3_auto[] = {  // Order matches S21
    {0, NULL}
 };
 
+const char humidifymap[][6] = {     // Humidify per mode FHCA456D
+   "",                          // F
+   "089:\xFF",                  // H
+   "0:;<\xFF",                  // C
+   "",                          // A
+   "",                          // 4
+   "",                          // 5
+   "",                          // 6
+   "0:;<0",                     // D
+};
+
 #define	PROTO_TXINVERT	1
 #define	PROTO_RXINVERT	2
 #define	PROTO_SCALE	4
@@ -611,6 +622,11 @@ daikin_s21_response (uint8_t cmd, uint8_t cmd2, int len, uint8_t *payload)
                report_bool (swingv, payload[0] & 1);
             if (!noswingh)
                report_bool (swingh, payload[0] & 2);
+            if (!nohumidify)
+            {
+               const char *o = strchr (humidifymap[daikin.mode & 7], payload[2]);
+               report_uint8 (humidify, o ? o - humidifymap[daikin.mode & 7] : 0);
+            }
          }
          break;
       case '6':                // 'G6' - "powerful" mode and some others
@@ -1947,6 +1963,8 @@ web_control (httpd_req_t *req)
       add (NULL, "Fan", "fan", "Low", "1", "Mid", "3", "High", "5", "Auto", "A", "Quiet", "Q", NULL);
    else
       add (NULL, "Fan", "fan", "Low", "1", "Mid", "3", "High", "5", NULL);
+   if (!nohumidify)
+      add (NULL, "Hum", "humidify", "Off", "X", "Low", "L", "Std", "S", "High", "H", "Cont", "C", NULL);
    addslider (NULL, "Set", "temp", tmin, tmax, get_temp_step ());
    void addt (const char *tag, const char *help)
    {
@@ -2095,7 +2113,7 @@ web_control (httpd_req_t *req)
                   "function c(){"       //
                   "ws=new WebSocket((location.protocol=='https:'?'wss:':'ws:')+'//'+window.location.host+'/status');"   //
                   "ws.onopen=function(v){g('top').className='on';};"    //
-                  "ws.onclose=function(v){g('top').className='off';if(reboot)location.reload();else setTimeout(function(){c();},5000);};"     //
+                  "ws.onclose=function(v){g('top').className='off';if(reboot)location.reload();else setTimeout(function(){c();},5000);};"       //
                   "ws.onerror=function(v){ws.close();};"        //
                   "ws.onmessage=function(v){"   //
                   "o=JSON.parse(v.data);"       //
@@ -3978,12 +3996,15 @@ app_main ()
                   daikin_s21_command ('D', '1', S21_PAYLOAD_LEN, temp);
                   xSemaphoreGive (daikin.mutex);
                }
-               if (daikin.control_changed & (CONTROL_swingh | CONTROL_swingv))
+               if (daikin.control_changed & (CONTROL_swingh | CONTROL_swingv | CONTROL_humidify))
                {                // D5
                   xSemaphoreTake (daikin.mutex, portMAX_DELAY);
                   temp[0] = '0' + (daikin.swingh ? 2 : 0) + (daikin.swingv ? 1 : 0) + (daikin.swingh && daikin.swingv ? 4 : 0);
                   temp[1] = (daikin.swingh || daikin.swingv ? '?' : '0');
-                  temp[2] = '0';
+                  if (!nohumidify && daikin.humidify < 5)
+                     temp[2] = humidifymap[daikin.mode & 7][daikin.humidify];
+                  else
+                     temp[2] = '0';
                   temp[3] = '0';
                   daikin_s21_command ('D', '5', S21_PAYLOAD_LEN, temp);
                   xSemaphoreGive (daikin.mutex);
