@@ -163,7 +163,7 @@ const struct FanMode fans_3_auto[] = {  // Order matches S21
    {0, NULL}
 };
 
-const char humidifymap[][6] = {     // Humidify per mode FHCA456D
+const char humidifymap[][6] = { // Humidify per mode FHCA456D
    "",                          // F
    "089:\xFF",                  // H
    "0:;<\xFF",                  // C
@@ -2973,10 +2973,11 @@ send_ha_config (void)
          jo_string (j, "curr_temp_t", hastatus);
          jo_string (j, "curr_temp_tpl", "{{value_json.temp}}");
       }
-      if (daikin.status_known & CONTROL_hum)
+      if ((daikin.status_known & CONTROL_hum) || (bleenable && *autob && bletemp && bletemp->humset))
       {
          jo_string (j, "curr_hum_t", hastatus);
-         jo_string (j, "curr_hum_tpl", "{{value_json.hum}}");
+         jo_string (j, "curr_hum_tpl", bleenable && *autob && bletemp
+                    && bletemp->humset ? "{{value_json.blehum}}" : "{{value_json.hum}}");
       }
       if (daikin.status_known & CONTROL_mode)
       {
