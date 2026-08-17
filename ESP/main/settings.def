@@ -114,10 +114,10 @@ u8	t.min		16		.live					// Min temp setting of system
 u8	t.coolmin	16		.live					// Min temp setting for Faikout auto when cooling
 u8	t.max		32		.live					// Max temp setting of system
 u8	t.heatmax	32		.live					// Max temp setting for Faikout auto when heating
-u32	t.predicts	30							// Temp prediction sample time
-u32	t.predictt	120							// Temp prediction total time factor
-u32	t.sample	900							// Sample period for making adjustments
-u32	t.control	600							// Control messages timeout
+u32	t.predicts	30		.unit="s"				// Temp prediction sample time
+u32	t.predictt	120		.unit="s"				// Temp prediction total time factor
+u32	t.sample	900		.unit="s"				// Sample period for making adjustments
+u32	t.control	600		.unit="s"					// Control messages timeout
 
 #ifdef  CONFIG_IDF_TARGET_ESP32S3
 gpio	tx	-48								// Tx
