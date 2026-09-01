@@ -3365,7 +3365,8 @@ register_get_uri (const char *uri, esp_err_t (*handler) (httpd_req_t *r))
    httpd_uri_t uri_struct = {
       .uri = uri,
       .method = HTTP_GET,
-      .handler = handler,
+      .handler = revk_web_auth,
+      .user_ctx = handler,
    };
    register_uri (&uri_struct);
 }
@@ -3378,6 +3379,9 @@ register_ws_uri (const char *uri, esp_err_t (*handler) (httpd_req_t *r))
       .method = HTTP_GET,
       .handler = handler,
       .is_websocket = true,
+#ifdef CONFIG_HTTPD_WS_PRE_HANDSHAKE_CB_SUPPORT
+      .ws_pre_handshake_cb = revk_ws_auth,
+#endif
    };
    register_uri (&uri_struct);
 }
