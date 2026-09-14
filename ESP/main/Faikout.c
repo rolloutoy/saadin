@@ -60,6 +60,8 @@ static const char TAG[] = "Faikout";
 #define	daikin_set_e(name,value)	daikin_set_enum(#name,&daikin.name,CONTROL_##name,value,CONTROL_##name##_VALUES)
 #define	daikin_set_t(name,value)	daikin_set_temp(#name,&daikin.name,CONTROL_##name,value)
 
+const char *daikin_set_enum (const char *name, uint8_t * ptr, uint64_t flag, char *value, const char *values);
+
 typedef struct s21poll_s
 {
    uint8_t nak:3;               //      Count of NAKs in a row - if too many we set bad
@@ -336,7 +338,9 @@ struct
      countBeyondPrev;           // Count of "beyond temp", and previous sample
    uint32_t countTotal,
      countTotalPrev;            // Count total, and previous sample
-   uint8_t fansaved;            // Saved fan we override at start
+   uint32_t fanrun;             // Fan run expiry (uptime)
+   uint8_t modesaved:4;         // Saved mode after fan run on
+   uint8_t fansaved:4;          // Saved fan we override at start
    uint8_t talking:1;           // We are getting answers
    uint8_t lastheat:1;          // Last heat mode
    uint8_t status_changed:1;    // Status has changed
@@ -371,6 +375,20 @@ daikin_set_value (const char *name, uint8_t *ptr, uint64_t flag, uint8_t value)
       return NULL;              // No change
    if (b.startup && !(daikin.status_known & flag))
       return "Setting cannot be controlled";
+   if (fanrun && !daikin.fanrun && value == 0 && !strcmp (name, "power")
+       && (daikin.mode == FAIKIN_MODE_COOL || daikin.mode == FAIKIN_MODE_DRY
+           || (daikin.mode == FAIKIN_MODE_AUTO && !daikin.lastheat)))
+   {                            // Auto fan run on
+      daikin.modesaved = daikin.mode;
+      daikin.fanrun = uptime () + 60 * fanrun;
+      daikin_set_e (mode, "F");
+      return NULL;
+   } else if (daikin.fanrun && (!strcmp (name, "power") || (!strcmp (name, "mode") && value != FAIKIN_MODE_FAN)))
+   {
+      if (strcmp (name, "mode"))
+         daikin_set_v (mode, daikin.modesaved);
+      daikin.fanrun = 0;
+   }
    xSemaphoreTake (daikin.mutex, portMAX_DELAY);
    *ptr = value;
    daikin.control_changed |= flag;
@@ -2580,6 +2598,7 @@ legacy_web_set_control_info (httpd_req_t *req)
                err = "Invalid mode value";
             else
                daikin_set_v_e (err, mode, setval);
+            return ESP_OK;
          }
          free (v);
       }
@@ -4160,6 +4179,8 @@ app_main ()
          else
             revk_blink (0, 0, b.loopback ? "RGB" : !daikin.online ? "M" : dark ? "" : !daikin.power ? "y" : daikin.mode == 0 ? "O" : daikin.mode == 7 ? "C" : daikin.heat ? "R" : "B"); // FHCA456D
          uint32_t now = uptime ();
+         if (daikin.fanrun && daikin.fanrun < now)
+            daikin_set_v (power, 0);
          // Basic temp tracking
          xSemaphoreTake (daikin.mutex, portMAX_DELAY);
          uint8_t hot = daikin.heat;     // Are we in heating mode?

@@ -83,6 +83,8 @@ u8	heat.back	6		.live	.unit="℃"			// For heating, pull (decrease) target sent 
 
 s8	min.outside	-100		.live	.unit="℃"			// Lowest allowed outside temp allowed for operation (if known)
 
+u8	fanrun				.live	.unit="min"			// Auto run fan after cool/dry
+
 s8	frosttemp	-100		.live	.unit="℃"			// Frost protect (below this, turn on hot regardless)
 
 bit	temp.track	0		.live					// Set target temp based on Daikin measured temp not required target
