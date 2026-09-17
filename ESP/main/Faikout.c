@@ -3190,6 +3190,7 @@ send_ha_config (void)
    ha_config_sensor ("spi",.name = "PSRAM",.field = "spi",.unit = "B",.diag = 1,.fallback = 1,.delete = !haram);
    ha_config_sensor ("uptime",.name = "Uptime",.field = "uptime",.unit = "s",.type = "duration",.stateclass = "measurement",.diag =
                      1,.fallback = 1,.delete = !hauptime);
+   ha_config_binary ("online",.name = "Online",.field = "online");
    free (cmd);
    free (hastatus);
 }
