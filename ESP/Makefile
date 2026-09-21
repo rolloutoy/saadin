@@ -38,7 +38,7 @@ issue:
 	@make send
 
 send:
-	rsync -rz release/* ota.revk.uk:/www/uk/revk/ota/
+	rsync -rz release/* ota.faikout.uk:/www/uk/revk/ota/
 
 main/settings.h:     components/ESP32-RevK/revk_settings main/settings.def components/ESP32-RevK/settings.def
 	components/ESP32-RevK/revk_settings $^
