@@ -3369,43 +3369,6 @@ uart_setup (void)
    }
 }
 
-static void
-register_uri (const httpd_uri_t *uri_struct)
-{
-   esp_err_t res = httpd_register_uri_handler (webserver, uri_struct);
-   if (res != ESP_OK)
-   {
-      ESP_LOGE (TAG, "Failed to register %s, error code %d", uri_struct->uri, res);
-   }
-}
-
-static void
-register_get_uri (const char *uri, esp_err_t (*handler) (httpd_req_t *r))
-{
-   httpd_uri_t uri_struct = {
-      .uri = uri,
-      .method = HTTP_GET,
-      .handler = revk_web_auth,
-      .user_ctx = handler,
-   };
-   register_uri (&uri_struct);
-}
-
-static void
-register_ws_uri (const char *uri, esp_err_t (*handler) (httpd_req_t *r))
-{
-   httpd_uri_t uri_struct = {
-      .uri = uri,
-      .method = HTTP_GET,
-      .handler = handler,
-      .is_websocket = true,
-#ifdef CONFIG_HTTPD_WS_PRE_HANDSHAKE_CB_SUPPORT
-      .ws_pre_handshake_cb = revk_ws_auth,
-#endif
-   };
-   register_uri (&uri_struct);
-}
-
 void
 revk_web_extra (httpd_req_t *req, int page)
 {
@@ -3518,24 +3481,24 @@ app_main ()
       {
          if (websettings)
             revk_web_settings_add (webserver);
-         register_get_uri ("/", web_root);
-         register_get_uri ("/apple-touch-icon.png", web_icon);
-         register_get_uri ("/favicon.ico", web_favicon);
+         revk_register_get_uri (webserver, "/", web_root);
+         revk_register_get_uri (webserver, "/apple-touch-icon.png", web_icon);
+         revk_register_get_uri (webserver, "/favicon.ico", web_favicon);
          if (webcontrol)
          {
-            register_get_uri ("/control", web_control);
-            register_ws_uri ("/status", web_status);
-            register_get_uri ("/common/basic_info", legacy_web_get_basic_info);
-            register_get_uri ("/aircon/get_model_info", legacy_web_get_model_info);
-            register_get_uri ("/aircon/get_control_info", legacy_web_get_control_info);
-            register_get_uri ("/aircon/set_control_info", legacy_web_set_control_info);
-            register_get_uri ("/aircon/get_sensor_info", legacy_web_get_sensor_info);
-            register_get_uri ("/common/register_terminal", legacy_web_register_terminal);
-            register_get_uri ("/aircon/get_year_power_ex", legacy_web_get_year_power);
-            register_get_uri ("/aircon/get_week_power_ex", legacy_web_get_week_power);
-            register_get_uri ("/aircon/set_special_mode", legacy_web_set_special_mode);
-            register_get_uri ("/aircon/set_demand_control", legacy_web_set_demand_control);
-            register_get_uri ("/aircon/set_holiday", legacy_web_set_holiday);
+            revk_register_get_uri (webserver, "/control", web_control);
+            revk_register_ws_uri (webserver, "/status", web_status);
+            revk_register_get_uri (webserver, "/common/basic_info", legacy_web_get_basic_info);
+            revk_register_get_uri (webserver, "/aircon/get_model_info", legacy_web_get_model_info);
+            revk_register_get_uri (webserver, "/aircon/get_control_info", legacy_web_get_control_info);
+            revk_register_get_uri (webserver, "/aircon/set_control_info", legacy_web_set_control_info);
+            revk_register_get_uri (webserver, "/aircon/get_sensor_info", legacy_web_get_sensor_info);
+            revk_register_get_uri (webserver, "/common/register_terminal", legacy_web_register_terminal);
+            revk_register_get_uri (webserver, "/aircon/get_year_power_ex", legacy_web_get_year_power);
+            revk_register_get_uri (webserver, "/aircon/get_week_power_ex", legacy_web_get_week_power);
+            revk_register_get_uri (webserver, "/aircon/set_special_mode", legacy_web_set_special_mode);
+            revk_register_get_uri (webserver, "/aircon/set_demand_control", legacy_web_set_demand_control);
+            revk_register_get_uri (webserver, "/aircon/set_holiday", legacy_web_set_holiday);
          }
          // When adding, update config.max_uri_handlers
       }
