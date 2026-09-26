@@ -21,7 +21,7 @@ beta:
 	-git pull
 	-git submodule update --recursive
 	-git commit -a
-	@make set
+	@BUILD=-RELEASE make set
 	cp $(PROJECT_NAME)*.bin release/beta
 	git commit -a -m Beta
 	git push
@@ -53,43 +53,43 @@ components/ESP32-RevK/idfmon: components/ESP32-RevK/idfmon.c
 set:    main/settings.h pico s3eth s3
 
 c3:
-	components/ESP32-RevK/setbuildsuffix -C3
+	components/ESP32-RevK/setbuildsuffix -C3${BUILD}
 	@make
 
 c5:
-	components/ESP32-RevK/setbuildsuffix -C5
+	components/ESP32-RevK/setbuildsuffix -C5${BUILD}
 	@make
 
 c6:
-	components/ESP32-RevK/setbuildsuffix -C6
+	components/ESP32-RevK/setbuildsuffix -C6${BUILD}
 	@make
 
 s3:
-	components/ESP32-RevK/setbuildsuffix -S3-MINI-N4-R2
+	components/ESP32-RevK/setbuildsuffix -S3-MINI-N4-R2${BUILD}
 	@make
 
 s3eth:
-	components/ESP32-RevK/setbuildsuffix -S3-MINI-N4-R2-ETH
+	components/ESP32-RevK/setbuildsuffix -S3-MINI-N4-R2-ETH${BUILD}
 	@make
 
 s3n8:
-	components/ESP32-RevK/setbuildsuffix -S3-MINI-N8
+	components/ESP32-RevK/setbuildsuffix -S3-MINI-N8${BUILD}
 	@make
 
 pico:
-	components/ESP32-RevK/setbuildsuffix -S1-PICO
+	components/ESP32-RevK/setbuildsuffix -S1-PICO${BUILD}
 	@make
 
 wroom1:
-	components/ESP32-RevK/setbuildsuffix -S1-V1
+	components/ESP32-RevK/setbuildsuffix -S1-V1${BUILD}
 	@make
 
 wroom:
-	components/ESP32-RevK/setbuildsuffix -S1
+	components/ESP32-RevK/setbuildsuffix -S1${BUILD}
 	@make
 
 solo:
-	components/ESP32-RevK/setbuildsuffix -S1-SOLO
+	components/ESP32-RevK/setbuildsuffix -S1-SOLO${BUILD}
 	@make
 
 flash:
