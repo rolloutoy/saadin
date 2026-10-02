@@ -4491,7 +4491,9 @@ app_main ()
          {
             controlstop ();
             // Just based on mode
-            daikin.action = (!daikin.power ? HVAC_OFF : daikin.antifreeze ? HVAC_DEFROSTING : daikin.mode == FAIKIN_MODE_HEAT ? HVAC_HEATING :  //
+            daikin.action = (!daikin.power ? HVAC_OFF : daikin.antifreeze ? HVAC_DEFROSTING :   //
+                             (daikin.status_known & CONTROL_comp) && !daikin.comp ? HVAC_IDLE : //
+                             daikin.mode == FAIKIN_MODE_HEAT ? HVAC_HEATING :   //
                              daikin.mode == FAIKIN_MODE_COOL ? HVAC_COOLING :   //
                              daikin.mode == FAIKIN_MODE_AUTO ? HVAC_IDLE :      //
                              daikin.mode == FAIKIN_MODE_DRY ? HVAC_DRYING :     //
