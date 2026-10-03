@@ -17,29 +17,6 @@ all:	main/settings.h
 	@cp build/bootloader/bootloader.bin $(PROJECT_NAME)$(SUFFIX)-bootloader.bin
 	@echo Done: $(PROJECT_NAME)$(SUFFIX).bin
 
-beta:	
-	-git pull
-	-git submodule update --recursive
-	-git commit -a
-	@BUILD=-RELEASE make set
-	cp $(PROJECT_NAME)*.bin release/beta
-	git commit -a -m Beta
-	git push
-	git lfs prune
-	@make send
-
-issue:	
-	-git pull
-	-git commit -a
-	cp -f release/beta/$(PROJECT_NAME)*.bin release
-	git commit -a -m Release
-	git push
-	git lfs prune
-	@make send
-
-send:
-	rsync -rz release/* ota.faikout.uk:/www/uk/revk/ota/
-
 main/settings.h:     components/ESP32-RevK/revk_settings main/settings.def components/ESP32-RevK/settings.def
 	components/ESP32-RevK/revk_settings $^
 

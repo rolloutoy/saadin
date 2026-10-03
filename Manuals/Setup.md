@@ -8,11 +8,11 @@ The *Faikout* is a small circuit board that can replace the common Daikin air-co
 
 ## Installation
 
-<img src="Install1.jpg" width=20% align=right>The latest boards have the 5 pin connector to match the plug for the official Daikin WiFi modules. Simply plug in.
+The latest boards have the 5 pin connector to match the plug for the official Daikin WiFi modules. Simply plug in.
 
 However, you do need a lead, and Daikin charge a lot for these. Typically it will be an S21 lead. However customers have reported simple header wires (i.e. wires with sockets on each wire intended to go on 0.1" pitch headers) work just as well. You need to locate the GND, Power, Tx, and Rx pins on the S21 connector and connect appropriately as marked on the PCB. The board is designed to handle 4V to 40V power, and the air-con typically provides 12V.
 
-A 3D printable case design is included on GitHub.
+A 3D printable case design is in the [upstream Faikout repository](https://codeberg.org/RevK/ESP32-Faikout).
 
 ## LED
 
