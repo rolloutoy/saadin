@@ -1,132 +1,123 @@
-## Support
+# Säädin
 
-You can support this project in many ways, including testing and diagnostics, merge requests, clearly described issues and suggestions, and [buying Faikout boards from us](https://shop.revk.uk/). Thank you all for your support. This is open source so others can make and sell (with trademark restrictions). AI based bug reprts or MRs will get yo blocked.
+Local ESP32 firmware for Daikin heat pumps and air conditioners. MQTT, Home Assistant and BLE room sensors, no cloud.
 
-# ESP32-Faikout
+Säädin is a fork of [Faikout](https://codeberg.org/RevK/ESP32-Faikout) by Adrian Kennard ([RevK](https://codeberg.org/RevK)). The aim is to run the heat pump at a steady, modulated output: the firmware sets the unit's power limit ("demand") from a room temperature control loop instead of switching it on and off around a setpoint.
 
-Everyone knows Daikin make some of the best air conditioners out there, mechanically speaking. Sadly their WiFi control modules are not so good, especially the latest models which are all cloud based, require an internet connection to even work, and are slow.
+> **Status: early fork.** Apart from the [changes listed below](#changes-from-faikout), the code is still upstream Faikout. Identifiers in the code (project name, binaries, hostname, MQTT topics, Home Assistant entities) still say `Faikout` and will be renamed later. There are no Säädin releases yet.
 
-[<img src="image/youtube.jpg" width=30% alt="Faikout">](https://www.youtube.com/watch?v=7ANKUI45cHw "Faikout")
-<img src="image/cable.jpg" width=30% align="right" Alt="Optional cable">
-<img src="image/case.jpg" width=30% align="right" Alt="Optional case">
+## Credit
 
-This code/module provides local control via web interface, MQTT, and HomeAssistant integration, all with no cloud crap.
+Almost all of this code is Faikout, written by Adrian Kennard and sponsored by [Andrews & Arnold Ltd](https://www.aa.net.uk/), with contributions from others. That includes:
 
-<img src="image/remote.jpg" width=33% align=right>
+- the reverse-engineered Daikin S21 and X50A protocols
+- the web interface
+- MQTT and Home Assistant integration
+- BLE sensor support
+- the ESP32 support library
 
-* There is also a new [Faikout Remote Control](https://remote.revk.uk/) available, BLE linked to the Faikout, with environmental sensors, available now.
+Säädin only builds on that work.
 
-I'd like to thank the contributors, but contributions are made and accepted on basis that you issue your contribution under the same GPL licence as the project. Forks are allowed on the basis that your forks are on the same GPL licence as the project.
+The original project:
 
-## Trademark
+- Firmware and documentation: [codeberg.org/RevK/ESP32-Faikout](https://codeberg.org/RevK/ESP32-Faikout)
+- Hardware: Faikout boards from [shop.revk.uk](https://shop.revk.uk/). Buying them supports the original author.
+- Bundled libraries, all by RevK and kept with their own licences:
+  - [ESP32-RevK](https://codeberg.org/RevK/ESP32-RevK) (`ESP/components/ESP32-RevK`)
+  - [ESP32-BLE-Env](https://codeberg.org/RevK/ESP32-BLE-Env)
+  - [AJL](https://codeberg.org/RevK/AJL)
+  - [AXL](https://codeberg.org/RevK/AXL)
+  - [SQLlib](https://codeberg.org/RevK/SQLlib)
+  - [stringdecimal](https://codeberg.org/RevK/stringdecimal)
 
-This is an open source project, but bear in mind you cannot sell boards bearing the Andrews & Arnold Ltd name, the A&A logo, the registered trademark Faikout, the registered trademark AJK logo, or the GS1 allocated EANs assigned to Andrews & Arnold Ltd.
+The commit history from the original project is kept, so each upstream author's work is still attributed to them.
 
-Note the name change from Faikin to Faikout as Daikin complained to Amazon and caused a lot of issues. As such Faikout is now a registered trademark to avoid such issues.
+**Please do not report Säädin problems to the Faikout project.** If you can reproduce a problem with unmodified Faikout firmware, report it upstream; otherwise open an issue here.
 
-## Further manuals / links
+## Not affiliated
 
-- [Work in progress / release notes](/RevK/ESP32-Faikout/wiki/Work-in-progress)
-- [Wiring](/RevK/ESP32-Faikout/wiki/Wiring)
-- [Setup](Manuals/Setup.md) Manual
-- [Controls](Manuals/Controls.md) Manual
-- [Advanced](Manuals/Advanced.md) Manual
-- [ESP8266 port](https://github.com/Sonic-Amiga/ESP8266-Faikin) of this code
-- [list of supported air-con](/RevK/ESP32-Faikout/wiki/List-of-confirmed-working-air-con-units) WiKi (please update as needed)
-- [DoC](Manuals/DoC.md) and Vulnerability disclosure policy
-- [S21](Manuals/S21.md) reverse engineered details of `S21` protocol
+Säädin is an independent fork. It is not affiliated with, endorsed by or supported by Andrews & Arnold Ltd, Adrian Kennard or Daikin.
 
-For support, see issues.
+- *Faikout* and the A&A and AJK logos are trademarks of Andrews & Arnold Ltd.
+- *Daikin* is a trademark of Daikin Industries, Ltd.
 
-## Safety
+These names appear here only to describe where the code comes from and what it works with.
 
-Always propely isolate power before opening your air-con. Take care as dangerous voltages. Some connector types have dangerous voltage in operation.
+## Hardware
 
-### Ethernet
+Säädin is firmware only. It is meant to run on [Faikout boards](https://shop.revk.uk/), which plug into the Daikin's S21 connector (or X50A on larger and ducted units). This repository has no hardware designs. The KiCad PCB designs, case models and production files are in the [upstream repository](https://codeberg.org/RevK/ESP32-Faikout).
 
-The Ethernet board has an RJ45 10/100 Ethernet connector for improved reliability and privacy. The Ethernet has an isolating transformer and clearances, but I have to stress **this is a prototype/dev board for specialist/hobbyist use only, and is NOT certified for grid power safety isolation. DO NOT USE WITH X403 CONNECTOR or any connector with dangerous voltages.**
+**Safety:** always isolate the power before opening an air conditioner. Some connector types carry dangerous voltages.
 
-### PoE Ethernet (design not finished)
+## Features (inherited from Faikout)
 
-The PoE Ethernet board has an RJ45 10/100 Ethernet connector for improved reliability and privacy, with PoE power for the Faikout module. The PoE power module has electrical isolation. The board also has opto isolators for the S21 connection, electrically isolating it from the air conditioning unit. This adds extra layers of safety, however I have to stress **this is a prototype/dev board for specialist/hobbyist use only, and is NOT certified for grid power safety isolation.**
+- Local web control with live status over a websocket. No app and no internet connection needed.
+- MQTT reporting and control.
+- Home Assistant auto-discovery over MQTT.
+- Detects automatically whether the unit uses the S21 or X50A protocol.
+- BLE temperature sensors (BlueCoinT, Telink/Xiaomi) can be used as the room reference for automatic control.
+- Linux MySQL/MariaDB logging and graphing tools (`Tools/`).
 
-Design now works, and boards on order.
+## Planned
 
-## PCB and case
+- **Demand control:**
+  - The Daikin gets a fixed setpoint.
+  - A PI controller driven by a BLE room sensor sets the demand limit (30–100%).
+  - Optional outdoor-temperature feedforward.
+  - Slow on/off cycling below minimum demand.
+- **Fixes to the existing auto mode:** stop it controlling against a stale BLE reading, and let it power off on overshoot when `lockmode` is set.
+- **Safer updates:** firmware upload from the browser and automatic rollback after a bad OTA.
+- **Releases:** builds published as GitHub Releases, with Säädin naming throughout.
 
-Buy from [shop.revk.uk](https://shop.revk.uk/). Also available from a third party in Australia eBay.
+## Building
 
-<img src=PCB/Faikout/Faikout.png width=25%><img src=PCB/Faikout/Faikout-bottom.png width=25%><img src=PCB/Faikout/FaikoutC.png width=25%>
+Build and flash from source with [ESP-IDF](https://docs.espressif.com/projects/esp-idf/):
 
-New Ethernet option.
+```sh
+cd ESP
+make pico     # original Faikout board (ESP32-PICO)
+make s3       # ESP32-S3 boards
+make s3eth    # ESP32-S3 Ethernet board
+make flash
+```
 
-<img src=PCB/FaikoutETH/Faikout-90.png width=25%><img src=PCB/FaikoutETH/Faikout-bottom.png width=25%><img src=PCB/FaikoutETH/FaikoutC.png width=25%>
+`ESP/Makefile` has targets for the other chips.
 
-New Opto-isiolated PoE Ethernet option.
+Libraries are included as git subtrees, so a plain clone is enough; `--recursive` is not needed. Boards can be flashed through the USB test pads, or with a [TC2030-USB-NL](https://www.tag-connect.com/product/tc2030-usb-nl) lead on boards with a Tag-Connect footprint.
 
-<img src=PCB/FaikoutPOE/Faikout-90.png width=25%><img src=PCB/FaikoutPOE/Faikout-bottom.png width=25%><img src=PCB/FaikoutPOE/FaikoutC.png width=25%>
+> **Turn off automatic updates.** By default the firmware checks the upstream OTA server (`ota.faikin.uk`) about once a week. It installs upstream Faikout whenever the version differs from what is running, which replaces Säädin. Set `ota.auto` to off, or point `ota.host` at your own server, before relying on a Säädin build.
 
-Board are supplied in a panel, with snap off parts. The basic Faikout board can be two sizes 45x36mm or 40x16mm.
+## Set-up and documentation
 
-<img src=PCB/Faikout/Faikout-panel.png width=25%><img src=PCB/FaikoutETH/Faikout-panel.png width=25%><img src=PCB/FaikoutPOE/Faikout-panel.png width=25%>
+When first started, the device acts as a Wi-Fi access point with a set-up page. After it joins your network, open `http://<hostname>.local/` for the control page.
 
+These manuals come from upstream and still use the Faikout name:
 
-## Why I made this
+- [Setup](Manuals/Setup.md)
+- [Controls](Manuals/Controls.md)
+- [Advanced](Manuals/Advanced.md)
+- [BLE sensors](Manuals/BLE.md)
+- [S21 protocol](Manuals/S21.md). The [upstream wiki](https://codeberg.org/RevK/ESP32-Faikout/wiki/S21-Protocol) is more up to date.
 
-The history is that, after years of using Daikin air-con in my old home, and using the local http control, in my new house in Wales the WiFi was all cloud based with no local control, and useless, and slow. Just configuring it was a nightmare. I spent all day reverse engineering it and making a new module to provide local control. Pull requests and feature ideas welcome.
+## Changes from Faikout
 
-This whole project is almost entirely by me, but with some valuable contributions from others (thank you). All of my bits are copyright by me and Andrews & Arnold Ltd who sponsor the whole project, and released under GPL. Whilst not required by the licence, attribution and links would be appreciated if you reuse this.
+As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
-## How to get one
+**2026-10-03**
+- Forked from upstream Faikout.
+- Removed the PCB designs, case models and product photos, which are still available upstream.
+- Removed the release binaries and the A&A Declaration of Conformity.
+- Removed the Makefile targets that published releases to the upstream OTA server.
+- Removed these files from the git history as well.
+- Rewrote this README.
 
-But also, the PCB designs are published, including production files for [JLCPCB](https://jlcpcb.com). You need to remove trademarks, etc, and you would also need something to program them (TC2030 lead). Obviously you need some experience with PCB ordering and diagnostics if getting your own boards made.
+## Security
 
-# Set-up
+Report vulnerabilities privately through GitHub's [private vulnerability reporting](https://github.com/rolloutoy/saadin/security/advisories/new), not in public issues.
 
-Appears as access point with simple web page to set up on local WiFI. On iPhone the setup page auto-loads.
+## Licence
 
-<img src="Manuals/WiFi1.png" width=49%>
-<img src="Manuals/WiFi2.png" width=49%>
+GPL-3.0, the same licence as Faikout. See [LICENSE](LICENSE).
 
-# Operation
-
-Local interactive web control page using *hostname*.local, no app required, no external internet required.
-
-<img src="Manuals/WiFi3.png" width=49%>
-
-- [Setup](Manuals/Setup.md) Manual
-- [Controls](Manuals/Controls.md) Manual
-- [Advanced](Manuals/Advanced.md) Manual
-
-# Design
-
-* KiCad PCB designs included, with JLCPCB production files
-* 3D printed case STL files
-* Documentation of reverse engineered protocol included
-
-Basically, Daikin have gone all cloudy with the latest WiFi controllers. This module is designed to provide an alternative.
-
-<img src="Manuals/MiSensor.jpg" align=right width="25%">
-
-* Simple local web based control with live websocket status, easy to save as desktop icon on a mobile phone
-* MQTT reporting and controls
-* Works with Home Assistant over MQTT - note Home Assistant can work with HomeKit
-* Includes linux mysql/mariadb based logging and graphing tools
-* Works with [EnvMon](https://codeberg.org/RevK/ESP32-EnvMon) Environmental Monitor for finer control and status display
-* or, works with BlueCoinT and Telink [BLE temperature sensor](Manuals/BLE.md) as a remote reference in an auto mode
-* Automatically works out if S21 or X50 protocol (used on bigger/ducted units)
-* Backwards compatible direct `/aircon/...` URLs
-
-# Building code yourself
-
-Git clone this `--recursive` to get all the submodules, and it should build with just `make`. There are make targets for other variations, but this hardware is the `make pico` or `make s3` version. The `make` actually runs the normal `idf.py` to build which then uses cmake. `make menuconfig` can be used to fine tune the settings, but the defaults should be mostly sane. `make flash` should work to program. If flashing yourself, you will need a programming lead, e.g. [Tazmotizer](https://codeberg.org/RevK/Tasmotizer-PCB) or similar, and of course the full ESP IDF environment. The latest boards also have 4 pads for direct USB connection to flash with no adaptor. The modules on Amazon come pre-loaded and can upgrade over the air.
-
-The code is normally set up to automatically upgrade the software, checking roughly once a week. You can change this in settings via MQTT.
-
-If you build yourself, you either need no code signing, or your own signing key. This will break auto-updates which try to load my code releases, so you need to adjuist settings `otahost` and `otaauto` accordingly. You can set these in the build config, along with WiFi settings, etc.
-
-## Flashing code
-
-You will need to connect a suitable programming lead. Boards have a tag-connect compatible header for a [TC2030-USB-NL](https://www.tag-connect.com/product/tc2030-usb-nl) lead. Note that the latest boards have test pads on the back which include USB, so you can solder a USB lead if necessary.
-
-See [https://codeberg.org/RevK/ESP32-RevK](https://codeberg.org/RevK/ESP32-RevK) for more details of how to flash the files easily.
+- Copyright in the upstream code belongs to Adrian Kennard, Andrews & Arnold Ltd and the other Faikout contributors.
+- Changes made in Säädin are released under the same licence.
