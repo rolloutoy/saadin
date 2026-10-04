@@ -3476,6 +3476,8 @@ app_main ()
    {
       // Web interface
       httpd_config_t config = revk_httpd_config (16);
+      if (config.stack_size < 8 * 1024)
+         config.stack_size = 8 * 1024;  // As Faikout used before revk_httpd_config (6K); page rendering and lwIP sends (core locking) run on this stack
       ESP_LOGE (TAG, "HTTPD stack %u sockets %u handlers %u", config.stack_size, config.max_open_sockets, config.max_uri_handlers);
       if (!httpd_start (&webserver, &config))
       {
