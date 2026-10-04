@@ -109,6 +109,7 @@ As required by GPL-3.0 §5(a), this section lists how Säädin differs from upst
 - Fixed a crash when the settings page or main page lists BLE sensors while the device drops a stale sensor from its list.
 - Fixed a deadlock that could hang the web server and the main loop while a BLE Faikout remote changes the aircon and a browser has the main page open.
 - Fixed the legacy `/aircon/set_control_info` API. A request that set the mode got no reply, leaked memory, and ignored the other values in the request (such as temperature and fan).
+- Fixed the web server locking up for good (connection reset, while the aircon keeps working) when several WebSocket connections close at once.
 
 **2026-10-03**
 - Forked from upstream Faikout.
