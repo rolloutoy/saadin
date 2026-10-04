@@ -1866,6 +1866,7 @@ settings_autob (httpd_req_t *req)
    if (!*autob)
       revk_web_send (req, "<option value=\"\">-- None --");
    char found = 0;
+   xSemaphoreTake (blemutex, portMAX_DELAY);    // Main loop frees bleenv entries (bleenv_clean) under this mutex
    for (bleenv_t * e = bleenv; e; e = e->next)
    {
       revk_web_send (req, "<option value=\"%s\"", e->mac);
@@ -1878,6 +1879,7 @@ settings_autob (httpd_req_t *req)
       if (!e->missing && e->rssi)
          revk_web_send (req, " %ddB", e->rssi);
    }
+   xSemaphoreGive (blemutex);
    if (!found && *autob)
    {
       revk_web_send (req, "<option selected value=\"%s\">%s", autob, autob);
