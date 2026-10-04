@@ -85,9 +85,9 @@ make flash
 
 Libraries are included as git subtrees, so a plain clone is enough; `--recursive` is not needed. Boards can be flashed through the USB test pads, or with a [TC2030-USB-NL](https://www.tag-connect.com/product/tc2030-usb-nl) lead on boards with a Tag-Connect footprint.
 
-> **No automatic updates, no signing.** Säädin builds have no default OTA server and `ota.auto` is off by default, so the device never installs firmware on its own. Builds are not signed and the device does not check signatures on OTA images, so only point `ota.host` at a server you control.
+> **No OTA downloads, no signing.** Säädin never fetches firmware from a server. There is no OTA host, no automatic update check, and no `upgrade` command or button. Builds are not signed. To update, download a release and load it onto the device yourself.
 >
-> A device that already stores `ota.host` or `ota.auto` (for example from upstream Faikout) keeps those values. Check them after flashing. A device running signed upstream firmware rejects unsigned images over OTA, so flash the first Säädin build over USB.
+> A device running signed upstream firmware rejects unsigned images over OTA, so flash the first Säädin build over USB.
 
 ## Set-up and documentation
 
@@ -113,7 +113,7 @@ As required by GPL-3.0 §5(a), this section lists how Säädin differs from upst
 - Fixed the legacy `/aircon/set_control_info` API. A request that set the mode got no reply, leaked memory, and ignored the other values in the request (such as temperature and fan).
 - Fixed the web server locking up for good (connection reset, while the aircon keeps working) when several WebSocket connections close at once.
 - Builds are no longer signed, and the firmware no longer requires signed OTA images.
-- Automatic OTA updates are off by default, and there is no default OTA server.
+- Removed OTA downloads. The firmware no longer checks for or fetches updates from a server, and the `upgrade` command, the upgrade button and the `ota.*` settings are gone.
 
 **2026-10-03**
 - Forked from upstream Faikout.

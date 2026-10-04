@@ -513,6 +513,14 @@ menu "RevK"
 		partition is present.  Validates the ESP32 magic byte and the
 		app project name before writing to the OTA partition.
 
+	config REVK_OTA_PULL
+	bool "OTA download from an OTA host"
+	default y
+        help
+		Check an OTA host for new firmware and download it (upgrade
+		command, upgrade button, automatic checks).  Turn off to only
+		allow firmware to be loaded locally.
+
 	config REVK_OTAHOST
 	string "Default OTA host"
 	default "ota.iot"

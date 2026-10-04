@@ -11,15 +11,17 @@ s	instance				.revk .hide		// Descriptive name of host, default is hostname
 s	hostname				.revk .hide		// Host name<br>(used in DHCP and MQTT)
 #endif
 
+#ifdef	CONFIG_REVK_OTA_PULL
 s	ota.host	CONFIG_REVK_OTAHOST	.revk	.live		// OTA hostname
 u8	ota.days	CONFIG_REVK_OTADAYS	.revk			// OTA auto load (days)
 u16	ota.start	600			.revk			// OTA check after startup (min seconds)
-bit	ota.auto	0			.revk	.hide .live	// OTA auto upgrade
+bit	ota.auto	1			.revk	.hide .live	// OTA auto upgrade
 bit	ota.tls		0			.revk	.live		// OTA use https (users more memory)
 #ifdef	CONFIG_REVK_WEB_BETA
 bit	ota.beta				.revk	.hide .live	// OTA from beta release
 #endif
 blob	ota.cert	CONFIG_REVK_OTACERT	.revk	.base64	// OTA cert of otahost
+#endif
 
 bit	dark					.revk .live			// Default LED off
 
