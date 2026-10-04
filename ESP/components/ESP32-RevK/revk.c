@@ -4219,11 +4219,16 @@ revk_web_setting_edit (httpd_req_t *req, const char *tag, const char *field, con
    {                            // Expand block to base coded
       const char *alphabet = s->base64 ? JO_BASE64 : s->base32 ? JO_BASE32 : JO_BASE16;
       uint8_t bits = s->base64 ? 6 : s->base32 ? 5 : 4;
-      uint32_t dlen = (len * 8 + bits - 1) / bits + 1;
+      uint32_t dlen = ((len * 8 + bits - 1) / bits + 7) / 8 * 8 + 1;    // Rounded up for = padding (base32 to 8, base64 to 4), and null
       dlen += (dlen / 40) + 1;  // Line breaks
       uint32_t dptr = 0;
       uint8_t *src = (uint8_t *) value;
       char *dst = mallocspi (dlen);
+      if (!dst)
+      {
+         free (value);
+         return;
+      }
       unsigned int i = 0,
          b = 0,
          v = 0;
