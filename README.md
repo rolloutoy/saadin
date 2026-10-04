@@ -85,7 +85,7 @@ make flash
 
 Libraries are included as git subtrees, so a plain clone is enough; `--recursive` is not needed. Boards can be flashed through the USB test pads, or with a [TC2030-USB-NL](https://www.tag-connect.com/product/tc2030-usb-nl) lead on boards with a Tag-Connect footprint.
 
-> **No OTA downloads, no signing.** Säädin never fetches firmware from a server. There is no OTA host, no automatic update check, and no `upgrade` command or button. Builds are not signed. To update, download a release and load it onto the device yourself.
+> **No OTA downloads, no signing.** Säädin never fetches firmware from a server. There is no OTA host, no automatic update check, and no `upgrade` command or button. Builds are not signed. To update, download a release and upload the `.bin` on the "Firmware" settings tab.
 >
 > A device running signed upstream firmware rejects unsigned images over OTA, so flash the first Säädin build over USB.
 
@@ -114,6 +114,7 @@ As required by GPL-3.0 §5(a), this section lists how Säädin differs from upst
 - Fixed the web server locking up for good (connection reset, while the aircon keeps working) when several WebSocket connections close at once.
 - Builds are no longer signed, and the firmware no longer requires signed OTA images.
 - Removed OTA downloads. The firmware no longer checks for or fetches updates from a server, and the `upgrade` command, the upgrade button and the `ota.*` settings are gone.
+- Added firmware upload from the browser: the "Firmware" tab on the settings page (`/revk-ota`).
 
 **2026-10-03**
 - Forked from upstream Faikout.
