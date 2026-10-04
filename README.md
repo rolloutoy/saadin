@@ -107,6 +107,7 @@ As required by GPL-3.0 §5(a), this section lists how Säädin differs from upst
 - Fixed a memory leak on every view of the settings page that shows a drop-down (enum) setting, such as the fan type.
 - Fixed heap corruption when the Library settings page shows a stored certificate or key.
 - Fixed a crash when the settings page or main page lists BLE sensors while the device drops a stale sensor from its list.
+- Fixed a deadlock that could hang the web server and the main loop while a BLE Faikout remote changes the aircon and a browser has the main page open.
 
 **2026-10-03**
 - Forked from upstream Faikout.
