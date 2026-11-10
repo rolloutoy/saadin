@@ -3450,7 +3450,9 @@ static esp_err_t revk_web_ota(httpd_req_t *req)
                 size_t desc_off = sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t);
                 const esp_app_desc_t *desc = (const esp_app_desc_t *)(buf + desc_off);
                 if (chunk < (int)(desc_off + sizeof(esp_app_desc_t)) || desc->magic_word != ESP_APP_DESC_MAGIC_WORD ||
-                    strncmp(desc->project_name, revk_app, sizeof(desc->project_name))) {
+                    (strncmp(desc->project_name, revk_app, sizeof(desc->project_name)) &&
+                     (!*CONFIG_REVK_WEB_OTA_ALSO ||
+                      strncmp(desc->project_name, CONFIG_REVK_WEB_OTA_ALSO, sizeof(desc->project_name))))) {
                     free(buf);
                     esp_ota_abort(ota);
                     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Firmware not built for this device");
