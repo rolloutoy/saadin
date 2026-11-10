@@ -19,7 +19,11 @@ Heating only. In cool, dry or fan mode, or with the unit off, the controller doe
 ```
 
 ### OFF
-Controller disabled (`auto.e` off), unit off, or unit not in heat mode. Nothing is sent. When the controller starts (enabled, unit on in heat) it starts **fresh** in DEMAND with the integral at the watts of the `demand.start` rung (default 60%). No NVS persistence.
+Controller disabled (`auto.e` off or `auto.t` 0), unit off, or unit not in heat mode. Nothing is sent while OFF.
+
+On the way into OFF, for whichever reason, the controller leaves nothing behind: demand goes back to 100% and QO off, and the setpoint goes to `stop.temp` (default 22 °C), clamped to `t.min`…`t.max`. The setpoint is only replaced if it is still the one the controller sent, so a setpoint set by hand at the same time (e.g. with a switch to cool) is kept.
+
+When the controller starts (enabled, unit on in heat) it starts **fresh** in DEMAND with the integral at the watts of the `demand.start` rung (default 60%). No NVS persistence.
 
 ### IDLE ("heating off")
 - Sends setpoint `idle.temp` (default 16 °C) so the unit stops heating. Demand stays at the lowest rung with QO on, so the restart is gentle.
@@ -51,7 +55,7 @@ Controller disabled (`auto.e` off), unit off, or unit not in heat mode. Nothing 
 - A drop only counts once `liquid` has reached `defrost.exit` since DEMAND or COLD was entered. A coil that cooled in IDLE, NOSENSOR or the watchdog rest is not a defrost when heating starts again.
 - Holds the current outputs, freezes the integral. No IDLE/COLD transitions are evaluated during defrost. Unknown `liquid` never enters defrost.
 - Start with `liquid` only. Log `fanrpm`, `comp` and power at entry and exit so the detection can be refined later.
-- **Post-defrost hold** (after leaving DEFROST, `defrost.hold`, default 10 min): demand capped at 95% (no plain 100, no 100q), and the integral may not raise demand.
+- **Post-defrost hold** (after leaving DEFROST, `defrost.hold`, default 10 min, 0 for no hold): demand capped at 95% (no plain 100, no 100q), and the integral may not raise demand. It carries over between DEMAND and COLD without restarting, so it lasts `defrost.hold` in all.
 - **Fan resend:** after each defrost, resend the configured fan for the current state (the unit doesn't restore a forced fan speed).
 - **Defrost-loop watchdog:** more than `defrost.loops` (default 3) defrosts within `defrost.window` (default 90 min) → go to IDLE for `defrost.rest` (default 15 min), then resume DEMAND/COLD. Logged and sent as an MQTT event. Breaks the "death loop" users report at −5…−12 °C.
 
@@ -65,7 +69,7 @@ Controller disabled (`auto.e` off), unit off, or unit not in heat mode. Nothing 
 - **Target** = `auto.t` + offset from `auto.curve` at the smoothed outdoor temperature.
 - `auto.curve` is a string of `outdoor:offset` points, e.g. `"-25:1.0,-10:0.5,0:0"`. Linear between points, flat beyond the ends, empty = no offset. It's an offset, so setting the target from web / HA / MQTT keeps working.
 - **Outdoor** temperature is the unit's own reading, smoothed (e.g. 30 min EMA) and frozen during DEFROST (the unit's outdoor reading jumps about +4 °C during defrost).
-- **Room** temperature: BLE sensor (`auto.b`) if set and fresh, otherwise MQTT (`auto.topic`/`auto.payload`, or `env` in the `control` command). Smoothed over `auto.smooth` (default 300 s). The unit's own sensor is never used as the room reading for control (it reads 3–7 K high against the fixed setpoint); it's only used via NOSENSOR.
+- **Room** temperature: BLE sensor (`auto.b`) if set and fresh, otherwise MQTT (`auto.topic`/`auto.payload`, or `env` in the `control` command). Smoothed over `auto.smooth` (default 300 s, 0 for none). The unit's own sensor is never used as the room reading for control (it reads 3–7 K high against the fixed setpoint); it's only used via NOSENSOR.
 
 ## Demand table
 
@@ -79,7 +83,7 @@ Controller disabled (`auto.e` off), unit off, or unit not in heat mode. Nothing 
 
 ## Fan
 
-Per-state fan settings `idle.fan`, `demand.fan`, `cold.fan`: leave alone, auto, 1–5, or quiet. Applied on entering the state and resent after each defrost. "Leave alone" never touches the fan.
+Per-state fan settings `idle.fan`, `demand.fan`, `cold.fan`: leave alone, auto, 1–5, or quiet. Applied on entering the state and resent after each defrost. "Leave alone" never touches the fan. A fan the unit doesn't have (2 or 4 on a 3-speed unit, auto or quiet on a unit with neither) counts as "leave alone".
 
 ## Outside changes
 

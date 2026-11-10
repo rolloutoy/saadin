@@ -215,8 +215,9 @@ static void enter(heatctl_t *s, heatctl_out_t *out, uint32_t now, heatctl_state_
 {
     s->state = state;
     s->since = now;
+    if (sub != s->sub)
+        s->sub_since = now; // A sub-state carried over (the post-defrost hold) keeps its time
     s->sub = sub;
-    s->sub_since = now;
     out->changed = 1;
 }
 
@@ -267,7 +268,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
     // Room, smoothed, restarted after a gap
     s->room_fresh = !isnan(in->room);
     if (s->room_fresh) {
-        if (!s->room_ok || now - s->room_at > p->smooth)
+        if (!s->room_ok || !p->smooth || now - s->room_at > p->smooth)
             s->room = in->room;
         else
             s->room += (in->room - s->room) * dt / (p->smooth + dt);
@@ -295,7 +296,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
                 if (n > p->defrost_loops)
                     defrost_rest = n;
                 else
-                    enter_sub(s, &out, now, HEATCTL_SUB_HOLD);
+                    enter_sub(s, &out, now, p->defrost_hold ? HEATCTL_SUB_HOLD : HEATCTL_SUB_NONE);
             }
         } else if (s->armed && !isnan(in->liquid) && in->liquid < p->defrost_enter) {
             s->armed = 0;
@@ -434,10 +435,10 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         int want = rung_wanted(t, top, s->heatw);
         if (s->rung < 0) // Just entered
             s->rung = want;
+        else if (s->rung > top)
+            s->rung = top; // Cap at once, also in defrost (e.g. a shorter table)
         else if (s->sub == HEATCTL_SUB_DEFROST)
             ; // Hold
-        else if (s->rung > top)
-            s->rung = top; // Cap at once
         else if (stale)
             ; // Hold
         else if (want != s->rung && now - s->rung_at >= p->demand_rate && !(noraise && want > s->rung))

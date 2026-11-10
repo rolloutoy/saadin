@@ -3218,8 +3218,15 @@ void revk_web_extra(httpd_req_t *req, int page)
 // Heating control (heatctl), see docs/heat-control.md
 
 static int8_t heatctl_fan(uint8_t setting)
-{ // Fan setting (Leave, Auto, 1-5, Quiet) as daikin.fan, or HEATCTL_FAN_LEAVE
-    return setting ? setting - 1 : HEATCTL_FAN_LEAVE;
+{ // Fan setting (Leave, Auto, 1-5, Quiet) as daikin.fan, or HEATCTL_FAN_LEAVE (also if the unit has no such fan)
+    if (!setting)
+        return HEATCTL_FAN_LEAVE;
+    int8_t fan = setting - 1;
+    if ((fan == 2 || fan == 4) && !fan_5_auto())
+        return HEATCTL_FAN_LEAVE; // Only 3 speeds
+    if ((fan == 0 || fan == 6) && !fan_5_auto() && !fan_3_auto())
+        return HEATCTL_FAN_LEAVE; // No auto or quiet
+    return fan;
 }
 
 static void heatctl_settings(heatctl_params_t *p)
@@ -3336,6 +3343,7 @@ static void heatctl_tick(uint32_t now)
     };
     heatctl_state_t was = ctl.state;
     heatctl_sub_t wassub = ctl.sub;
+    float wasset = ctl.setpoint;
     heatctl_out_t o = heatctl_step(&heatctl, &p, &in, now);
     ctl = o;
     xSemaphoreGive(daikin.mutex);
@@ -3410,13 +3418,17 @@ static void heatctl_tick(uint32_t now)
         if ((daikin.status_known & CONTROL_econo) && !noecono && // Econo and demand share D7
             heatctl_send(HEATCTL_SEND_ECONO, "econo", daikin.econo, 0, o.changed, now))
             daikin_set_v(econo, 0);
-    } else if (o.changed && was != HEATCTL_OFF && daikin.power && daikin.mode == FAIKIN_MODE_HEAT && autot) {
-        // Switched off while heating: back to a plain unit thermostat at the target
-        daikin_set_t(temp, o.target < tmin ? tmin : o.target > tmax ? tmax : o.target);
+    } else if (o.changed && was != HEATCTL_OFF) {
+        // Stopped (switched off, unit off or not heating): no demand limit or QO left on the unit
         if ((daikin.status_known & CONTROL_demand) && !nodemand)
             daikin_set_i(demand, 100);
         if ((daikin.status_known & CONTROL_quiet) && !noquiet)
             daikin_set_v(quiet, 0);
+        // and stop.temp in place of the controller's setpoint, unless someone has set another since
+        float t = (float)stoptemp / stoptemp_scale;
+        if ((daikin.status_known & CONTROL_temp) && !isnan(daikin.temp) &&
+            lroundf(daikin.temp * 10) == lroundf(daikin_temp_step(wasset) * 10))
+            daikin_set_t(temp, t < tmin ? tmin : t > tmax ? tmax : t);
     }
     daikin.action = (!daikin.power                                          ? HVAC_OFF
                      : daikin.antifreeze || o.sub == HEATCTL_SUB_DEFROST    ? HVAC_DEFROSTING

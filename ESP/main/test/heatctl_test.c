@@ -454,6 +454,73 @@ static void test_defrost_rearm(void)
     CHECK("coil at room temperature is not a defrost", x.out.sub == HEATCTL_SUB_NONE);
 }
 
+// The post-defrost hold carries over into COLD without starting again
+static void test_hold_carry(void)
+{
+    sim_t x;
+    start(&x);
+    memset(&x.s, 0, sizeof(x.s));
+    x.in.outdoor = -20;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    run(&x, 100);
+    x.in.liquid = -20;
+    run(&x, 300);
+    x.in.liquid = 35;
+    run(&x, 1);
+    CHECK("hold carry: hold in DEMAND", x.out.state == HEATCTL_DEMAND && x.out.sub == HEATCTL_SUB_HOLD);
+    uint32_t hold = x.now;
+    run_until(&x, HEATCTL_COLD, -1, 4000);
+    CHECK("hold carry: hold carried into COLD", x.out.sub == HEATCTL_SUB_HOLD);
+    run_until(&x, HEATCTL_COLD, HEATCTL_SUB_NONE, 4000);
+    CHECK("hold carry: hold lasts defrost.hold in all", x.now - hold == 600);
+}
+
+// defrost.hold 0 turns the hold off
+static void test_no_hold(void)
+{
+    sim_t x;
+    start(&x);
+    x.p.defrost_hold = 0;
+    x.in.room = 18;
+    run(&x, 5 * 3600);
+    x.in.liquid = -20;
+    run(&x, 1);
+    x.in.liquid = 30;
+    run(&x, 1);
+    CHECK("no hold: defrost ends straight to DEMAND", x.out.sub == HEATCTL_SUB_NONE && x.out.resend_fan);
+    CHECK("no hold: demand not capped", x.out.demand == 100);
+    run(&x, 600);
+    CHECK("no hold: demand stays at the top", x.out.demand == 100);
+}
+
+// demand.table saved with fewer rungs during a defrost
+static void test_table_shrinks_in_defrost(void)
+{
+    sim_t x;
+    start(&x);
+    x.in.room = 18;
+    run(&x, 5 * 3600);
+    x.in.liquid = -20;
+    run(&x, 1);
+    CHECK("table shrink: defrost at plain 100", x.out.sub == HEATCTL_SUB_DEFROST && x.out.demand == 100);
+    CHECK("table shrink: parsed", !heatctl_parse_table(&x.p.table, "40:220,60:400,80:700"));
+    run(&x, 1);
+    CHECK("table shrink: demand from the new table", x.out.demand == 80);
+}
+
+// auto.smooth 0 with two steps in one second (CN_WIRED has no 1 s sleep)
+static void test_no_smoothing(void)
+{
+    sim_t x;
+    start(&x);
+    x.p.smooth = 0;
+    x.in.room = 20;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    CHECK("no smoothing: room is the reading", x.out.room == 20);
+    run(&x, 600);
+    CHECK("no smoothing: integral stays a number", !isnan(x.out.integral) && x.out.integral > 350);
+}
+
 static void test_hold_cap(int full)
 {
     sim_t x;
@@ -700,6 +767,10 @@ int main(void)
     test_cold();
     test_defrost();
     test_defrost_rearm();
+    test_hold_carry();
+    test_no_hold();
+    test_table_shrinks_in_defrost();
+    test_no_smoothing();
     test_hold_cap(1);
     test_hold_cap(0);
     test_watchdog(3);
