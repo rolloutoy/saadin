@@ -20,6 +20,12 @@ endif
 ifeq (${OS},Linux)
 LIBS := -lm
 endif
+# popt from mise (see mise.toml) if installed
+POPT_DIR ?= $(shell mise where conda:popt 2>/dev/null)
+ifneq ($(POPT_DIR),)
+INCLUDES += -I$(POPT_DIR)/include
+LIBS += -L$(POPT_DIR)/lib -Wl,-rpath,$(POPT_DIR)/lib
+endif
 
 CFLAGS := -g -O
 
