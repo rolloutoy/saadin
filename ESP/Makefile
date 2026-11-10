@@ -27,9 +27,9 @@ components/ESP32-RevK/idfmon: components/ESP32-RevK/idfmon.c
 	make -C components/ESP32-RevK idfmon
 
 # idf.py keeps the values in an existing sdkconfig and only takes new options from sdkconfig.defaults, so start again
-# from the defaults whenever they change
+# from the defaults whenever they change. The build directory goes too, as it may be set up for another target.
 sdkconfig: sdkconfig.defaults
-	rm -f sdkconfig
+	rm -rf sdkconfig build
 
 c3 c5 c6 s3 s3eth s3n8 pico wroom1 wroom solo: sdkconfig
 
