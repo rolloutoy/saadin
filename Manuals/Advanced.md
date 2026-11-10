@@ -14,37 +14,9 @@ The *hostname* you picked is used for these messages. The format for commands an
 |Info|`info/GuestAC/whatever`|Info messages are informational, and don't relate to a specific event happening.|
 |Error|`error/GuestAC/whatever`|Errors are reported using this.|
 
-## Faikout auto
+## Heating control
 
-The *Faikout auto* logic allows a set point (with a margin) and a reference to external temperature. It uses simple prediction to see if we are going to exceed the maximum or minimum or be within range (see below), and aims to stay in range by basically turning the aircon just *on* or *off*. It does the *on* or *off* by changing the set point given to the air con to be *higher* or *lower*, in simplest terms.
-
-However there are a few settings to control what *on* and *off* mean in this case. the simplest, default, is *much higher* than current temperature or *much lower* than current temperature, i.e. around ±6℃.
-
-The actual set point logic set a set point, and adds `heatover` or subtracts `heatback` adjustment for *heating* or subtracts `coolover` or adds `coolback` for *cooling*. The basis for these is one of there options.
-
-1. The default (`temptrack` off, `tempadjust` on) is your requested set point, adjusted for the air con temperature not matching your external temperature.
-2. Non adjusted (`temptrack` off, `tempadjust` off) just uses the set point you have asked for as a basis.
-3. Tracking (`temptrack` on) uses what the air con sees as the current temperature, allowing you to constantly nudge the aircon towards the target you want
-
-There is also a setting hold off adjustments (e.g. when tracking) for a time period (`tempnoflap`).
-
-### Staying in range
-
-The auto mode has a target range, a *min* and *max*. On the web page this is set by a target and tolerance, so if you set 21℃ with ±1℃ that is a range of 20℃ to 22℃. This is the comfort zone, the range in which you would like the temperature to stay.
-
-To achieve this the Faikout looks at the temperature and sets the heating/cooling *on* or *off* as explained above. When heating, it is basically looking to keep the temperature just above *min*, and for cooling just below *max*. Note, it it not *aiming* for the middle, just to be within the range.
-
-When looking at the current temperature it looks ahead, as the aircon has some inertia, it samples every `tpredicts` seconds and looks ahead `tpredictt` periods. This allows it to act before the temperature goes too far one way or the other.
-
-I simplest terms, if heating, if the temperature will be above *min* it turns off, and if it will be below *min* it turns on. However, that would simply mean a temperature hovering around *min*. To aim for somewhere between *min* and *max* it actually adjusts its target, increasing *min* by `pushtemp` (default 0.1℃) so it hovers a bit above *min*. For cooling this works the other way around and relates to *max*.
-
-The temperature band is also used to work out if we need to reverse heating/cooling. This is where *max* comes in for heating (*min* for cooling). If we are heating but spending all the time over *max* we switch to cooling. If we are always within *min* to *max* it will turn off. Bear in mind this is based on predicted temperature, so we may be within *min* to *max* because the heating is turned on/off to keep us there, and that does not turn off as the predicted temp will have gone out of range. There is an adjustment to the switching temperature, e.g. in heating *max* is adjusted by `switchtemp`.
-
-### Thermostat mode
-
-You can set the `thermostat` - this changes the target we use. When not in this mode, heating aims for *min* and cooling aims for *max*. In thermostat mode heating aims for *max* until it gets there, and then lets things cool to *min* before turning back on again, adding hysteresis.
-
-Thermostat mode also disables the `pushtemp`/`switchtemp` adjustment, and makes the default set point reference `min` or `max` depending on the current heating mode and hysteresis.
+Säädin replaces *Faikout auto* with its own heating controller. It acts only in heat mode, never turns the aircon on or off, and leaves cool, dry and fan mode alone. [docs/heat-control.md](../docs/heat-control.md) describes how it works and its settings (`auto.e`, `auto.t`, `auto.curve`, `demand.*`, `pid.*`, `idle.*`, `cold.*`, `defrost.*`).
 
 ## Settings
 
@@ -54,35 +26,13 @@ The web pages provide settings for the basic WiFi/MQTT, the Faikout specific set
 
 Note that web settings can be disabled with `websettings`, and the web based control pages can be disabled with `webcontrol`. It is also possible to apply a password for the web settings 9this is not sent security, so use with care on a local network which you control).
 
-### Automatic on/off
+### Room temperature
 
-Auto mode can be enabled/dissbled via `autoe`.
-
-Every `tsample` seconds the relationship of the adjusted *min*, *max* and *current* are assessed to consider how much time was *approaching* the target band, in the target band, or *beyond* the target band. Two whole samples in a row are considered. Sampling is reset on change of power or mode.
-
-If `auto1` is set, the power on at start of that minute. If `auto0` is set, the power off at start of that minute.
-
-If `autop` is set, and the last sample period is entirely outside the target band, and the current temperature is more than `autoptemp` degrees above or below the target band, then automatic power on.
-
-If `autop` is set, and the last two sample periods are entirely inside the target band, then automatic power off.
-
-### Remote
-
-The system is designed to work with an external remote [Environmental monitor](https://github.com/revk/ESP32-EnvMon). This sends a command `control` periodically.
-
-You can use for your own external control, which takes priority over *Faikout auto*, but you have to send the `control`.
-
-|Field|Meaning|
-|-----|-------|
-|`env`|Set the current room temperature (this needs to be regularly sent (`tcontrol` seconds max), and in every `control` message else it times out)|
-|`target`|Set the target temperature, either an array of *min* and *max*, or a single number.|
-|`margin`|Mainly for when sending `target` as just a number, if present the *min* is reduced by half `margin` and the *max* is increased by half `margin`|
-
-When remote working `autop` is assumed if `autoptemp` is not `0`.
+The heating control needs the room temperature, from a BLE sensor (`autob`) or over MQTT. Send `env` in a `control` command at least every `tcontrol` seconds, e.g. `command/GuestAC/control {"env":21.3}`.
 
 ### Reference temperature
 
-In addition to the above, `env` in `control` you can set `autotopic` to subscribe to, and `autopayload` as the field name in a JSON payload in that topic, which is sent periodically will set the reference temperature.
+Instead of `env` in `control`, you can set `autotopic` to a topic to subscribe to, and `autopayload` to the field name in its JSON payload. A message on that topic sets the room temperature.
 
 ### Special settings
 
@@ -153,21 +103,16 @@ The controls are things you can change. These can be sent in a JSON payload in a
 |`swingv`|Boolean - vertical louvre swing|
 |`powerful`|Boolean|
 |`econo`|Boolean|
-|`target`|This can be a single temperature, or an array of two temperatures (`min`/`max`) which forces Faikout auto mode|
-|`env`|This is the temperature reference used for the Faikout auto mode|
+|`env`|Room temperature for the heating control|
 |`streamer`| Boolean|
 
-There are also settings that can impact the Faikout auto mode. These are also reported in the status messages, if not using remote `control`.
+There are also settings for the heating control. These are also reported in the status messages.
 
 |Attribute|Meaning|
 |---------|-------|
-|`autor`|Range for automation, `0.0` means off - this sets the `autor` setting |
-|`autot`|Target temp for automation, This sets the `autot` setting|
+|`autoe`|Heating control on. This sets the `autoe` setting|
+|`autot`|Target room temperature. This sets the `autot` setting|
 |`autob`|The name of the BLE device. This sets the `autob` setting|
-|`auto0`|Time to turn off HH:MM, `00:00` is don't turn off. This sets the `auto0` setting|
-|`auto1`|Time to turn off HH:MM, `00:00` is don't turn on. This sets the `auto1` setting|
-
-For remote controlled Faikout auto mode, you typically send a `control` message with `target` and `env` in the JSON payload. This needs to be sent regularly to avoid it revertign to normal (not Faikout auto mode).
 
 ## Debug
 
