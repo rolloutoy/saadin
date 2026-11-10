@@ -2604,7 +2604,6 @@ legacy_web_set_control_info (httpd_req_t *req)
                err = "Invalid mode value";
             else
                daikin_set_v_e (err, mode, setval);
-            return ESP_OK;
          }
          free (v);
       }
