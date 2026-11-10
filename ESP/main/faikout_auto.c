@@ -10,6 +10,9 @@ auto_review_action_t auto_review(const auto_review_t *r)
         if ((r->beyond2 * 2 > r->total2 || r->slave) && !r->approaching2) { // Mode switch
             if (!r->lock_mode)
                 return AUTO_REVIEW_MODE;
+            // Mode is locked, so turn off rather than keep overshooting (not just for being a slave)
+            if (r->autopower && r->beyond2 * 2 > r->total2)
+                return AUTO_REVIEW_OFF;
             return AUTO_REVIEW_NONE;
         }
         // Less approaching, but still close to min in heating or max in cooling
@@ -27,9 +30,10 @@ auto_review_action_t auto_review(const auto_review_t *r)
         return AUTO_REVIEW_NONE;
     }
     // Daikin is off
-    // Turn on as 100% out of band for the last period (don't auto on if would reverse mode and lockmode)
+    // Turn on as 100% out of band for the last period
+    // With the mode locked, only when approaching, as beyond would need the other mode and it would turn off again
     if (r->autopower && (r->approaching == r->total || r->beyond == r->total) && r->out_of_band &&
-        (!r->lock_mode || r->beyond2 != r->total2))
+        (!r->lock_mode || r->beyond != r->total))
         return r->beyond2 == r->total2 ? AUTO_REVIEW_ON_MODE : AUTO_REVIEW_ON;
     return AUTO_REVIEW_NONE;
 }

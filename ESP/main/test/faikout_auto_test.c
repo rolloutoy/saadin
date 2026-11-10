@@ -48,7 +48,13 @@ int main(void)
           AUTO_REVIEW_MODE);
     check("slave, swap mode", (auto_review_t){IN_BAND, .power = 1, .slave = 1}, AUTO_REVIEW_MODE);
 
-    // Unit on, mode locked
+    // Unit on, mode locked: power off instead of swapping mode, if auto power is on
+    check("overshoot, lockmode, auto power off", (auto_review_t){BEYOND, .power = 1, .lock_mode = 1, .autopower = 1},
+          AUTO_REVIEW_OFF);
+    check("mostly overshoot, lockmode, auto power off",
+          (auto_review_t){
+              .beyond = 6, .beyond2 = 11, .total = 10, .total2 = 20, .power = 1, .lock_mode = 1, .autopower = 1},
+          AUTO_REVIEW_OFF);
     check("overshoot, lockmode, no auto power", (auto_review_t){BEYOND, .power = 1, .lock_mode = 1}, AUTO_REVIEW_NONE);
     check("slave in band, lockmode, stays on",
           (auto_review_t){IN_BAND, .power = 1, .slave = 1, .lock_mode = 1, .autopower = 1}, AUTO_REVIEW_NONE);
@@ -64,6 +70,11 @@ int main(void)
           (auto_review_t){APPROACHING, .lock_mode = 1, .autopower = 1, .out_of_band = 1}, AUTO_REVIEW_ON);
     check("off, overshoot, lockmode, stays off",
           (auto_review_t){BEYOND, .lock_mode = 1, .autopower = 1, .out_of_band = 1}, AUTO_REVIEW_NONE);
+    // Just powered off for overshoot: the period before was only mostly beyond
+    check("off, overshoot this period only, lockmode, stays off",
+          (auto_review_t){
+              .beyond = 10, .beyond2 = 16, .total = 10, .total2 = 20, .lock_mode = 1, .autopower = 1, .out_of_band = 1},
+          AUTO_REVIEW_NONE);
 
     // BLE sensor temperature
     uint8_t from_ble = 0;
