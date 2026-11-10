@@ -4,13 +4,14 @@ Säädin is a fork of Faikout (by RevK / Andrews & Arnold). Firmware only.
 
 ## Engineering constraints
 
-- Keep code as close as possible to the existing structure and conventions. Do not refactor or rename things without an explicit need. This keeps the fork mergeable with upstream Faikout.
+- Säädin diverges from Faikout for good. Nothing is sent upstream, and the fork is never rebased onto or merged with upstream. Refactor, rename, or remove upstream code when that serves Säädin.
+- Exception: keep the S21 protocol code (`ESP/main/daikin_s21.h`) exactly as upstream has it. Build Säädin features on top of it, not into it.
 - Make the smallest change that solves the problem. Match the surrounding style (indentation, naming, comment density) instead of imposing a new one.
 - Do NOT enable hardware secure boot, flash encryption, or eFuse burning. These are permanent and can brick the board.
 - Use ASCII `saadin` / `Saadin` in code, hostnames, binaries, and topics. Use "Säädin" only in display text.
 - Settings are generated, not hand-written. `revk_settings` builds `ESP/main/settings.h` and `settings.c` from `ESP/main/settings.def` (and the library's `settings.def`). Those generated files are git-ignored. Add or change settings in `settings.def`; new demand-control settings (`demand.set`, `pid.kp`, …) go there. Do not edit the generated `settings.h` / `settings.c`.
 - Do not commit binaries or build artifacts. Releases are published as GitHub Releases, not stored in the repo.
-- Match the existing C style by hand. There is no formatter config; the code uses RevK's GNU-indent style (3-space indent, braces as in `ESP/components/ESP32-RevK/revk.c`). Never reformat lines you did not change, so upstream diffs stay small.
+- Match the existing C style by hand. There is no formatter config; the code uses RevK's GNU-indent style (3-space indent, braces as in `ESP/components/ESP32-RevK/revk.c`). Never reformat lines you did not change, so diffs stay reviewable.
 
 ## Git workflow
 
