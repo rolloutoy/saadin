@@ -31,6 +31,8 @@ static heatlog_in_t in_none(void)
         .setpoint = NAN,
         .demand = NAN,
         .smoothed = NAN,
+        .liquid = NAN,
+        .comp = NAN,
         .integral = NAN,
         .kp = NAN,
         .ti = NAN,
@@ -52,6 +54,8 @@ static heatlog_in_t in_demand(void)
         .setpoint = 30,
         .demand = 70,
         .smoothed = 21.1,
+        .liquid = 35,
+        .comp = 40,
         .integral = 350,
         .kp = 300,
         .ti = 90,
@@ -86,6 +90,8 @@ static void test_one(void)
     for (uint32_t now = 1; now <= 60; now++) {
         in.room = now <= 30 ? 20 : 22;
         in.power = now <= 30 ? 400 : 500;
+        in.liquid = now <= 30 ? 30 : 4.5; // A defrost dip shows in the mean
+        in.comp = now <= 30 ? 40 : 61;
         in.target = now <= 50 ? 21 : 21.5;
         in.demand = now <= 50 ? 70 : 80;
         heatlog_add(&l, &in, now);
@@ -97,6 +103,8 @@ static void test_one(void)
     CHECK("room is the mean", out[0].room == 2100);
     CHECK("power is the mean", out[0].power == 450);
     CHECK("heatw is the mean", out[0].heatw == 400);
+    CHECK("liquid is the mean", out[0].liquid == 1725);
+    CHECK("comp is the mean", out[0].comp == 51);
     CHECK("outdoor negative", out[0].outdoor == -500);
     CHECK("target is the last", out[0].target == 2150);
     CHECK("demand is the last", out[0].demand == 80);
@@ -121,7 +129,8 @@ static void test_unknown(void)
           out[0].outdoor == HEATLOG_NONE && out[0].heatw == HEATLOG_NONE && out[0].power == HEATLOG_NONE &&
               out[0].target == HEATLOG_NONE && out[0].effective == HEATLOG_NONE && out[0].setpoint == HEATLOG_NONE &&
               out[0].demand == HEATLOG_NONE && out[0].smoothed == HEATLOG_NONE && out[0].integral == HEATLOG_NONE &&
-              out[0].kp == HEATLOG_NONE && out[0].ti == HEATLOG_NONE);
+              out[0].kp == HEATLOG_NONE && out[0].ti == HEATLOG_NONE && out[0].liquid == HEATLOG_NONE &&
+              out[0].comp == HEATLOG_NONE);
     CHECK("off state", out[0].state == HEATCTL_OFF);
 }
 

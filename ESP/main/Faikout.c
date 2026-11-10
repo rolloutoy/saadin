@@ -1766,6 +1766,8 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     col("integral", offsetof(heatlog_sample_t, integral));
     col("kp", offsetof(heatlog_sample_t, kp));
     col("ti", offsetof(heatlog_sample_t, ti));
+    col("liquid", offsetof(heatlog_sample_t, liquid));
+    col("comp", offsetof(heatlog_sample_t, comp));
     out("],\"state\":[");
     for (uint32_t i = 0; i < n; i++)
         out("%s%u", i ? "," : "", s[i].state);
@@ -1798,6 +1800,7 @@ static esp_err_t web_graph(httpd_req_t *req)
         "<style>.g{background:white;max-width:1000px;padding:5px;margin-bottom:10px;}</style>"       //
         "<p id=msg>Loading…</p>"                                                                     //
         "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>" //
+        "<div class=g><canvas id=unit></canvas></div>"                                               //
         "<p>One sample a minute, kept until a restart. Click a legend entry to show or hide it. "    //
         "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "     //
         "green hold after a defrost (demand is not raised), red rest after a defrost loop. "         //
@@ -1856,6 +1859,11 @@ static esp_err_t web_graph(httpd_req_t *req)
         "ds('Demand',d.demand,n,'#06c',{stepped:true,yAxisID:'d'})]},"                                        //
         "options:opt({y:{title:{display:true,text:'W'}},"                                                     //
         "d:{position:'right',min:0,max:100,title:{display:true,text:'%%'},grid:{drawOnChartArea:false}}})});" //
+        "new Chart(document.getElementById('unit'),{type:'line',plugins:[band,mark],data:{datasets:["         //
+        "ds('Liquid',d.liquid,tc,'#a0a'),"                                                                    //
+        "ds('Compressor',d.comp,n,'#555',{yAxisID:'h'})]},"                                                   //
+        "options:opt({y:{title:{display:true,text:U}},"                                                       //
+        "h:{position:'right',min:0,title:{display:true,text:'Hz'},grid:{drawOnChartArea:false}}})});"         //
         "}).catch(e=>{document.getElementById('msg').textContent='Could not load the log: '+e;});"            //
         "</script>",
         revk_version, fahrenheit);
@@ -3526,6 +3534,8 @@ static void heatctl_tick(uint32_t now)
         .heatw = o.heatw,
         .power = (daikin.status_known & CONTROL_consumption) ? daikin.consumption : NAN,
         .smoothed = isnan(in.room) ? NAN : o.room, // o.room keeps the last reading once there is none
+        .liquid = in.liquid,
+        .comp = (daikin.status_known & CONTROL_comp) ? daikin.comp : NAN,
         .integral = pi ? o.integral : NAN,
         .kp = pi ? (cold ? p.cold_kp : p.kp) : NAN,
         .ti = pi ? (cold ? p.cold_ti : p.ti) / 60.0 : NAN,

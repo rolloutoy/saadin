@@ -13,6 +13,8 @@ typedef struct {     // Inputs, about once a second, NAN if not known
     float heatw;     // Heat wanted (W), mean
     float power;     // Power consumption (W), mean
     float smoothed;  // Room temperature as the controller sees it, smoothed (°C), mean
+    float liquid;    // Liquid temperature (°C), mean
+    float comp;      // Compressor frequency (Hz), mean
     float target;    // Target, auto.t (°C), last in the sample
     float effective; // Effective target, with the curve (°C), last
     float setpoint;  // Unit setpoint (°C), last
@@ -31,6 +33,8 @@ typedef struct { // One sample, temperatures in 0.01 °C, HEATLOG_NONE if not kn
     int16_t heatw; // W
     int16_t power; // W
     int16_t smoothed;
+    int16_t liquid;
+    int16_t comp; // Hz
     int16_t target;
     int16_t effective;
     int16_t setpoint;
@@ -42,7 +46,7 @@ typedef struct { // One sample, temperatures in 0.01 °C, HEATLOG_NONE if not kn
     uint8_t sub;
 } heatlog_sample_t;
 
-#define HEATLOG_MEANS 5 // room, outdoor, heatw, power, smoothed
+#define HEATLOG_MEANS 7 // room, outdoor, heatw, power, smoothed, liquid, comp
 
 typedef struct {
     heatlog_sample_t *sample; // Ring of n samples
