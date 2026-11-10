@@ -9,22 +9,22 @@
 
 int set_serial(int p, unsigned int speed, unsigned int bits, unsigned int parity, unsigned int stop)
 {
-   DCB dcb = {0};
-   
-   dcb.DCBlength = sizeof(dcb);
-   dcb.BaudRate  = speed;
-   dcb.fBinary   = TRUE;
-   dcb.fParity   = TRUE;
-   dcb.ByteSize  = bits;
-   dcb.Parity    = parity;
-   dcb.StopBits  = stop;
-   
-   if (!SetCommState((HANDLE)_get_osfhandle(p), &dcb)) {
-      fprintf(stderr, "Failed to set port parameters\n");
-	   return -1;
-   }
+    DCB dcb = {0};
 
-   return 0;
+    dcb.DCBlength = sizeof(dcb);
+    dcb.BaudRate = speed;
+    dcb.fBinary = TRUE;
+    dcb.fParity = TRUE;
+    dcb.ByteSize = bits;
+    dcb.Parity = parity;
+    dcb.StopBits = stop;
+
+    if (!SetCommState((HANDLE)_get_osfhandle(p), &dcb)) {
+        fprintf(stderr, "Failed to set port parameters\n");
+        return -1;
+    }
+
+    return 0;
 }
 
 // This implementation is not tested, sorry
@@ -44,57 +44,53 @@ static HANDLE hMapFile;
 
 void *create_shmem(const char *name, void *data, unsigned int len)
 {
-   void *pBuf;
+    void *pBuf;
 
-   hMapFile = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, len, name);
-   if (hMapFile == NULL)
-   {
+    hMapFile = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, len, name);
+    if (hMapFile == NULL) {
         fprintf(stderr, "Could not create file mapping object (0x%08X)\n", GetLastError());
         return NULL;
-   }
+    }
 
-   pBuf = MapViewOfFile(hMapFile, FILE_MAP_ALL_ACCESS, 0, 0,len);
+    pBuf = MapViewOfFile(hMapFile, FILE_MAP_ALL_ACCESS, 0, 0, len);
 
-   if (pBuf == NULL)
-   {
-       fprintf(stderr, "Could not map view of file (0x%08X)\n", GetLastError());
-       CloseHandle(hMapFile);
-       return NULL;
-   }
+    if (pBuf == NULL) {
+        fprintf(stderr, "Could not map view of file (0x%08X)\n", GetLastError());
+        CloseHandle(hMapFile);
+        return NULL;
+    }
 
-   CopyMemory(pBuf, data, len);
+    CopyMemory(pBuf, data, len);
 
-   return pBuf;
+    return pBuf;
 }
 
 void *open_shmem(const char *name, unsigned int len)
 {
-   void *pBuf;
+    void *pBuf;
 
-   hMapFile = OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, name);
+    hMapFile = OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, name);
 
-   if (hMapFile == NULL)
-   {
-      fprintf(stderr, "Could not open file mapping object (0x%08X)\n", GetLastError());
-      return NULL;
-   }
+    if (hMapFile == NULL) {
+        fprintf(stderr, "Could not open file mapping object (0x%08X)\n", GetLastError());
+        return NULL;
+    }
 
-   pBuf = MapViewOfFile(hMapFile, FILE_MAP_ALL_ACCESS, 0, 0, len);
+    pBuf = MapViewOfFile(hMapFile, FILE_MAP_ALL_ACCESS, 0, 0, len);
 
-   if (pBuf == NULL)
-   {
-      fprintf(stderr, "Could not map view of file (0x%08X)\n", GetLastError());
-      CloseHandle(hMapFile);
-      return NULL;
-   }
+    if (pBuf == NULL) {
+        fprintf(stderr, "Could not map view of file (0x%08X)\n", GetLastError());
+        CloseHandle(hMapFile);
+        return NULL;
+    }
 
-   return pBuf;
+    return pBuf;
 }
 
 void close_shmem(void *mem)
 {
-   UnmapViewOfFile(mem);
-   CloseHandle(hMapFile);
+    UnmapViewOfFile(mem);
+    CloseHandle(hMapFile);
 }
 
 #else
@@ -105,35 +101,35 @@ void close_shmem(void *mem)
 
 int set_serial(int p, unsigned int speed, unsigned int bits, unsigned int parity, unsigned int stop)
 {
-   struct termios  t;
-   if (tcgetattr(p, &t) < 0) {
-      perror("Cannot get termios");
-      return -1;
-   }
-   cfsetspeed(&t, speed);
-   cfmakeraw(&t);
-   t.c_iflag &= ~(IGNBRK | IXON | IXOFF | IXANY);
-   t.c_cflag = CLOCAL | CREAD | bits | parity | stop;
-   t.c_cc[VMIN] = 1;
-   t.c_cc[VTIME] = 0;
+    struct termios t;
+    if (tcgetattr(p, &t) < 0) {
+        perror("Cannot get termios");
+        return -1;
+    }
+    cfsetspeed(&t, speed);
+    cfmakeraw(&t);
+    t.c_iflag &= ~(IGNBRK | IXON | IXOFF | IXANY);
+    t.c_cflag = CLOCAL | CREAD | bits | parity | stop;
+    t.c_cc[VMIN] = 1;
+    t.c_cc[VTIME] = 0;
 
-   if (tcsetattr(p, TCSANOW, &t) < 0) {
-      perror("Cannot set termios");
-      return -1;
-   }
-   usleep(100000);
-   tcflush(p, TCIOFLUSH);
-   return 0;
+    if (tcsetattr(p, TCSANOW, &t) < 0) {
+        perror("Cannot set termios");
+        return -1;
+    }
+    usleep(100000);
+    tcflush(p, TCIOFLUSH);
+    return 0;
 }
 
 int wait_read(int p, unsigned int timeout)
 {
-    fd_set          r;
+    fd_set r;
     FD_ZERO(&r);
     FD_SET(p, &r);
     // Timeout is specified in milliseconds
-    struct timeval  tv = {0, timeout * 1000};
-    
+    struct timeval tv = {0, timeout * 1000};
+
     return select(p + 1, &r, NULL, NULL, &tv);
 }
 
@@ -142,50 +138,47 @@ static int owner;
 
 void *create_shmem_internal(const char *name, unsigned int len, int oflag)
 {
-   void *pBuf;
+    void *pBuf;
 
-   shm_fd = shm_open(name, oflag, 0600);
+    shm_fd = shm_open(name, oflag, 0600);
 
-   if (shm_fd < 0)
-   {
-      perror("Could not open shared memory object");
-      return NULL;
-   }
+    if (shm_fd < 0) {
+        perror("Could not open shared memory object");
+        return NULL;
+    }
 
-   if ((oflag & O_CREAT) && ftruncate(shm_fd, len))
-   {
-      perror("Could not ftruncate() shared memory object");
-      close(shm_fd);
-      return NULL;
-   }
+    if ((oflag & O_CREAT) && ftruncate(shm_fd, len)) {
+        perror("Could not ftruncate() shared memory object");
+        close(shm_fd);
+        return NULL;
+    }
 
-   pBuf = mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    pBuf = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
 
-   if (pBuf == MAP_FAILED)
-   {
-       perror("Could not map view of file");
-       close(shm_fd);
-       return NULL;
-   }
+    if (pBuf == MAP_FAILED) {
+        perror("Could not map view of file");
+        close(shm_fd);
+        return NULL;
+    }
 
-   return pBuf;
+    return pBuf;
 }
 
-void *create_shmem(const char *name, void* data, unsigned int len)
+void *create_shmem(const char *name, void *data, unsigned int len)
 {
-   void *pBuf = create_shmem_internal(name, len, O_RDWR|O_CREAT);
+    void *pBuf = create_shmem_internal(name, len, O_RDWR | O_CREAT);
 
-   if (pBuf)
-      memcpy(pBuf, data, len);
-   else if (shm_fd != -1)
-      shm_unlink(name);
+    if (pBuf)
+        memcpy(pBuf, data, len);
+    else if (shm_fd != -1)
+        shm_unlink(name);
 
-   return pBuf;
+    return pBuf;
 }
 
 void *open_shmem(const char *name, unsigned int len)
 {
-   return create_shmem_internal(name, len, O_RDWR);
+    return create_shmem_internal(name, len, O_RDWR);
 }
 
 void close_shmem(void *mem)

@@ -113,7 +113,7 @@ def parse_empty_response(cmd, what):
         sent = sent[0:2]
     if cmd != sent:
         return False
-    
+
     print("<%s>" % what)
     return True
 

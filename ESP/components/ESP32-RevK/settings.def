@@ -38,7 +38,7 @@ gpio	factorygpio				.revk			// Factory reset GPIO (press 3 times)
 #endif
 
 s	topic.group				.revk .array=2	// MQTT Alternative hostname accepted for commands
-s	topic.command	command			.revk .old="prefixcommand"			// MQTT Topic for commands 
+s	topic.command	command			.revk .old="prefixcommand"			// MQTT Topic for commands
 s	topic.setting	setting			.revk .old="prefixsetting"			// MQTT Topic for settings
 s	topic.state	state			.revk .old="prefixstate"			// MQTT Topic for state
 s	topic.event	event			.revk .old="prefixevent"			// MQTT Topic for event
@@ -81,7 +81,7 @@ u16	mqtt.port	CONFIG_REVK_MQTTPORT	.revk	.array=CONFIG_REVK_MQTT_CLIENTS				// M
 s	mqtt.user	CONFIG_REVK_MQTTUSER	.revk	.array=CONFIG_REVK_MQTT_CLIENTS .hide			// MQTT username
 s	mqtt.pass	CONFIG_REVK_MQTTPASS	.revk	.array=CONFIG_REVK_MQTT_CLIENTS	.secret .hide		// MQTT password
 blob	mqtt.cert	CONFIG_REVK_MQTTCERT	.revk	.array=CONFIG_REVK_MQTT_CLIENTS	.base64 		// MQTT CA certificate (for mqtts)
-#endif  
+#endif
 blob	client.key				.revk	.base64 	// Client Key (MQTT TLS)
 blob	client.cert				.revk	.base64 	// Client certificate (MQTT TLS)
 

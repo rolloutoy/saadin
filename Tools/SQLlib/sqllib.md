@@ -11,7 +11,7 @@ A number of functions are directly mapped by `#define` in the `sqllib.h` include
 
 ## Connection and config
 
-Ensuring the correct database connection details is a challenge. For this a function `sql_safe_connect(...)` is defined. If the connection fails an error is reported to stderr and the program aborts. This will make use of a config file if available, in `$MYSQL_HOME` or `$HOME` or `/etc` by the name of `.my.cnf`. This is the default for the `mysql` command as well, so allows credentials to be defaulted in a common way. 
+Ensuring the correct database connection details is a challenge. For this a function `sql_safe_connect(...)` is defined. If the connection fails an error is reported to stderr and the program aborts. This will make use of a config file if available, in `$MYSQL_HOME` or `$HOME` or `/etc` by the name of `.my.cnf`. This is the default for the `mysql` command as well, so allows credentials to be defaulted in a common way.
 
 In addition `sql_cnf_connect(...)` can be used, which just uses a specified configuration file for the connection. This is ideal for ensuring credentials are not included in code.
 
@@ -107,7 +107,7 @@ Setting up a transaction for your code is recommended, and ideal when using the 
 
 Also, when not in transactions, and single SQL query can fail with a *failed to get lock* error. In such cases the query is automatically retried once before failing.
 
-One trick for using debug is to end with something like 
+One trick for using debug is to end with something like
 
 ```
  if(sqldebug)sql_safe_rollback(&sql);

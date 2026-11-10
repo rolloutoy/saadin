@@ -95,7 +95,7 @@ The following functions output JSON. These all return NULL for OK, or a malloc'd
 |`j_write_close(j,FILE*)`|Write to an open file, type `FILE*`, and close when written|
 |`j_write_pretty(j,FILE*)`|Write to an open file, type `FILE*`, but with formatting white space for human reading|
 |`j_write_file(j,filename)`|Create a file by filename and write to it|
-|`j_write_mem(j,*buf,*len)`|Write to memory, malloced, address written to `buf` and size to `len`| 
+|`j_write_mem(j,*buf,*len)`|Write to memory, malloced, address written to `buf` and size to `len`|
 
 ## Changing/generating
 
@@ -175,7 +175,7 @@ Often JSON is used with external systems for APIs, and so logging is a common re
 
 ### Formdata
 
-It is often useful to have a JSON turned in to HTTP style form data, two calls can do this, `j_formdata(j_t)` and `j_multipart(j_t,size_t*)`. These return a malloc'd string. The latter is formatted as a 
+It is often useful to have a JSON turned in to HTTP style form data, two calls can do this, `j_formdata(j_t)` and `j_multipart(j_t,size_t*)`. These return a malloc'd string. The latter is formatted as a
 
 Both are mainly designed for a single top level JSON object with simple fields, and these make the form data tags. E.g. `{"a":1,"b":"test"}` would make `a=1&b=test` with proper escaping.
 

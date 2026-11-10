@@ -7,15 +7,15 @@
 #include "faikin_enums.h"
 
 // Some common S21 definitions
-#define	STX	2
-#define	ETX	3
-#define	ACK	6
-#define	NAK	21
+#define STX 2
+#define ETX 3
+#define ACK 6
+#define NAK 21
 
 // Packet structure
-#define S21_STX_OFFSET     0
-#define S21_CMD0_OFFSET    1
-#define S21_CMD1_OFFSET    2
+#define S21_STX_OFFSET 0
+#define S21_CMD0_OFFSET 1
+#define S21_CMD1_OFFSET 2
 #define S21_PAYLOAD_OFFSET 3
 
 // Length of a framing (STX + CRC + ETX)
@@ -35,111 +35,100 @@
 #define AC_MIN_TEMP_VALUE '@'
 
 #define AC_MODE_AUTO 0
-#define AC_MODE_DRY  2
+#define AC_MODE_DRY 2
 #define AC_MODE_COOL 3
 #define AC_MODE_HEAT 4
-#define AC_MODE_FAN  6
+#define AC_MODE_FAN 6
 
 // Fan speed
-#define AC_FAN_AUTO  'A'
+#define AC_FAN_AUTO 'A'
 #define AC_FAN_QUIET 'B'
-#define AC_FAN_1     '3'
-#define AC_FAN_2     '4'
-#define AC_FAN_3     '5'
-#define AC_FAN_4     '6'
-#define AC_FAN_5     '7'
+#define AC_FAN_1 '3'
+#define AC_FAN_2 '4'
+#define AC_FAN_3 '5'
+#define AC_FAN_4 '6'
+#define AC_FAN_5 '7'
 
 // Calculate packet checksum
-static inline uint8_t
-s21_checksum (uint8_t *buf, int len)
+static inline uint8_t s21_checksum(uint8_t *buf, int len)
 {
-   uint8_t c = 0;
+    uint8_t c = 0;
 
-   // The checksum excludes STX, checksum field itself, and ETX
-   for (int i = 1; i < len - 2; i++)
-      c += buf[i];
+    // The checksum excludes STX, checksum field itself, and ETX
+    for (int i = 1; i < len - 2; i++)
+        c += buf[i];
 
-   // Special bytes are forbidden even as checksum bytes, they are promoted
-   if (c == STX || c == ETX || c == ACK || c == NAK)
-      c += 2;
+    // Special bytes are forbidden even as checksum bytes, they are promoted
+    if (c == STX || c == ETX || c == ACK || c == NAK)
+        c += 2;
 
-   return c;
+    return c;
 }
 
 // Target temperature is encoded as one character
-static inline float
-s21_decode_target_temp (unsigned char v)
+static inline float s21_decode_target_temp(unsigned char v)
 {
-   return 18.0 + 0.5 * ((signed) v - AC_MIN_TEMP_VALUE);
+    return 18.0 + 0.5 * ((signed)v - AC_MIN_TEMP_VALUE);
 }
 
-static inline float
-s21_encode_target_temp (float temp)
+static inline float s21_encode_target_temp(float temp)
 {
-   return lroundf ((temp - 18.0) * 2) + AC_MIN_TEMP_VALUE;
+    return lroundf((temp - 18.0) * 2) + AC_MIN_TEMP_VALUE;
 }
 
-static inline int
-s21_valid_int_sensor (const unsigned char *payload)
+static inline int s21_valid_int_sensor(const unsigned char *payload)
 {
-   return payload[0] >= '0' && payload[0] <= '9' && payload[1] >= '0' && payload[1] <= '9' && payload[2] >= '0'
-      && payload[2] <= '9';
+    return payload[0] >= '0' && payload[0] <= '9' && payload[1] >= '0' && payload[1] <= '9' && payload[2] >= '0' &&
+           payload[2] <= '9';
 }
 
-static inline int
-s21_decode_int_sensor (const unsigned char *payload)
+static inline int s21_decode_int_sensor(const unsigned char *payload)
 {
-   if (!s21_valid_int_sensor (payload))
-      return 0;
-   int v = (payload[0] - '0') + (payload[1] - '0') * 10 + (payload[2] - '0') * 100;
-   if (payload[3] == '-')
-      v = -v;
-   return v;
+    if (!s21_valid_int_sensor(payload))
+        return 0;
+    int v = (payload[0] - '0') + (payload[1] - '0') * 10 + (payload[2] - '0') * 100;
+    if (payload[3] == '-')
+        v = -v;
+    return v;
 }
 
-static inline uint16_t
-s21_decode_hex_sensor (const unsigned char *payload)
+static inline uint16_t s21_decode_hex_sensor(const unsigned char *payload)
 {
-#define hex(c)	(((c)&0xF)+((c)>'9'?9:0))
-   return (hex (payload[3]) << 12) | (hex (payload[2]) << 8) | (hex (payload[1]) << 4) | hex (payload[0]);
+#define hex(c) (((c) & 0xF) + ((c) > '9' ? 9 : 0))
+    return (hex(payload[3]) << 12) | (hex(payload[2]) << 8) | (hex(payload[1]) << 4) | hex(payload[0]);
 #undef hex
 }
 
-static inline float
-s21_decode_float_sensor (const unsigned char *payload)
+static inline float s21_decode_float_sensor(const unsigned char *payload)
 {
-   if (!s21_valid_int_sensor (payload))
-      return NAN;
-   return (float) s21_decode_int_sensor (payload) * 0.1;
+    if (!s21_valid_int_sensor(payload))
+        return NAN;
+    return (float)s21_decode_int_sensor(payload) * 0.1;
 }
 
 // Convert between Daikin and Faikin fan speed enums
-static inline unsigned char
-s21_encode_fan (int speed)
+static inline unsigned char s21_encode_fan(int speed)
 {
-   switch (speed)
-   {
-   case FAIKIN_FAN_AUTO:
-      return AC_FAN_AUTO;
-   case FAIKIN_FAN_QUIET:
-      return AC_FAN_QUIET;
-   default:
-      return speed - FAIKIN_FAN_1 + AC_FAN_1;
-   }
+    switch (speed) {
+    case FAIKIN_FAN_AUTO:
+        return AC_FAN_AUTO;
+    case FAIKIN_FAN_QUIET:
+        return AC_FAN_QUIET;
+    default:
+        return speed - FAIKIN_FAN_1 + AC_FAN_1;
+    }
 }
 
-static inline int
-s21_decode_fan (unsigned char v)
+static inline int s21_decode_fan(unsigned char v)
 {
-   switch (v)
-   {
-   case AC_FAN_AUTO:
-      return FAIKIN_FAN_AUTO;
-   case AC_FAN_QUIET:
-      return FAIKIN_FAN_QUIET;
-   default:
-      return v - AC_FAN_1 + FAIKIN_FAN_1;
-   }
+    switch (v) {
+    case AC_FAN_AUTO:
+        return FAIKIN_FAN_AUTO;
+    case AC_FAN_QUIET:
+        return FAIKIN_FAN_QUIET;
+    default:
+        return v - AC_FAN_1 + FAIKIN_FAN_1;
+    }
 }
 
 #endif

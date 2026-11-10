@@ -4,30 +4,15 @@
 
 #include "faikin-s21.h"
 
-struct EnumOption
-{
+struct EnumOption {
     const char *name;
     unsigned int value;
 };
 
-static struct EnumOption humidity[] =
-{
-    {"Off", 0x30},
-    {"Low", 0x8F},
-    {"Standard", 0x80},
-    {"High", 0x81},
-    {"Continuous", 0xFF},
-    {NULL, 0}
-};
+static struct EnumOption humidity[] = {{"Off", 0x30},  {"Low", 0x8F},        {"Standard", 0x80},
+                                       {"High", 0x81}, {"Continuous", 0xFF}, {NULL, 0}};
 
-static struct EnumOption demand[] =
-{
-    {"Off", 0},
-    {"Low", 60},
-    {"Medium", 50},
-    {"High", 30},
-    {NULL, 0}
-};
+static struct EnumOption demand[] = {{"Off", 0}, {"Low", 60}, {"Medium", 50}, {"High", 30}, {NULL, 0}};
 
 static int parse_protocol(int argc, const char **argv, struct S21State *state)
 {
@@ -129,7 +114,7 @@ static int parse_string(int argc, const char **argv, char *v, unsigned int len)
     return 2;
 }
 
-static int parse_enum(int argc, const char **argv, unsigned int*v, const struct EnumOption* opts)
+static int parse_enum(int argc, const char **argv, unsigned int *v, const struct EnumOption *opts)
 {
     const char *opt = argv[0];
     char *endp = NULL;
@@ -188,7 +173,7 @@ static int parse_raw(int argc, const char **argv, unsigned char *v, unsigned int
     return len + 1;
 }
 
-static void enum_option(const char* name, const char *description, const struct EnumOption* opts)
+static void enum_option(const char *name, const char *description, const struct EnumOption *opts)
 {
     printf(" %s <enum> - %s: ", name, description);
     while (opts->name) {
@@ -207,7 +192,7 @@ static void raw_option(const char *opt, unsigned int len)
 
 void state_options_help(void)
 {
-    const struct S21State* state = NULL; // For RAW_OPTION() macro below
+    const struct S21State *state = NULL; // For RAW_OPTION() macro below
 
     printf("Supported state options:\n"
            " power <bool> - power on/off\n"
@@ -223,7 +208,7 @@ void state_options_help(void)
            " temp <float> - Target temperature in C\n"
            " hum_sensor <int> - Reported indoor humidity\n"
            " fanrpm <int> - Fan rpm (divided by 10)\n"
-	       " comprpm <int> - Compressor rpm\n");
+           " comprpm <int> - Compressor rpm\n");
     enum_option("demand", "Demand mode setting", demand);
     printf(" consumption <int> - Reported power consumption\n"
            " protocol <major>.<minor> - Reported protocol version. Major and minor are 2 digits max.\n");
@@ -300,35 +285,46 @@ int parse_item(int argc, const char **argv, struct S21State *state)
     } else if (!strcmp(opt, "humidity")) {
         return parse_enum(argc, argv, &state->humidity, humidity);
     }
-#define PARSE_BOOL(cmd)           \
-     else if (!strcmp(opt, #cmd)) \
-        return parse_bool(argc, argv, &state->cmd);
+#define PARSE_BOOL(cmd) else if (!strcmp(opt, #cmd)) return parse_bool(argc, argv, &state->cmd);
     PARSE_BOOL(powerful)
     PARSE_BOOL(comfort)
     PARSE_BOOL(quiet)
     PARSE_BOOL(streamer)
     PARSE_BOOL(sensor)
     PARSE_BOOL(eco)
-    else if (!strcmp(opt, "eco")) {
+    else if (!strcmp(opt, "eco"))
+    {
         return parse_bool(argc, argv, &state->eco);
-    } else if (!strcmp(opt, "temp")) {
+    }
+    else if (!strcmp(opt, "temp"))
+    {
         return parse_float(argc, argv, &state->temp);
-    } else if (!strcmp(opt, "hum_sensor")) {
+    }
+    else if (!strcmp(opt, "hum_sensor"))
+    {
         return parse_int(argc, argv, &state->hum_sensor);
-    } else if (!strcmp(opt, "comprpm")) {
+    }
+    else if (!strcmp(opt, "comprpm"))
+    {
         return parse_int(argc, argv, &state->comprpm);
-    } else if (!strcmp(opt, "demand")) {
+    }
+    else if (!strcmp(opt, "demand"))
+    {
         return parse_enum(argc, argv, &state->demand, demand);
-    } else if (!strcmp(opt, "consumption")) {
+    }
+    else if (!strcmp(opt, "consumption"))
+    {
         return parse_int(argc, argv, &state->consumption);
-    } else if (!strcmp(opt, "protocol"))  {
+    }
+    else if (!strcmp(opt, "protocol"))
+    {
         return parse_protocol(argc, argv, state);
-    } else if (!strcmp(opt, "model")) {
+    }
+    else if (!strcmp(opt, "model"))
+    {
         return parse_string(argc, argv, state->model, sizeof(state->model));
     }
-#define PARSE_RAW(cmd)               \
-    else if (!strcmp(argv[0], #cmd)) \
-        return parse_raw(argc, argv, state->cmd, sizeof(state->cmd));
+#define PARSE_RAW(cmd) else if (!strcmp(argv[0], #cmd)) return parse_raw(argc, argv, state->cmd, sizeof(state->cmd));
     PARSE_RAW(F2)
     PARSE_RAW(F3)
     PARSE_RAW(F4)
@@ -380,7 +376,8 @@ int parse_item(int argc, const char **argv, struct S21State *state)
     PARSE_RAW(FX61)
     PARSE_RAW(FX71)
     PARSE_RAW(FX81)
-    else {
+    else
+    {
         fprintf(stderr, "Unknown option %s\n", opt);
         return -1;
     }
