@@ -71,7 +71,14 @@ Säädin is firmware only. It is meant to run on [Faikout boards](https://shop.r
 
 ## Building
 
-Build and flash from source with [ESP-IDF](https://docs.espressif.com/projects/esp-idf/):
+Build and flash from source with [ESP-IDF](https://docs.espressif.com/projects/esp-idf/). [mise](https://mise.jdx.dev/) sets up the tools:
+
+```sh
+mise install          # eim (ESP-IDF installer), prek, and popt for the host tools
+eim install           # once: install ESP-IDF; `eim select` picks the version
+```
+
+In this directory mise then puts the selected ESP-IDF on your PATH, so no `source …/activate_idf_*.sh` is needed. Without mise, activate ESP-IDF yourself and install popt (e.g. `brew install popt`).
 
 ```sh
 cd ESP
