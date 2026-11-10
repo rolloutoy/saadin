@@ -74,7 +74,7 @@ u8	fanrun				.live	.unit="min"			// Auto run fan after cool/dry
 s8	frosttemp	-100		.live	.unit="℃"			// Frost protect (below this, turn on hot regardless)
 
 #ifdef CONFIG_BT_NIMBLE_ENABLED
-bit	ble.enable			.hide .old="ble"				// Enable BLE for sensors or remote
+bit	ble.enable			.hide .old="ble"				// Enable BLE for room temperature sensors
 s	auto.b				.live					// BLE sensor ID
 #endif
 

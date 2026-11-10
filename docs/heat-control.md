@@ -87,7 +87,7 @@ If the unit reports a demand, setpoint, QO or fan that differs from what the con
 
 ## Removed from Faikout's auto mode
 
-- Timed on/off (`auto.0`, `auto.1`), auto power on/off by temperature (`auto.p`, `auto.ptemp`), heat/cool switching (`lockmode`), auto fan (`auto.fmax`, `no.fanauto`), the BLE remote's Faikout-auto mode (mode 7; its simple modes stay), the target range of the MQTT `control` command (its `env` stays).
+- Timed on/off (`auto.0`, `auto.1`), auto power on/off by temperature (`auto.p`, `auto.ptemp`), heat/cool switching (`lockmode`), auto fan (`auto.fmax`, `no.fanauto`), the Faikout BLE remote (all of it; BLE is only for room sensors), the target range of the MQTT `control` command (its `env` stays).
 - Settings: `thermostat`, `temp.track`, `temp.adjust`, `temp.noflap`, `heat.over`/`back`, `cool.over`/`back`, `switchtemp`, `pushtemp`, `t.predicts`, `t.predictt`, `t.sample`, `auto.lcontrol`, `t.coolmin`, `t.heatmax` and anything else only the old loop used.
 - Kept: `auto.e` (now the controller's on switch), `auto.t`, `auto.b`, `auto.topic`, `auto.payload`, `t.min`, `t.max`, `t.control`, `frosttemp` (separate safety net), `min.outside`.
 

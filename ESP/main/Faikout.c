@@ -164,9 +164,8 @@ struct {
     uint8_t dumping : 1;
     uint8_t hourly : 1; // Hourly stuff
     uint8_t protocol_set : 1;
-    uint8_t faikouton : 1; // Last faikout power state
-    uint8_t startup : 1;   // In a startup phase (i.e. full comms not yet confirmed)
-    uint8_t frost : 1;     // Frost override
+    uint8_t startup : 1; // In a startup phase (i.e. full comms not yet confirmed)
+    uint8_t frost : 1;   // Frost override
 } b = {0};
 
 static httpd_handle_t webserver = NULL;
@@ -1697,7 +1696,7 @@ static void settings_autob(httpd_req_t *req)
             revk_web_send(req, " selected");
             found = 1;
         }
-        revk_web_send(req, ">%s%s", e->faikoutset ? "Remote: " : "", e->name);
+        revk_web_send(req, ">%s", e->name);
         if (!e->missing && e->rssi)
             revk_web_send(req, " %ddB", e->rssi);
     }
@@ -1832,7 +1831,7 @@ static esp_err_t web_control(httpd_req_t *req)
         xSemaphoreTake(blemutex, portMAX_DELAY);
         tre();
         tr(NULL);
-        revk_web_send(req, "<td>%s</td>", bletemp && bletemp->faikoutset ? "BLE<br>Remote" : "BLE");
+        revk_web_send(req, "<td>BLE</td>");
         if (!bletemp || bletemp->tempset)
             addt("Temp", "External BLE temperature");
         if (!bletemp || bletemp->humset)
@@ -3634,7 +3633,7 @@ void app_main()
                 usleep(1000000LL - (esp_timer_get_time() % 1000000LL));
             }
 #ifdef ELA
-            if (ble_sensor_enabled()) { // Room temperature from the BLE sensor, or a Faikout remote
+            if (ble_sensor_enabled()) { // Room temperature from the BLE sensor
                 xSemaphoreTake(blemutex, portMAX_DELAY);
                 bleenv_t *was = bletemp;
                 bleenv_expire(300); // Marks any as missing at 300 seconds
@@ -3666,39 +3665,6 @@ void app_main()
                     daikin.status_known |= CONTROL_env; // So we report it
                 else
                     daikin.status_known &= ~CONTROL_env; // So we don't report it
-                if (bletemp && bletemp->faikoutset) {
-                    float min = NAN, max = NAN;
-                    if (bletemp->targetminset)
-                        min = (float)bletemp->targetmin / 100;
-                    if (bletemp->targetmaxset)
-                        max = (float)bletemp->targetmax / 100;
-                    if (isnan(max))
-                        max = min;
-                    { // Simple remote (its Faikout auto mode, 7, is not supported, so changes no mode)
-                        static const uint8_t map[] = {
-                            0, 3, 0, 7, 2, 1, 0, 0}; // FHCA456D Unspecified,Auto,Fan,Dry,Cool,Heat,Reserved,Faikout
-                        if (bletemp->mode && bletemp->mode != 7 && daikin.mode != map[bletemp->mode] &&
-                            !(daikin.control_changed & CONTROL_mode))
-                            daikin_set_v(mode, map[bletemp->mode]);
-                        if (daikin.power != bletemp->power && !(daikin.control_changed & CONTROL_power))
-                            daikin_set_v(power, b.faikouton = bletemp->power);
-                        if (!isnan(min) && daikin.temp != (min + max) / 2 && !(daikin.control_changed & CONTROL_temp))
-                            daikin_set_t(temp, (min + max) / 2);
-                    }
-                    if (bletemp->fan && daikin.fan != bletemp->fan - 1 && !(daikin.control_changed & CONTROL_fan)) {
-                        uint8_t fan = bletemp->fan;
-                        if (fan == 7 && (!fan_3_auto() & !fan_5_auto()))
-                            fan = 0; // No auto
-                        if ((fan == 3 || fan == 5) && !fan_5_auto())
-                            fan = 0; // Only 3 speeds
-                        if (fan)
-                            daikin_set_v(fan, fan - 1);
-                    }
-                    static const uint8_t map[] = {
-                        2, 5, 4, 1, 0, 0, 0, 3}; // FHCA456D Unspecified,Auto,Fan,Dry,Cool,Heat,Reserved,Faikout
-                    bleenv_faikout(hostname, daikin.home, daikin.temp, daikin.temp, daikin.power,
-                                   daikin.antifreeze | daikin.slave, map[daikin.mode], daikin.fan + 1);
-                }
                 xSemaphoreGive(blemutex);
             }
 #endif

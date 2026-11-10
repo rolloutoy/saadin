@@ -178,33 +178,6 @@ int bleenv_gap_disc(struct ble_gap_event *event)
                     d->bat = p[8];
                     d->batset = 1;
                 }
-            } else if (man == 0xE9C) {        // A&A
-                if (*p == 9 && p[4] == 'F') { // Faikin
-                    if (!d)
-                        d = bleenv_find(&event->disc.addr, 1);
-                    if (d) {
-                        d->power = ((p[5] & 0x80) ? 1 : 0);
-                        d->rad = ((p[5] & 0x40) ? 1 : 0);
-                        d->mode = ((p[5] >> 3) & 7);
-                        d->fan = (p[5] & 7);
-                        if (p[6] & 0x80) {
-                            d->temp = (((p[6] & 0x1F) << 8) + p[7]) - 4000;
-                            d->tempset = 1;
-                        } else
-                            d->tempset = 0;
-                        if (p[6] & 0x40) {
-                            d->targetmin = 10 * (p[8] + 100);
-                            d->targetminset = 1;
-                        } else
-                            d->targetminset = 0;
-                        if (p[6] & 0x20) {
-                            d->targetmax = 10 * (p[9] + 100);
-                            d->targetmaxset = 1;
-                        } else
-                            d->targetmaxset = 0;
-                        d->faikoutset = 1;
-                    }
-                }
             } else if (man == 0x0499 &&
                        ((*p == 27 && p[4] == 5) ||
                         (*p == 23 && p[4] == 6))) { // Ruuvi - data format 5 (RuuviTag) and 6 (Ruuvi Air)
@@ -610,58 +583,6 @@ void bleenv_bthome2(const char *name, float c, float rh, uint16_t co2, float lux
         data[p++] = L >> 8;
         data[p++] = L >> 16;
     }
-    p = add_name(data, p, 0, name);
-    ble_adv(name, data, p);
-}
-
-void bleenv_faikout(const char *name, float c, float targetmin, float targetmax, uint8_t power, uint8_t rad,
-                    uint8_t mode, uint8_t fan)
-{ // Set up / update advertising Faikin format
-    if (mode > 7)
-        mode = 0;
-    if (fan > 7)
-        fan = 0;
-    if (!isnan(c)) {
-        if (c < -40)
-            c = -40;
-        else if (c > 40)
-            c = 40;
-    }
-    if (!isnan(targetmin)) {
-        if (targetmin < 10)
-            targetmin = 10;
-        else if (targetmin > 35)
-            targetmin = 35;
-    }
-    if (!isnan(targetmax)) {
-        if (targetmax < 10)
-            targetmax = 10;
-        else if (targetmax > 35)
-            targetmax = 35;
-    }
-    uint8_t data[MAX_ADV], p = 0;
-    data[p++] = 2;    // Len
-    data[p++] = 1;    // Flags
-    data[p++] = 6;    // Discoverable / no BR
-    data[p++] = 9;    // Len
-    data[p++] = 0xFF; // Manufacturer specific
-    data[p++] = 0x9C; // A&A
-    data[p++] = 0x0E;
-    data[p++] = 'F'; // Message
-    data[p++] = (power ? 0x80 : 0) + (rad ? 0x40 : 0) + (mode << 3) + fan;
-    int16_t T = 0;
-    if (!isnan(c))
-        T = 0x8000 + (c + 40) * 100; // 13 bits - top bits are if temp/targets set
-    if (!isnan(targetmin))
-        T |= 0x4000;
-    if (!isnan(targetmax))
-        T |= 0x2000;
-    data[p++] = T >> 8;
-    data[p++] = T;
-    T = (isnan(targetmin) ? 0 : (targetmin - 10) * 10);
-    data[p++] = T;
-    T = (isnan(targetmax) ? 0 : (targetmax - 10) * 10);
-    data[p++] = T;
     p = add_name(data, p, 0, name);
     ble_adv(name, data, p);
 }
