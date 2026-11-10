@@ -4508,18 +4508,19 @@ esp_err_t revk_web_settings(httpd_req_t *req)
                     e = revk_command("upgrade", NULL);
 #endif
                 else if (jo_find(j, "_settingsave")) {
-                    jo_t j = revk_setting_dump(1);
-                    if (j) {
+                    jo_t d = revk_setting_dump(1);
+                    if (d) {
                         httpd_resp_set_type(req, "application/json");
                         char *cd = NULL;
                         asprintf(&cd, "attachment; filename=%s.json", revk_id);
                         httpd_resp_set_hdr(req, "Content-Disposition", cd);
-                        char *js = jo_finisha(&j);
+                        char *js = jo_finisha(&d);
                         if (js) {
                             httpd_resp_sendstr_chunk(req, js);
                             free(js);
                         }
                         httpd_resp_sendstr_chunk(req, NULL);
+                        jo_free(&j);
                         free(qs);
                         free(cd);
                         return ESP_OK;
@@ -4541,6 +4542,8 @@ esp_err_t revk_web_settings(httpd_req_t *req)
                             req,
                             "<p>First attribute needs to be \"password\". To change password you need to include \"password\" twice, once for old and once new.</p>");
 #endif
+                    jo_free(&j);
+                    free(qs);
                     return revk_web_foot(req, 1, 0, NULL);
                 }
             }
