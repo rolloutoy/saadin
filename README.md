@@ -113,6 +113,7 @@ These manuals come from upstream and still use the Faikout name:
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
 **2026-11-10**
+- Faikout auto no longer keeps controlling on the last reading of a BLE sensor that has stopped reporting (it is dropped after 5 minutes). Until the sensor reports again, it uses the aircon's own temperature, as it does with no BLE sensor.
 - With `lockmode` and auto power on/off (`autop`) set, Faikout auto now turns the aircon off when the room overshoots the target range, instead of leaving it running because it may not swap heat/cool. It turns back on only once the room needs the locked mode again.
 - Firmware uploaded from the browser now starts on probation. Every page shows a banner with **Keep** and **Roll back now** buttons and a 10-minute countdown. Restarting from the web UI also keeps the firmware. If nobody keeps it in time, if it gets no IP address within 3 minutes, or if the device restarts any other way first (crash, power loss, MQTT `restart`), the device goes back to the previous firmware. The old firmware then says why the update was rolled back, until its next restart, and sends `info/upgrade` over MQTT. While new firmware is on probation, another upload is refused. This needs the new bootloader, flashed over USB once.
 - The "Firmware" tab can boot the previous firmware, which then goes through the same probation.

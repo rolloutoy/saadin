@@ -31,5 +31,6 @@ typedef struct {
 auto_review_action_t auto_review(const auto_review_t *r);
 
 // daikin.env after a check of the BLE sensor. reading is its temperature, or NAN if it has none. *from_ble says
-// whether env holds a BLE reading.
+// whether env holds a BLE reading. Once the sensor has none, its last reading becomes NAN (unknown), while a value
+// from elsewhere (MQTT) is kept.
 float auto_ble_env(float env, uint8_t *from_ble, float reading);

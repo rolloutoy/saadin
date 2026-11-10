@@ -80,6 +80,7 @@ int main(void)
     uint8_t from_ble = 0;
     check_env("BLE reading used", auto_ble_env(NAN, &from_ble, 21.5), 21.5);
     check_env("BLE reading updated", auto_ble_env(21.5, &from_ble, 21.25), 21.25);
+    check_env("BLE reading gone, env unknown", auto_ble_env(21.25, &from_ble, NAN), NAN);
     check_env("BLE still gone, MQTT env kept", auto_ble_env(19.0, &from_ble, NAN), 19.0);
     check_env("BLE back, its reading used", auto_ble_env(19.0, &from_ble, 20.0), 20.0);
     from_ble = 0;

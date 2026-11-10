@@ -44,5 +44,9 @@ float auto_ble_env(float env, uint8_t *from_ble, float reading)
         *from_ble = 1;
         return reading;
     }
-    return env;
+    if (*from_ble) { // Sensor has gone stale or missing, so its last reading is no longer the room temperature
+        *from_ble = 0;
+        return NAN;
+    }
+    return env; // Not from the BLE sensor (e.g. MQTT), so leave it
 }
