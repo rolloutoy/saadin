@@ -103,6 +103,9 @@ These manuals come from upstream and still use the Faikout name:
 
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
+**2026-10-04**
+- Fixed a memory leak on every view of the settings page that shows a drop-down (enum) setting, such as the fan type.
+
 **2026-10-03**
 - Forked from upstream Faikout.
 - Removed the PCB designs, case models and product photos, which are still available upstream.

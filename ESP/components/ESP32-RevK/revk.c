@@ -4305,6 +4305,7 @@ revk_web_setting_edit (httpd_req_t *req, const char *tag, const char *field, con
             n++;
          }
       revk_web_send (req, "</select></td><td>%s</td></tr>", comment);
+      free (value);
       return;
    }
 #endif
