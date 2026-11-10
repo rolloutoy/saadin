@@ -1,0 +1,2 @@
+# Reformat to ESP-IDF style (whitespace only). Use: git config blame.ignoreRevsFile .git-blame-ignore-revs
+bc6e7a33b6ead974472caa1dc8b7d8820e528809
