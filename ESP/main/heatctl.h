@@ -1,4 +1,4 @@
-// Säädin heating controller (heatctl), see docs/heat-control.md
+// Saadin heating controller (heatctl), see docs/heat-control.md
 // Pure logic, no ESP-IDF calls, so it also builds as a host unit test (see test/heatctl_test.c)
 #pragma once
 

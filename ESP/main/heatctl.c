@@ -1,4 +1,4 @@
-// Säädin heating controller (heatctl), see docs/heat-control.md
+// Saadin heating controller (heatctl), see docs/heat-control.md
 #include <ctype.h>
 #include <math.h>
 #include <stdarg.h>
@@ -261,7 +261,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
     heatctl_out_t out = {0};
     uint32_t dt = (s->ticked && now > s->last) ? now - s->last : 0;
     if (dt > HEATCTL_DT_MAX)
-        dt = HEATCTL_DT_MAX; // A stall (e.g. comms restart) is not integrated
+        dt = HEATCTL_DT_MAX; // A stall (e.g. comms restart) is integrated as HEATCTL_DT_MAX at most
     s->ticked = 1;
     s->last = now;
 
