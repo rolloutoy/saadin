@@ -85,7 +85,9 @@ make flash
 
 Libraries are included as git subtrees, so a plain clone is enough; `--recursive` is not needed. Boards can be flashed through the USB test pads, or with a [TC2030-USB-NL](https://www.tag-connect.com/product/tc2030-usb-nl) lead on boards with a Tag-Connect footprint.
 
-> **Turn off automatic updates.** By default the firmware checks the upstream OTA server (`ota.faikin.uk`) about once a week. It installs upstream Faikout whenever the version differs from what is running, which replaces Säädin. Set `ota.auto` to off, or point `ota.host` at your own server, before relying on a Säädin build.
+> **No OTA downloads, no signing.** Säädin never fetches firmware from a server. There is no OTA host, no automatic update check, and no `upgrade` command or button. Builds are not signed. To update, download a release and load it onto the device yourself.
+>
+> A device running signed upstream firmware rejects unsigned images over OTA, so flash the first Säädin build over USB.
 
 ## Set-up and documentation
 
@@ -110,6 +112,8 @@ As required by GPL-3.0 §5(a), this section lists how Säädin differs from upst
 - Fixed a deadlock that could hang the web server and the main loop while a BLE Faikout remote changes the aircon and a browser has the main page open.
 - Fixed the legacy `/aircon/set_control_info` API. A request that set the mode got no reply, leaked memory, and ignored the other values in the request (such as temperature and fan).
 - Fixed the web server locking up for good (connection reset, while the aircon keeps working) when several WebSocket connections close at once.
+- Builds are no longer signed, and the firmware no longer requires signed OTA images.
+- Removed OTA downloads. The firmware no longer checks for or fetches updates from a server, and the `upgrade` command, the upgrade button and the `ota.*` settings are gone.
 
 **2026-10-03**
 - Forked from upstream Faikout.

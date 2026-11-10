@@ -375,8 +375,10 @@ static mesh_addr_t mesh_ota_addr = { };
 #endif
 
 /* Local functions */
+#ifdef	CONFIG_REVK_OTA_PULL
 static char *revk_upgrade_url (const char *val, const char *ext);
 static int revk_upgrade_check (const char *url);
+#endif
 #if  defined(CONFIG_REVK_APCONFIG) || defined(CONFIG_REVK_WEB_DEFAULT)
 static httpd_handle_t webserver = NULL;
 void revk_web_dummy (httpd_handle_t * webp, uint16_t port);
@@ -390,7 +392,9 @@ static void ap_stop (void);     // Stop AP mode, allowed if if not running
 
 static void ip_event_handler (void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 static void mqtt_rx (void *arg, char *topic, unsigned short plen, unsigned char *payload);
+#ifdef	CONFIG_REVK_OTA_PULL
 static const char *revk_upgrade (const char *target, jo_t j);
+#endif
 
 #ifdef	CONFIG_REVK_MESH
 static void mesh_init (void);
@@ -1419,9 +1423,12 @@ mqtt_rx (void *arg, char *topic, unsigned short plen, unsigned char *payload)
                      target = NULL;     // Mark as us for simple testing by app_command, etc
 #endif
          }
+#ifdef	CONFIG_REVK_OTA_PULL
          if (!client && prefix && !strcmp (prefix, topiccommand) && suffix && !strcmp (suffix, "upgrade"))
             err = (err ? : revk_upgrade (target, j));   // Special case as command can be to other host
-         else if (!client && !target)
+         else
+#endif
+         if (!client && !target)
          {                      // For us (could otherwise be for app callback)
             if (prefix && !strcmp (prefix, topiccommand))
                err = (err ? : revk_command (suffix, j));
@@ -2445,6 +2452,7 @@ task (void *pvParameters)
    pvParameters = pvParameters;
    /* Log if unexpected restart */
    int64_t tick = 0;
+#ifdef	CONFIG_REVK_OTA_PULL
    uint32_t ota_check = 0;
    if (otaauto)
    {
@@ -2458,6 +2466,7 @@ task (void *pvParameters)
       else if (otadays)
          ota_check = 86400 * otadays + (esp_random () % 3600);  // Min periodic check
    }
+#endif
    revk_gpio_input (factorygpio);
    b.factorywas = revk_gpio_get (factorygpio);
    while (1)
@@ -2510,8 +2519,10 @@ task (void *pvParameters)
                {
                   if (b.factorycount == 1)
                      revk_restart (1, "Reset button");
+#ifdef	CONFIG_REVK_OTA_PULL
                   else if (b.factorycount == 2)
                      revk_command ("upgrade", NULL);
+#endif
                   else if (b.factorycount == 3)
                   {             // Do factory reset
                      const esp_app_desc_t *app = esp_app_get_description ();
@@ -2539,6 +2550,7 @@ task (void *pvParameters)
                lwmqtt_reconnect6 (mqtt_client[i]);
 #endif
          }
+#ifdef	CONFIG_REVK_OTA_PULL
          if (!b.disableupgrade && !b.disablewifi && otaauto && ota_check && ota_check < now)
          {                      // Check for s/w update
             time_t t = time (0);
@@ -2563,6 +2575,7 @@ task (void *pvParameters)
                   revk_upgrade (NULL, NULL);    // Checks for upgrade
             }
          }
+#endif
          {
 #if     defined(CONFIG_REVK_WIFI) || defined(CONFIG_REVK_MESH)
             if (!b.disablewifi && *wifissid && (xEventGroupGetBits (revk_group) & (GROUP_OFFLINE)))
@@ -4472,8 +4485,10 @@ revk_web_settings (httpd_req_t *req)
          {
             if (jo_find (j, "_reboot"))
                revk_restart (3, "Reboot");
+#ifdef	CONFIG_REVK_OTA_PULL
             else if (jo_find (j, "_upgrade"))
                e = revk_command ("upgrade", NULL);
+#endif
             else if (jo_find (j, "_settingsave"))
             {
                jo_t j = revk_setting_dump (1);
@@ -4684,12 +4699,14 @@ revk_web_settings (httpd_req_t *req)
          if (page == -1)
             revk_web_send (req, "<br><input id=_settingsave name=_settingsave type=submit value='Save settings'>"
                            "<input id=_settingload name=_settingload type=submit value='Upload settings'>");
+#ifdef	CONFIG_REVK_OTA_PULL
          if (!revk_link_down () && *otahost && page == -1)
             revk_web_send (req, "<input id=_upgrade name=_upgrade type=submit value='Upgrade now from %s%s'>", otahost,
 #ifdef CONFIG_REVK_WEB_BETA
                            otabeta ? " (beta)" :
 #endif
                            "");
+#endif
       }
       revk_web_send (req, "</td></tr>");
       if (
@@ -4701,6 +4718,7 @@ revk_web_settings (httpd_req_t *req)
       switch (page)
       {
       case -1:                 // Basic
+#ifdef	CONFIG_REVK_OTA_PULL
          if (!revk_link_down () && *otahost)
          {
             if (otadays)
@@ -4710,6 +4728,7 @@ revk_web_settings (httpd_req_t *req)
 #endif
             hr ();
          }
+#endif
          if (sta_netif)
          {
             revk_web_setting_title (req, "WiFi settings");
@@ -5156,6 +5175,7 @@ revk_web_status (httpd_req_t *req)
    if (ws_pkt.len == 4 && !memcmp (buf, "scan", 4))
    {                            // Basic settings
       status ();
+#ifdef	CONFIG_REVK_OTA_PULL
       if (!revk_link_down () && otaauto)
       {
          char *url = revk_upgrade_url ("", "bin");
@@ -5168,6 +5188,7 @@ revk_web_status (httpd_req_t *req)
             free (url);
          }
       }
+#endif
       if (!revk_shutting_down (NULL))
          scan ();
    }
@@ -5408,6 +5429,7 @@ revk_ota_progress (void)
    return ota_percent;
 }
 
+#ifdef	CONFIG_REVK_OTA_PULL
 static void
 ota_task (void *pvParameters)
 {
@@ -5785,6 +5807,7 @@ revk_upgrade (const char *target, jo_t j)
    ota_task_id = revk_task ("OTA", ota_task, url, 5);
    return "";
 }
+#endif
 
 const char *
 revk_command (const char *tag, jo_t j)
@@ -5794,8 +5817,10 @@ revk_command (const char *tag, jo_t j)
    ESP_LOGD (TAG, "MQTT command [%s]", tag);
    const char *e = NULL;
    /* My commands */
+#ifdef	CONFIG_REVK_OTA_PULL
    if (!e && !strcmp (tag, "upgrade"))
       e = revk_upgrade (NULL, j);       // Called internally maybe
+#endif
    if (!e && !strcmp (tag, "status"))
    {
       up_next = 0;

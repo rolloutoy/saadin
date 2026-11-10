@@ -3436,12 +3436,14 @@ app_main ()
       revk_settings_store (j, NULL, REVK_SETTINGS_PASSOVERRIDE);
    }
 #endif
+#ifdef	CONFIG_REVK_OTA_PULL
    if (!strcmp (otahost, "ota.revk.uk") || !strcmp (otahost, "ota.faikin.uk"))
    {
       jo_t j = jo_object_alloc ();
       jo_string (j, "otahost", "ota.faikout.uk");
       revk_settings_store (j, NULL, REVK_SETTINGS_PASSOVERRIDE);
    }
+#endif
 
    ESP_LOGD (TAG, "USB %d", usb_serial_jtag_is_connected ());
    if (tx.set && rx.set)
