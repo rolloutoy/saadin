@@ -97,7 +97,7 @@ u16	demand.rate	600		.live	.unit="s"			// Minimum time between demand changes
 u8	demand.minrun	30		.live	.unit="min"			// Minimum heating before heating off
 enum	demand.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet"	// Fan while heating on demand
 u16	pid.kp		300		.live	.unit="W/℃"			// Heat wanted per degree below target
-u16	pid.ti		90		.live	.unit="min"			// Integral time
+u16	pid.ti		90		.live	.unit="min"			// Integral time, 0 for none (P only)
 
 u16	idle.temp	16		.live	.decimal=1 .unit="℃"		// Setpoint while heating is off
 u8	idle.over	0.5		.live	.decimal=1 .unit="℃"		// Heating off above target by more than this
@@ -111,7 +111,7 @@ u8	cold.hold	60		.live	.unit="min"			// Outdoor temperature must stay past cold.
 u16	cold.set	23		.live	.decimal=1 .unit="℃"		// Starting setpoint at full power
 u16	cold.rate	1800		.live	.unit="s"			// Minimum time between 0.5℃ setpoint steps at full power
 u8	cold.kp		2		.live	.decimal=1			// Setpoint change per degree below target at full power
-u16	cold.ti		120		.live	.unit="min"			// Integral time at full power
+u16	cold.ti		120		.live	.unit="min"			// Integral time at full power, 0 for none
 enum	cold.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet"	// Fan at full power
 
 u8	defrost.enter	5		.live	.unit="℃"			// Defrost when liquid drops below this

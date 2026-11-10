@@ -57,7 +57,7 @@ typedef struct {
     uint32_t demand_rate;   // Minimum time between demand changes (s)
     uint32_t demand_minrun; // Minimum DEMAND run before IDLE (s)
     float kp;               // W per °C
-    float ti;               // Integral time (s)
+    float ti;               // Integral time (s), 0 for none
     // IDLE
     float idle_temp;   // Setpoint
     float idle_over;   // Go IDLE above target + this
@@ -70,7 +70,7 @@ typedef struct {
     float cold_set;     // Setpoint on entering COLD
     uint32_t cold_rate; // Minimum time between 0.5 °C setpoint steps (s)
     float cold_kp;      // °C setpoint per °C error
-    float cold_ti;      // Integral time (s)
+    float cold_ti;      // Integral time (s), 0 for none
     // DEFROST
     float defrost_enter;     // Liquid below this is a defrost
     float defrost_exit;      // Liquid at or above this ends it

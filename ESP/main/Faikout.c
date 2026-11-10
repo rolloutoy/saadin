@@ -14,6 +14,7 @@ static const char TAG[] = "Saadin";
 #include "mdns.h"
 #include "faikout_i2c.h"
 #include "heatctl.h"
+#include "heatlog.h"
 #ifdef CONFIG_BT_NIMBLE_ENABLED
 #include "bleenv.h"
 #endif
@@ -329,6 +330,7 @@ const char *const hvac_action[] = {"off", "preheating", "heating", "cooling", "d
 // Heating control (heatctl), see docs/heat-control.md
 static heatctl_t heatctl;                          // Controller state, main loop only
 static heatctl_out_t ctl = {.state = HEATCTL_OFF}; // Last outputs, for status
+static heatlog_t heatlog;                          // One sample a minute for the graph page, under daikin.mutex
 
 static void heatctl_status_json(jo_t j)
 { // Controller state, for the web status and the HA state
@@ -1696,6 +1698,178 @@ static esp_err_t web_favicon(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t web_chartjs(httpd_req_t *req)
+{ // Chart.js for the graph page, gzipped at build time (see CMakeLists.txt)
+    extern const char cstart[] asm("_binary_chart_umd_min_js_gz_start");
+    extern const char cend[] asm("_binary_chart_umd_min_js_gz_end");
+    httpd_resp_set_type(req, "text/javascript");
+    httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    httpd_resp_set_hdr(req, "Cache-Control", "max-age=604800"); // The page asks for it by firmware version
+    httpd_resp_send(req, cstart, cend - cstart);
+    return ESP_OK;
+}
+
+static esp_err_t web_graph_json(httpd_req_t *req)
+{ // Heating log as columns: seconds ago, then each value (null if not known)
+#ifdef CONFIG_REVK_WEB_AUTH
+    if (!web_auth_check(req))
+        return ESP_OK;
+#endif
+    heatlog_sample_t *s = heatlog.n ? mallocspi(heatlog.n * sizeof(*s)) : NULL;
+    const size_t size = 4096; // Reply buffer, PSRAM if there is any
+    char *buf = mallocspi(size);
+    if (!buf) {
+        free(s);
+        httpd_resp_send_500(req);
+        return ESP_OK;
+    }
+    xSemaphoreTake(daikin.mutex, portMAX_DELAY);
+    uint32_t n = s ? heatlog_get(&heatlog, s, heatlog.n) : 0;
+    xSemaphoreGive(daikin.mutex);
+    uint32_t now = uptime();
+    size_t len = 0;
+    void out(const char *f, ...)
+    { // Each item is short, send when the buffer is nearly full
+        if (len > size - 64) {
+            httpd_resp_send_chunk(req, buf, len);
+            len = 0;
+        }
+        va_list ap;
+        va_start(ap, f);
+        len += vsnprintf(buf + len, size - len, f, ap);
+        va_end(ap);
+    }
+    void col(const char *tag, size_t offset)
+    {
+        out("],\"%s\":[", tag);
+        for (uint32_t i = 0; i < n; i++) {
+            int16_t v = *(int16_t *)((char *)&s[i] + offset);
+            if (v == HEATLOG_NONE)
+                out("%snull", i ? "," : "");
+            else
+                out("%s%d", i ? "," : "", v);
+        }
+    }
+    httpd_resp_set_type(req, "application/json");
+    out("{\"interval\":%d,\"ago\":[", HEATLOG_INTERVAL);
+    for (uint32_t i = 0; i < n; i++)
+        out("%s%lu", i ? "," : "", (unsigned long)(now - s[i].t));
+    col("room", offsetof(heatlog_sample_t, room));
+    col("outdoor", offsetof(heatlog_sample_t, outdoor));
+    col("heatw", offsetof(heatlog_sample_t, heatw));
+    col("power", offsetof(heatlog_sample_t, power));
+    col("target", offsetof(heatlog_sample_t, target));
+    col("effective", offsetof(heatlog_sample_t, effective));
+    col("setpoint", offsetof(heatlog_sample_t, setpoint));
+    col("demand", offsetof(heatlog_sample_t, demand));
+    col("smoothed", offsetof(heatlog_sample_t, smoothed));
+    col("integral", offsetof(heatlog_sample_t, integral));
+    col("kp", offsetof(heatlog_sample_t, kp));
+    col("ti", offsetof(heatlog_sample_t, ti));
+    col("liquid", offsetof(heatlog_sample_t, liquid));
+    col("comp", offsetof(heatlog_sample_t, comp));
+    out("],\"state\":[");
+    for (uint32_t i = 0; i < n; i++)
+        out("%s%u", i ? "," : "", s[i].state);
+    out("],\"sub\":[");
+    for (uint32_t i = 0; i < n; i++)
+        out("%s%u", i ? "," : "", s[i].sub);
+    out("],\"states\":[");
+    for (int i = 0; i <= HEATCTL_NOSENSOR; i++)
+        out("%s\"%s\"", i ? "," : "", heatctl_state_name(i));
+    out("],\"subs\":[");
+    for (int i = 0; i <= HEATCTL_SUB_REST; i++)
+        out("%s\"%s\"", i ? "," : "", heatctl_sub_name(i));
+    out("]}");
+    httpd_resp_send_chunk(req, buf, len);
+    httpd_resp_send_chunk(req, NULL, 0);
+    free(buf);
+    free(s);
+    return ESP_OK;
+}
+
+static esp_err_t web_graph(httpd_req_t *req)
+{ // Graph of the heating log, drawn once from /graph.json
+#ifdef CONFIG_REVK_WEB_AUTH
+    if (!web_auth_check(req))
+        return ESP_OK;
+#endif
+    web_head(req, "Heating graph");
+    revk_web_send(
+        req,
+        "<style>.g{background:white;max-width:1000px;padding:5px;margin-bottom:10px;}</style>"       //
+        "<p id=msg>Loading…</p>"                                                                     //
+        "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>" //
+        "<div class=g><canvas id=unit></canvas></div>"                                               //
+        "<p>One sample a minute, kept until a restart. Click a legend entry to show or hide it. "    //
+        "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "     //
+        "green hold after a defrost (demand is not raised), red rest after a defrost loop. "         //
+        "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint.</p>"  //
+        "<script src='/chart.js?%s'></script>"                                                       //
+        "<script>"                                                                                   //
+        "var F=%d,U=F?'℉':'℃';"                                                                      //
+        "function tc(v){return F?v*0.018+32:v/100;}"                                                 //
+        "function n(v){return v;}"                                                                   //
+        "fetch('/graph.json').then(r=>r.json()).then(d=>{"                                           //
+        "var m=document.getElementById('msg'),k=d.ago.length;"                                       //
+        "if(!k){m.textContent='No samples yet, the first comes after a minute.';return;}"            //
+        "var now=Date.now(),x=d.ago.map(a=>now-a*1000);"                                             //
+        "m.textContent='Last '+(d.ago[0]>=172800?Math.round(d.ago[0]/8640)/10+' days':Math.round(d.ago[0]/360)/10+' hours')+', to '+new Date(x[k-1]).toLocaleString();" //
+        "function p(a,f){return a.map((v,i)=>({x:x[i],y:v==null?null:f(v)}));}" //
+        "function ds(l,a,f,c,o){return Object.assign({label:l,data:p(a,f),borderColor:c,backgroundColor:c,"
+        "borderWidth:1.5,pointRadius:0,spanGaps:false},o||{});}"           //
+        "function shade(i){var s=d.subs[d.sub[i]],t=d.states[d.state[i]];" //
+        "return s=='defrost'?'#bdf':s=='hold'?'#cfc':s=='rest'?'#fcc':t=='idle'?'#e4e4e4':t=='cold'?'#dcf':"
+        "t=='nosensor'?'#fe9':null;}"                                                                          //
+        "var band={id:'band',beforeDatasetsDraw(c){var a=c.chartArea,g=c.ctx,s=c.scales.x;g.save();"           //
+        "g.beginPath();g.rect(a.left,a.top,a.width,a.height);g.clip();"                                        //
+        "for(var i=0;i<k;i++){var f=shade(i);if(!f)continue;"                                                  //
+        "var x0=s.getPixelForValue(x[i]-d.interval*1000),x1=s.getPixelForValue(x[i]);"                         //
+        "g.fillStyle=f;g.fillRect(x0,a.top,x1-x0+1,a.height);}g.restore();}};"                                 //
+        "function cold(i){return d.states[d.state[i]]=='cold';}"                                               //
+        "function only(a,c){return a.map((v,i)=>cold(i)==c?v:null);}"                                          //
+        "function tune(i){var v=d.kp[i];if(v==null)return '';"                                                 //
+        "return 'kp '+(cold(i)?v/100+' ℃/℃':v+' W/℃')+(d.ti[i]?', ti '+d.ti[i]+' min':', no integral');}"      //
+        "var mk=[],last=[];for(var i=0;i<k;i++){var t=tune(i),c=+cold(i);if(!t)continue;"                      //
+        "if(last[c]&&last[c]!=t)mk.push(i);last[c]=t;}"                                                        //
+        "var mark={id:'mark',afterDatasetsDraw(c){var a=c.chartArea,g=c.ctx,s=c.scales.x;g.save();"            //
+        "g.strokeStyle=g.fillStyle='#444';g.setLineDash([3,3]);g.font='11px sans-serif';"                      //
+        "mk.forEach(i=>{var v=s.getPixelForValue(x[i]-d.interval*1000);"                                       //
+        "g.beginPath();g.moveTo(v,a.top);g.lineTo(v,a.bottom);g.stroke();g.fillText(tune(i),v+3,a.top+11);});" //
+        "g.restore();}};"                                                                                      //
+        "function time(v){return new Date(v).toLocaleString([],Object.assign({hour:'2-digit',minute:'2-digit'},"
+        "x[k-1]-x[0]>864e5?{weekday:'short'}:{}));}"                                                          //
+        "function opt(y){return{animation:false,interaction:{mode:'index',intersect:false},"                  //
+        "plugins:{tooltip:{callbacks:{title:t=>time(t[0].parsed.x),footer:t=>tune(t[0].dataIndex)}}},"        //
+        "scales:Object.assign({x:{type:'linear',min:x[0]-d.interval*1000,max:x[k-1],"                         //
+        "ticks:{callback:time,maxTicksLimit:12}}},y)};}"                                                      //
+        "new Chart(document.getElementById('temps'),{type:'line',plugins:[band,mark],data:{datasets:["        //
+        "ds('Room',d.room,tc,'#c00'),"                                                                        //
+        "ds('Room, smoothed',d.smoothed,tc,'#e99',{borderWidth:1}),"                                          //
+        "ds('Target',d.target,tc,'#080',{stepped:true}),"                                                     //
+        "ds('Effective target',d.effective,tc,'#0b0',{stepped:true,borderDash:[4,4]}),"                       //
+        "ds('Setpoint',d.setpoint,tc,'#888',{stepped:true,hidden:true}),"                                     //
+        "ds('Setpoint integral',only(d.integral,true),tc,'#a6a',{stepped:true,hidden:true}),"                 //
+        "ds('Outdoor',d.outdoor,tc,'#08c',{hidden:true})]},"                                                  //
+        "options:opt({y:{title:{display:true,text:U}}})});"                                                   //
+        "new Chart(document.getElementById('power'),{type:'line',plugins:[band,mark],data:{datasets:["        //
+        "ds('Heat wanted',d.heatw,n,'#f80'),"                                                                 //
+        "ds('Integral',only(d.integral,false),n,'#fb6',{borderDash:[4,4]}),"                                  //
+        "ds('Power',d.power,n,'#c00'),"                                                                       //
+        "ds('Demand',d.demand,n,'#06c',{stepped:true,yAxisID:'d'})]},"                                        //
+        "options:opt({y:{title:{display:true,text:'W'}},"                                                     //
+        "d:{position:'right',min:0,max:100,title:{display:true,text:'%%'},grid:{drawOnChartArea:false}}})});" //
+        "new Chart(document.getElementById('unit'),{type:'line',plugins:[band,mark],data:{datasets:["         //
+        "ds('Liquid',d.liquid,tc,'#a0a'),"                                                                    //
+        "ds('Compressor',d.comp,n,'#555',{yAxisID:'h'})]},"                                                   //
+        "options:opt({y:{title:{display:true,text:U}},"                                                       //
+        "h:{position:'right',min:0,title:{display:true,text:'Hz'},grid:{drawOnChartArea:false}}})});"         //
+        "}).catch(e=>{document.getElementById('msg').textContent='Could not load the log: '+e;});"            //
+        "</script>",
+        revk_version, fahrenheit);
+    return revk_web_foot(req, 1, websettings, NULL);
+}
+
 static void settings_autob(httpd_req_t *req)
 {
     revk_web_send(req, "<tr><td>BLE</td><td colspan=6>" //
@@ -2016,6 +2190,7 @@ static esp_err_t web_control(httpd_req_t *req)
         "setInterval(function() {if(!ws.readyState)ws.close();else if(ws.readyState==1)ws.send('');},1000);"   //
         "</script>",
         fahrenheit ? "Math.round(10*((v*9/5)+32))/10+'℉'" : "v+'℃'");
+    revk_web_send(req, "<p><a href=/graph>Heating graph</a></p>"); // Just above the footer's Settings link
     return revk_web_foot(req, 0, websettings, b.protocol_set ? proto_name() : NULL);
 }
 
@@ -2880,7 +3055,7 @@ static void send_ha_config(void)
     }
     addnumber(!nofaikoutauto, "autot", "Heating target", tmin, tmax, "0.1", "°C");
     addnumber(!nofaikoutauto, "pidkp", "Heating gain", 0, 5000, "10", "W/°C");
-    addnumber(!nofaikoutauto, "pidti", "Heating integral time", 1, 1000, "1", "min");
+    addnumber(!nofaikoutauto, "pidti", "Heating integral time", 0, 1000, "1", "min");
     if (asprintf(&topic, "%s/sensor/%sctl/config", topicha, revk_id) >= 0) {
         if (nofaikoutauto)
             revk_mqtt_send_str(topic);
@@ -3352,6 +3527,26 @@ static void heatctl_tick(uint32_t now)
     float wasset = ctl.setpoint;
     heatctl_out_t o = heatctl_step(&heatctl, &p, &in, now);
     ctl = o;
+    uint8_t cold = (o.state == HEATCTL_COLD), pi = (cold || o.state == HEATCTL_DEMAND); // A PI loop is running
+    heatlog_in_t l = {
+        .room = in.room,
+        .outdoor = in.outdoor,
+        .heatw = o.heatw,
+        .power = (daikin.status_known & CONTROL_consumption) ? daikin.consumption : NAN,
+        .smoothed = isnan(in.room) ? NAN : o.room, // o.room keeps the last reading once there is none
+        .liquid = in.liquid,
+        .comp = (daikin.status_known & CONTROL_comp) ? daikin.comp : NAN,
+        .integral = pi ? o.integral : NAN,
+        .kp = pi ? (cold ? p.cold_kp : p.kp) : NAN,
+        .ti = pi ? (cold ? p.cold_ti : p.ti) / 60.0 : NAN,
+        .target = autot ? (float)autot / autot_scale : NAN,
+        .effective = o.state != HEATCTL_OFF ? o.target : NAN,
+        .setpoint = (daikin.status_known & CONTROL_temp) ? daikin.temp : NAN,
+        .demand = (daikin.status_known & CONTROL_demand) ? daikin.demand : NAN,
+        .state = o.state,
+        .sub = o.sub,
+    };
+    heatlog_add(&heatlog, &l, now);
     xSemaphoreGive(daikin.mutex);
     if (o.changed) {
         char from[24], to[24];
@@ -3464,6 +3659,10 @@ void app_main()
 #endif
     blemutex = xSemaphoreCreateMutex();
     daikin.mutex = xSemaphoreCreateMutex();
+    { // Heating log for the graph page: 3 days, or 6 hours without PSRAM
+        uint32_t n = (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) ? 72 : 6) * 3600 / HEATLOG_INTERVAL;
+        heatlog_init(&heatlog, mallocspi(n * sizeof(heatlog_sample_t)), n);
+    }
     b.startup = 1;
     daikin.status_known = CONTROL_online;
 #define t(name) daikin.name = NAN;
@@ -3523,7 +3722,7 @@ void app_main()
 
     if (webcontrol || websettings) {
         // Web interface
-        httpd_config_t config = revk_httpd_config(16);
+        httpd_config_t config = revk_httpd_config(19);
         ESP_LOGE(TAG, "HTTPD stack %u sockets %u handlers %u", config.stack_size, config.max_open_sockets,
                  config.max_uri_handlers);
         if (!httpd_start(&webserver, &config)) {
@@ -3535,6 +3734,9 @@ void app_main()
             if (webcontrol) {
                 revk_register_get_uri(webserver, "/control", web_control);
                 revk_register_ws_uri(webserver, "/status", web_status);
+                revk_register_get_uri(webserver, "/graph", web_graph);
+                revk_register_get_uri(webserver, "/graph.json", web_graph_json);
+                revk_register_get_uri(webserver, "/chart.js", web_chartjs);
                 revk_register_get_uri(webserver, "/common/basic_info", legacy_web_get_basic_info);
                 revk_register_get_uri(webserver, "/aircon/get_model_info", legacy_web_get_model_info);
                 revk_register_get_uri(webserver, "/aircon/get_control_info", legacy_web_get_control_info);
