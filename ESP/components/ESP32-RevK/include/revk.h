@@ -74,6 +74,7 @@ typedef uint8_t mac_t[6];
 
 // Data
 extern const char *revk_app;           // App name
+extern const char *revk_app_title;     // App name shown on web pages
 extern const char *revk_version;       // App version
 extern const char revk_build_suffix[]; // App build suffix
 #ifndef CONFIG_SOC_IEEE802154_SUPPORTED

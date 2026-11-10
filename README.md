@@ -108,6 +108,7 @@ These manuals come from upstream and still use the Faikout name:
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
 **2026-11-10**
+- Web pages show the name as "Säädin" (page title, footer and settings tab). Hostnames, binaries and MQTT topics still use `Saadin`.
 - The default timezone is now Finnish time (`EET-2EEST,M3.5.0/3,M10.5.0/4`) instead of UK time. A device that never changed `tz` switches to Finnish time on update; one with its own `tz` keeps it.
 - The heating controller's full-power defaults are slower: `cold.hold` is 60 minutes (was 15) and `cold.rate` is 1800 s (was 600).
 - Replaced Faikout auto with a new heating controller. [Manuals/Heating.md](Manuals/Heating.md) explains how to use it, and [docs/heat-control.md](docs/heat-control.md) has the design.

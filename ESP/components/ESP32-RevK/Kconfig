@@ -672,6 +672,12 @@ menu "RevK"
         help
 		Include otabeta in web config
 
+	config REVK_APP_TITLE
+	string "App name shown on web pages"
+	default ""
+        help
+		The app name shown on web pages, if not the project name, e.g. with non-ASCII letters
+
 	config REVK_WEB_EXTRA
 	bool "Include extra settings in web config"
 	default n
