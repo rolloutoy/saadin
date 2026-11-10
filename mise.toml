@@ -1,3 +1,7 @@
+[tools]
+# Runs the hooks in .pre-commit-config.yaml (prek install, prek run --all-files).
+prek = "0.5.2"
+
 [tools.'github:espressif/idf-im-ui']
 # ESP-IDF Installation Manager (eim). The CLI moved from the archived
 # espressif/idf-im-cli repo into espressif/idf-im-ui; select the CLI zip per platform.
