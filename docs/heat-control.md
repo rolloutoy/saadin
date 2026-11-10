@@ -1,6 +1,8 @@
 # Heating control (heatctl)
 
-Design for Säädin's heating controller. It replaces Faikout's local auto mode completely. Background, measurements and forum findings are in `saadin-ideas.md` sections 1.1–1.5 (untracked notes in the main checkout); this document is the agreed design.
+Design for Säädin's heating controller. It replaces Faikout's local auto mode completely. For how to use it, see [Manuals/Heating.md](../Manuals/Heating.md). Background, measurements and forum findings are in `saadin-ideas.md` sections 1.1–1.5 (private notes, not in this repo); this document is the agreed design.
+
+Terms: **QO** is quiet outdoor. **PI** is a proportional-integral control loop. **Demand** is the unit's power limit, in %.
 
 Heating only. In cool, dry or fan mode, or with the unit off, the controller does nothing and the unit runs on its own settings. The controller never powers the unit on or off.
 
@@ -39,11 +41,11 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 - `demand.full` (bit, default on): when on, DEMAND may use plain 100% (QO off). When off, DEMAND tops out at 100 + QO.
 - Demand changes at most once per `demand.rate` (default 600 s), but one change may jump several levels.
 - Anti-windup: the integral stops growing when at the top or bottom level, during DEFROST and the post-defrost hold, and while the room reading is stale.
-- Gains: `pid.kp` (W per °C), `pid.ti` (minutes). Pick sensible starting defaults from the step-test table (e.g. kp ≈ 300 W/°C, ti ≈ 90 min) and say so in the PR.
+- Gains: `pid.kp` (W per °C, default 300), `pid.ti` (minutes, default 90). On the heat-model PoC's two-node house these hold ±0.2 K from −12 to +10 °C outside.
 
 ### COLD
 - Sends demand 100 with QO **always off**.
-- A second PI loop drives the **setpoint** from room temperature error. It starts at `cold.set` (default 23 °C), is clamped to `t.min`…`t.max`, rounded to 0.5 °C, and moves at most 0.5 °C per `cold.rate` (default 600 s); big setpoint jumps are reported to cause defrost loops. Gains `cold.kp` (°C setpoint per °C error), `cold.ti` (minutes).
+- A second PI loop drives the **setpoint** from room temperature error. It starts at `cold.set` (default 23 °C), is clamped to `t.min`…`t.max`, rounded to 0.5 °C, and moves at most 0.5 °C per `cold.rate` (default 600 s); big setpoint jumps are reported to cause defrost loops. Gains `cold.kp` (°C setpoint per °C error, default 2.0), `cold.ti` (minutes, default 120), not yet tested on hardware.
 - No IDLE from COLD: on overshoot the setpoint PI pulls the setpoint down and the unit thermostats off by itself.
 - Entered from DEMAND when the smoothed outdoor temperature stays below `cold.enter` (default −15 °C) for `cold.hold` (default 15 min). Exits to DEMAND when it stays above `cold.exit` (default −10 °C) for `cold.hold`.
 - On exit to DEMAND the integral starts at the watts of the 95% level (the house has just needed a lot of heat).
@@ -57,7 +59,7 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 - Start with `liquid` only. Log `fanrpm`, `comp` and power at entry and exit so the detection can be refined later.
 - **Post-defrost hold** (after leaving DEFROST, `defrost.hold`, default 10 min, 0 for no hold): demand capped at 95% (no plain 100, no 100q), and the integral may not raise demand. It carries over between DEMAND and COLD without restarting, so it lasts `defrost.hold` in all.
 - **Fan resend:** after each defrost, resend the configured fan for the current state (the unit doesn't restore a forced fan speed).
-- **Defrost-loop watchdog:** more than `defrost.loops` (default 3) defrosts within `defrost.window` (default 90 min) → go to IDLE for `defrost.rest` (default 15 min), then resume DEMAND/COLD. Logged and sent as an MQTT event. Breaks the "death loop" users report at −5…−12 °C.
+- **Defrost-loop watchdog:** more than `defrost.loops` (default 3) defrosts within `defrost.window` (default 90 min) → go to IDLE for `defrost.rest` (default 15 min), then resume DEMAND/COLD. Logged and sent on `info/<host>/heatctl`. Breaks the "death loop" users report at −5…−12 °C.
 
 ### NOSENSOR
 - No fresh room reading for 30 min (`auto.stale`, default 1800 s). Before that the controller freezes the integral and holds its outputs.
@@ -98,7 +100,7 @@ If the unit reports a demand, setpoint, QO or fan that differs from what the con
 ## Visibility
 
 - **Log:** every state or sub-state change with its reason, e.g. `heatctl: DEMAND -> IDLE (room 21.6 > target 21.0+0.5)`; a status line every 10 min.
-- **MQTT:** `info/heatctl` event on every transition (state, sub-state, reason, inputs). Status JSON gains `ctl` (state), `ctl_sub`, `ctl_target`, `ctl_heatw`, `ctl_i`.
+- **MQTT:** `info/<host>/heatctl` on every transition (state, sub-state, reason, inputs). Status JSON gains `ctl` (state), `ctl_sub`, `ctl_target`, `ctl_heatw`, `ctl_i`.
 - **Web:** the old auto section is replaced by an enable switch, a target slider and a status line such as "Demand 65% · target 21.3 (curve +0.3) · heat 410 W" or "Cold · setpoint 24.5 · ❄ defrost". Manual temperature, demand and QO controls are greyed out while the controller runs.
 - **Home Assistant:** an enum sensor "Control state"; `hvac_action` reports `defrosting` / `idle` / `heating`; the climate target sets `auto.t`. Tuning entities: number entities for `auto.t`, `pid.kp`, `pid.ti`; sensors for heat wanted (W), integral and effective target.
 

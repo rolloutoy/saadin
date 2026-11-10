@@ -16,7 +16,9 @@ The *hostname* you picked is used for these messages. The format for commands an
 
 ## Heating control
 
-Säädin replaces *Faikout auto* with its own heating controller. It acts only in heat mode, never turns the aircon on or off, and leaves cool, dry and fan mode alone. [docs/heat-control.md](../docs/heat-control.md) describes how it works and its settings (`auto.e`, `auto.t`, `auto.curve`, `demand.*`, `pid.*`, `idle.*`, `cold.*`, `defrost.*`).
+Säädin replaces *Faikout auto* with its own heating controller. It acts only in heat mode, never turns the aircon on or off, and leaves cool, dry and fan mode alone. [Heating control](Heating.md) describes how to use it and all its settings (`auto.*`, `stop.temp`, `demand.*`, `pid.*`, `idle.*`, `cold.*`, `defrost.*`).
+
+Settings with a dot in their name are written without the dot in MQTT JSON: `auto.t` is `autot`, `t.control` is `tcontrol`. The heating control fields (`ctl`, `ctl_sub`, …) are in the status JSON, listed below.
 
 ## Settings
 
@@ -28,11 +30,9 @@ Note that web settings can be disabled with `websettings`, and the web based con
 
 ### Room temperature
 
-The heating control needs the room temperature, from a BLE sensor (`autob`) or over MQTT. Send `env` in a `control` command at least every `tcontrol` seconds, e.g. `command/GuestAC/control {"env":21.3}`.
+The heating control needs the room temperature, from a BLE sensor (`auto.b`) or over MQTT. Send `env` in a `control` command at least every `t.control` seconds (default 600), e.g. `command/GuestAC/control {"env":21.3}`. A BLE sensor, if set and still reporting, wins over MQTT.
 
-### Reference temperature
-
-Instead of `env` in `control`, you can set `autotopic` to a topic to subscribe to, and `autopayload` to the field name in its JSON payload. A message on that topic sets the room temperature.
+Instead of `env` in `control`, you can set `auto.topic` to a topic to follow, and `auto.payload` to the field name in its JSON payload. A message on that topic sets the room temperature.
 
 ### Special settings
 
@@ -53,7 +53,7 @@ Some more advances settings which you are unlikely to need to ever change.
 |`on` `off`|Power on/off|
 |`heat` `cool` `auto` `fan` `dry`|Change mode|
 |`low` `medium` `high`|Change fan speed|
-|`temp`|Set target temp (argument is temp)|
+|`temp`|Set target temp (argument is temp). While the heating control is on and the unit is in heat mode, this sets the heating control target (`auto.t`) instead of the unit's setpoint|
 |`status`|Force a status report to be sent|
 |`control`|JSON payload with aircon controls, see below|
 |`send`|Force sending message for debug / testing|
@@ -83,7 +83,12 @@ The setting `livestatus` causes the `state/` topic on any change.
 |`outside`|Outside temperature, if known|
 |`inlet`|Inlet temperature, if known|
 |`liquid`|Liquid coolant feed temperature, if known|
-|`control`|Boolean, if we are under external/automatic control|
+|`control`|Boolean, if the heating control is running|
+|`ctl`|Heating control state: `off`, `demand`, `idle`, `cold` or `nosensor`|
+|`ctl_sub`|Heating control sub-state, if any: `defrost`, `hold` or `rest`|
+|`ctl_target`|Heating control target, with the curve offset|
+|`ctl_heatw`|Heat wanted by the heating control, W|
+|`ctl_i`|Heating control integral: W, or °C of setpoint in `cold`|
 
 The `faikoutlog` reports the last periods for values. For each value, if it is the same for the whole period it is reported as is. If not, then for numeric is reported as an array of *min*, *ave*, *max*. For an enumerated type it is the current value. For a Boolean, it is a value `0.0` to `1.0` indicating how much it was `true` in the period.
 
@@ -110,9 +115,9 @@ There are also settings for the heating control. These are also reported in the 
 
 |Attribute|Meaning|
 |---------|-------|
-|`autoe`|Heating control on. This sets the `autoe` setting|
-|`autot`|Target room temperature. This sets the `autot` setting|
-|`autob`|The name of the BLE device. This sets the `autob` setting|
+|`autoe`|Heating control on. This sets the `auto.e` setting|
+|`autot`|Target room temperature. This sets the `auto.t` setting|
+|`autob`|The name of the BLE device. This sets the `auto.b` setting|
 
 ## Debug
 
