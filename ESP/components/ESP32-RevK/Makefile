@@ -12,3 +12,10 @@ revk_settings: revk_settings.c settings.def
 
 idfmon: idfmon.c
 	gcc -O -o $@ $< -g -Wall --std=gnu99
+
+.PHONY: test
+test:	test/ota_confirm_test
+	./test/ota_confirm_test
+
+test/ota_confirm_test: test/ota_confirm_test.c ota_confirm.c ota_confirm.h
+	gcc -O -o $@ test/ota_confirm_test.c ota_confirm.c -g -Wall --std=gnu99

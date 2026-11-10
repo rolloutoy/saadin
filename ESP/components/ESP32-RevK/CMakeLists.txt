@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5...3.25)
 
-set(SOURCES "revk.c" "jo.c" "lwmqtt.c" "settings_lib.c" "settings_old.c" "halib.c" "led.c")
-set(RECS nvs_flash app_update esp_http_client esp-tls esp_http_server esp_driver_spi spi_flash esp_wifi esp_timer esp_system driver bt esp_driver_gpio esp_driver_pcnt esp_driver_usb_serial_jtag)
+set(SOURCES "revk.c" "jo.c" "lwmqtt.c" "settings_lib.c" "settings_old.c" "halib.c" "led.c" "ota_confirm.c")
+set(RECS nvs_flash app_update bootloader_support esp_http_client esp-tls esp_http_server esp_driver_spi spi_flash esp_wifi esp_timer esp_system driver bt esp_driver_gpio esp_driver_pcnt esp_driver_usb_serial_jtag)
 
 # Add extra dependencies
 
@@ -34,3 +34,8 @@ idf_component_register(
 		)
 
 add_definitions(-DBUILD_ESP32_USING_CMAKE)
+
+# Keep the firmware probation marker (revk.c), which nothing references
+if(CONFIG_REVK_OTA_CONFIRM)
+	target_link_libraries(${COMPONENT_LIB} INTERFACE "-u ota_confirm_magic")
+endif()

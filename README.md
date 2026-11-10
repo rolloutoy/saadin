@@ -113,6 +113,9 @@ These manuals come from upstream and still use the Faikout name:
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
 **2026-11-10**
+- Firmware uploaded from the browser now starts on probation. Every page shows a banner with **Keep** and **Roll back now** buttons and a 10-minute countdown. Restarting from the web UI also keeps the firmware. If nobody keeps it in time, if it gets no IP address within 3 minutes, or if the device restarts any other way first (crash, power loss, MQTT `restart`), the device goes back to the previous firmware. The old firmware then says why the update was rolled back, until its next restart, and sends `info/upgrade` over MQTT. While new firmware is on probation, another upload is refused. This needs the new bootloader, flashed over USB once.
+- The "Firmware" tab can boot the previous firmware, which then goes through the same probation.
+- Faikout, or any other firmware that can't confirm itself, is installed without probation, so the bootloader doesn't switch it back on its next reset.
 - Renamed the app from `Faikout` to `Saadin`. Binaries are `Saadin-<board>.bin`, the setup access point is `Saadin-…`, the Home Assistant device model is `Saadin`, and the app-wide MQTT topics use `Saadin` (for example `command/Saadin` for all devices). Settings are kept.
 - The "Firmware" upload also accepts upstream Faikout images, so a device can go back to Faikout without USB.
 - Reformatted all C code to ESP-IDF style. Only whitespace changed.

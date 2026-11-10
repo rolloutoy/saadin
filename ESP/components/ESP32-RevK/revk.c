@@ -47,6 +47,15 @@ static const char __attribute__((unused)) *TAG = "RevK";
 #ifdef CONFIG_REVK_WEB_OTA
 #include "esp_app_format.h"
 #endif
+#ifdef CONFIG_BOOTLOADER_APP_ANTI_ROLLBACK
+#error Anti-rollback burns eFuses, never enable it
+#endif
+#ifdef CONFIG_REVK_OTA_CONFIRM
+#include "ota_confirm.h"
+#include "esp_flash_partitions.h"
+#include "bootloader_common.h"
+#include "spi_flash_mmap.h"
+#endif
 #include "esp_tls.h"
 #ifdef CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
 #include "esp_crt_bundle.h"
@@ -2312,6 +2321,195 @@ void revk_blink_do(void)
 }
 #endif
 
+#ifdef CONFIG_REVK_OTA_CONFIRM
+// Firmware probation after a web upload (see ota_confirm.h)
+// This marker, at the fixed offset ESP-IDF gives a custom app description, tells an uploader that the image confirms
+// itself, unlike e.g. Faikout, which would never confirm and so be rolled back on its next reset.
+#define OTA_CONFIRM_MAGIC 0x53614F43
+#define OTA_CONFIRM_OFFSET (sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t))
+const __attribute__((used, section(".rodata_custom_desc"))) uint32_t ota_confirm_magic = OTA_CONFIRM_MAGIC;
+#define OTA_CONFIRM_NVS "revkota" // Namespace for the rollback notice
+
+static volatile struct {
+    uint8_t pending : 1;      // Running firmware is on probation
+    uint8_t noboot : 1;       // Bootloader does not support rollback
+    uint8_t can_rollback : 1; // The other slot holds firmware to go back to
+    uint8_t got_ip : 1;       // Has had an IP address since boot
+    uint8_t keep : 1;         // Keep clicked
+    uint8_t rollback : 1;     // Roll back now clicked
+    uint8_t web_restart : 1;  // Restart requested from the web UI
+    uint8_t notify : 1;       // Rollback notice still to send over MQTT
+} otac = {0};
+static char ota_notice_version[sizeof(((esp_app_desc_t *)0)->version)]; // Rolled back firmware, shown until next reboot
+static char ota_notice_build[20];
+static char ota_notice_reason[64];
+
+static int ota_confirms(const esp_partition_t *p)
+{ // Firmware in p confirms itself after an upload
+    uint32_t magic = 0;
+    return p && !esp_partition_read(p, OTA_CONFIRM_OFFSET, &magic, sizeof(magic)) && magic == OTA_CONFIRM_MAGIC;
+}
+
+static esp_err_t ota_boot_valid(void)
+{ // Mark the firmware just set to boot as valid, for firmware that cannot confirm itself
+    const esp_partition_t *p = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, NULL);
+    if (!p)
+        return ESP_ERR_NOT_FOUND;
+    esp_ota_select_entry_t s[2];
+    esp_err_t e = esp_partition_read(p, 0, &s[0], sizeof(s[0]));
+    if (!e)
+        e = esp_partition_read(p, SPI_FLASH_SEC_SIZE, &s[1], sizeof(s[1]));
+    if (e)
+        return e;
+    int i = bootloader_common_get_active_otadata(s);
+    if (i < 0)
+        return ESP_ERR_NOT_FOUND;
+    s[i].ota_state = ESP_OTA_IMG_VALID; // The CRC covers only the sequence number
+    e = esp_partition_erase_range(p, i * SPI_FLASH_SEC_SIZE, SPI_FLASH_SEC_SIZE);
+    if (!e)
+        e = esp_partition_write(p, i * SPI_FLASH_SEC_SIZE, &s[i], sizeof(s[i]));
+    return e;
+}
+
+static const esp_partition_t *ota_previous(esp_app_desc_t *d)
+{ // The other slot, if it holds firmware the device can switch back to
+    const esp_partition_t *p = esp_ota_get_next_update_partition(NULL);
+    esp_ota_img_states_t state;
+    if (!p || esp_ota_get_partition_description(p, d) ||
+        (strncmp(d->project_name, revk_app, sizeof(d->project_name)) &&
+         (!*CONFIG_REVK_WEB_OTA_ALSO || strncmp(d->project_name, CONFIG_REVK_WEB_OTA_ALSO, sizeof(d->project_name)))) ||
+        (!esp_ota_get_state_partition(p, &state) && (state == ESP_OTA_IMG_INVALID || state == ESP_OTA_IMG_ABORTED)))
+        return NULL;
+    return p;
+}
+
+static void ota_confirm_boot(void)
+{ // Check how this firmware was started
+    esp_ota_img_states_t state;
+    esp_app_desc_t d;
+    if (!esp_ota_get_state_partition(esp_ota_get_running_partition(), &state)) { // None if flashed over USB
+        if (state == ESP_OTA_IMG_PENDING_VERIFY) {
+            otac.pending = 1;
+            otac.can_rollback = (ota_previous(&d) != NULL); // Not esp_ota_check_rollback_is_possible(), see below
+            ESP_LOGE(TAG, "New firmware on probation, Keep within %d seconds", OTA_CONFIRM_WINDOW);
+            return;
+        }
+        if (state == ESP_OTA_IMG_NEW) { // The bootloader did not move it on to pending, so it cannot roll back
+            otac.noboot = 1;
+            return;
+        }
+    }
+    const esp_partition_t *bad = esp_ota_get_last_invalid_partition();
+    nvs_handle_t h;
+    if (!bad || esp_ota_get_partition_description(bad, &d) || nvs_open(OTA_CONFIRM_NVS, NVS_READWRITE, &h))
+        return;
+    uint8_t sha[sizeof(d.app_elf_sha256)];
+    size_t l = sizeof(sha);
+    if (nvs_get_blob(h, "notified", sha, &l) || l != sizeof(sha) || memcmp(sha, d.app_elf_sha256, sizeof(sha))) {
+        // First boot since this rollback
+        strncpy(ota_notice_version, d.version, sizeof(ota_notice_version) - 1);
+        revk_build_date_app(&d, ota_notice_build);
+        l = sizeof(sha);
+        size_t rl = sizeof(ota_notice_reason);
+        if (nvs_get_blob(h, "rbsha", sha, &l) || l != sizeof(sha) || memcmp(sha, d.app_elf_sha256, sizeof(sha)) ||
+            nvs_get_str(h, "rbreason", ota_notice_reason, &rl))
+            strcpy(ota_notice_reason, "reset before confirmation (crash, watchdog or power loss)");
+        otac.notify = 1;
+        nvs_set_blob(h, "notified", d.app_elf_sha256, sizeof(d.app_elf_sha256));
+        nvs_commit(h);
+        ESP_LOGE(TAG, "Update to %s %s was rolled back (%s)", ota_notice_version, ota_notice_build, ota_notice_reason);
+    }
+    nvs_close(h);
+}
+
+static void ota_confirm_check(uint32_t now)
+{ // Keep or roll back firmware on probation
+    if (!otac.pending)
+        return;
+    if (revk_has_ip())
+        otac.got_ip = 1;
+    ota_confirm_t c = {
+        .uptime = now,
+        .got_ip = otac.got_ip,
+        .keep = otac.keep,
+        .rollback = otac.rollback,
+        .web_restart = otac.web_restart,
+        .can_rollback = otac.can_rollback,
+    };
+    ota_confirm_reason_t reason;
+    ota_confirm_action_t a = ota_confirm_decide(&c, &reason);
+    if (a == OTA_CONFIRM_WAIT)
+        return;
+    otac.pending = 0;
+    if (a == OTA_CONFIRM_KEEP) {
+        if (reason)
+            ESP_LOGE(TAG, "Nothing to roll back to (%s), keeping new firmware", ota_confirm_reason_text(reason));
+        else
+            ESP_LOGE(TAG, "New firmware kept");
+        esp_ota_mark_app_valid_cancel_rollback();
+        return;
+    }
+    nvs_handle_t h;
+    if (!nvs_open(OTA_CONFIRM_NVS, NVS_READWRITE, &h)) { // Why, for the notice after the rollback
+        const esp_app_desc_t *app = esp_app_get_description();
+        nvs_set_blob(h, "rbsha", app->app_elf_sha256, sizeof(app->app_elf_sha256));
+        nvs_set_str(h, "rbreason", ota_confirm_reason_text(reason));
+        nvs_commit(h);
+        nvs_close(h);
+    }
+    // Restarting while still pending makes the bootloader mark this firmware aborted and boot the previous one.
+    // esp_ota_mark_app_invalid_rollback() would refuse when the previous firmware was flashed over USB, as it then has
+    // no OTA data, though the bootloader boots it fine.
+    revk_restart(1, "Rolling back firmware (%s)", ota_confirm_reason_text(reason));
+}
+
+static void ota_confirm_tick(uint32_t now)
+{ // Once a second
+#ifdef CONFIG_REVK_MQTT
+    if (otac.notify && lwmqtt_connected(mqtt_client[0])) {
+        otac.notify = 0;
+        jo_t j = jo_make(NULL);
+        jo_string(j, "version", ota_notice_version);
+        jo_string(j, "build", ota_notice_build);
+        jo_string(j, "reason", ota_notice_reason);
+        revk_info("upgrade", &j);
+    }
+#endif
+    ota_confirm_check(now);
+}
+
+static const char *ota_confirm_web(jo_t j)
+{ // Keep, Roll back now and Boot previous firmware buttons, returns what happened
+#ifdef CONFIG_REVK_SETTINGS_PASSWORD
+    if (*password && (!jo_find(j, "password") || jo_strcmp(j, password)))
+        return "Wrong password";
+#endif
+    if (jo_find(j, "_otaprevious")) {
+        if (otac.pending)
+            return "Keep or roll back the new firmware first";
+        esp_app_desc_t d;
+        const esp_partition_t *p = ota_previous(&d);
+        if (!p)
+            return "No previous firmware";
+        esp_err_t e = esp_ota_set_boot_partition(p);
+        if (!e && !ota_confirms(p))
+            e = ota_boot_valid();
+        if (e)
+            return esp_err_to_name(e);
+        revk_restart(3, "Booting previous firmware");
+        return "Booting previous firmware";
+    }
+    if (!otac.pending)
+        return "No new firmware to keep or roll back";
+    if (jo_find(j, "_otakeep"))
+        otac.keep = 1;
+    else
+        otac.rollback = 1;
+    ota_confirm_check(uptime());
+    return restart_time ? "Rolling back to previous firmware" : "New firmware kept";
+}
+#endif
+
 static void task(void *pvParameters)
 { /* Main RevK task */
     if (watchdogtime)
@@ -2319,8 +2517,12 @@ static void task(void *pvParameters)
     pvParameters = pvParameters;
     /* Log if unexpected restart */
     int64_t tick = 0;
+#ifdef CONFIG_REVK_OTA_CONFIRM
+    ota_confirm_boot();
+#endif
 #ifdef CONFIG_REVK_OTA_PULL
     uint32_t ota_check = 0;
+#ifndef CONFIG_REVK_OTA_CONFIRM
     if (otaauto) {
 #ifdef CONFIG_REVK_WEB_BETA
         if (otabeta)
@@ -2332,6 +2534,7 @@ static void task(void *pvParameters)
         else if (otadays)
             ota_check = 86400 * otadays + (esp_random() % 3600); // Min periodic check
     }
+#endif
 #endif
     revk_gpio_input(factorygpio);
     b.factorywas = revk_gpio_get(factorygpio);
@@ -2637,6 +2840,9 @@ static void task(void *pvParameters)
                 revk_settings_commit();
                 revk_nvs_time = 0;
             }
+#ifdef CONFIG_REVK_OTA_CONFIRM
+            ota_confirm_tick(now);
+#endif
             if (restart_time && restart_time <= now)
                 break;
         }
@@ -3410,6 +3616,13 @@ static esp_err_t revk_web_ota(httpd_req_t *req)
             }
         }
     }
+#ifdef CONFIG_REVK_OTA_CONFIRM
+    if (otac.pending) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Keep or roll back the new firmware first");
+        return ESP_FAIL;
+    }
+    uint8_t confirms = 0;
+#endif
     const esp_partition_t *update = esp_ota_get_next_update_partition(NULL);
     if (!update) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No OTA partition found");
@@ -3459,6 +3672,14 @@ static esp_err_t revk_web_ota(httpd_req_t *req)
                     return ESP_FAIL;
                 }
             }
+#ifdef CONFIG_REVK_OTA_CONFIRM
+            {
+                uint32_t magic = 0;
+                if (chunk >= (int)(OTA_CONFIRM_OFFSET + sizeof(magic)))
+                    memcpy(&magic, buf + OTA_CONFIRM_OFFSET, sizeof(magic));
+                confirms = (magic == OTA_CONFIRM_MAGIC);
+            }
+#endif
         }
         e = esp_ota_write(ota, buf, chunk);
         if (e) {
@@ -3476,18 +3697,29 @@ static esp_err_t revk_web_ota(httpd_req_t *req)
         return ESP_FAIL;
     }
     e = esp_ota_set_boot_partition(update);
+#ifdef CONFIG_REVK_OTA_CONFIRM
+    if (!e && !confirms)
+        e = ota_boot_valid();
+#endif
     if (e) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(e));
         return ESP_FAIL;
     }
     ESP_LOGE(TAG, "OTA upload complete (%d bytes), rebooting", received);
     httpd_resp_set_type(req, "text/html");
-    httpd_resp_sendstr(req, "<!DOCTYPE html><html><head>"
-                            "<meta http-equiv=refresh content='8;url=/'>"
-                            "</head><body>"
-                            "<h2>&#x2705; Firmware flashed successfully!</h2>"
-                            "<p>Rebooting &mdash; reconnecting in 8 seconds...</p>"
-                            "</body></html>");
+    httpd_resp_sendstr_chunk(req, "<!DOCTYPE html><html><head>"
+                                  "<meta http-equiv=refresh content='8;url=/'>"
+                                  "</head><body>"
+                                  "<h2>&#x2705; Firmware flashed successfully!</h2>"
+                                  "<p>Rebooting &mdash; reconnecting in 8 seconds...</p>");
+#ifdef CONFIG_REVK_OTA_CONFIRM
+    httpd_resp_sendstr_chunk(req, confirms ? "<p>Click <b>Keep</b> within 10 minutes, or it goes back to the previous "
+                                             "firmware.</p>"
+                                           : "<p>This firmware cannot confirm itself, so it is kept without the 10 "
+                                             "minute check.</p>");
+#endif
+    httpd_resp_sendstr_chunk(req, "</body></html>");
+    httpd_resp_sendstr_chunk(req, NULL);
     revk_restart(3, "OTA upload");
     return ESP_OK;
 }
@@ -3883,6 +4115,29 @@ void revk_web_head(httpd_req_t *req, const char *title)
 #endif
         ">",
         revk_web_safe(&qs, title ?: revk_app));
+#ifdef CONFIG_REVK_OTA_CONFIRM
+    if (otac.pending) {
+        char temp[20];
+        uint32_t now = uptime();
+        unsigned long left = now < OTA_CONFIRM_WINDOW ? OTA_CONFIRM_WINDOW - now : 0;
+        revk_web_send(req, "<form action=/revk-settings method=post><p class=error>New firmware %s %s: ",
+                      revk_web_safe(&qs, revk_version), revk_build_date(temp) ?: "?");
+#ifdef CONFIG_REVK_SETTINGS_PASSWORD
+        if (*password)
+            revk_web_send(req, "<input name=password type=password placeholder=Password> ");
+#endif
+        revk_web_send(req,
+                      "<input type=submit name=_otakeep value=Keep>"
+                      "<input type=submit name=_otarollback value='Roll back now'> "
+                      "rolls back in <span id=_otaleft>%lu:%02lu</span></p></form>"
+                      "<script>var _otaleft=%lu;setInterval(function(){if(_otaleft>0)_otaleft--;"
+                      "document.getElementById('_otaleft').textContent="
+                      "Math.floor(_otaleft/60)+':'+('0'+_otaleft%%60).slice(-2);},1000);</script>",
+                      left / 60, left % 60, left);
+    } else if (*ota_notice_version)
+        revk_web_send(req, "<p class=error>Update to %s %s was rolled back (%s)</p>",
+                      revk_web_safe(&qs, ota_notice_version), ota_notice_build, ota_notice_reason);
+#endif
     free(qs);
 }
 
@@ -4229,6 +4484,17 @@ esp_err_t revk_web_settings(httpd_req_t *req)
             jo_strncpy(j, t, sizeof(t));
             page = atoi(t);
         }
+#ifdef CONFIG_REVK_OTA_CONFIRM
+        if (jo_find(j, "_otakeep") || jo_find(j, "_otarollback") || jo_find(j, "_otaprevious")) {
+            const char *m = ota_confirm_web(j);
+            jo_free(&j);
+            head();
+            revk_web_send(req, "<p>%s</p><script>setTimeout(function(){location='/';},%d);</script>", m,
+                          restart_time ? 15000 : 2000);
+            free(qs);
+            return revk_web_foot(req, 1, 1, NULL);
+        }
+#endif
         if (jo_find(j, "_upgrade") || jo_find(j, "_reboot") || jo_find(j, "_settingsave") ||
             jo_find(j, "_settingload")) {
             const char *e = revk_settings_store(j, &location, REVK_SETTINGS_JSON_STRING); // Saved settings
@@ -4371,6 +4637,12 @@ esp_err_t revk_web_settings(httpd_req_t *req)
 #endif
             }
         }
+#ifdef CONFIG_REVK_OTA_CONFIRM
+        if (restart_time && req->method == HTTP_POST) { // Restart asked for from the web UI keeps new firmware
+            otac.web_restart = 1;
+            ota_confirm_check(uptime());
+        }
+#endif
         jo_free(&j);
     }
     head();
@@ -4460,8 +4732,10 @@ esp_err_t revk_web_settings(httpd_req_t *req)
         case -1: // Basic
 #ifdef CONFIG_REVK_OTA_PULL
             if (!revk_link_down() && *otahost) {
+#ifndef CONFIG_REVK_OTA_CONFIRM
                 if (otadays)
                     revk_web_setting_s(req, "Auto upgrade", "otaauto", otaauto, NULL, "Automatic updates");
+#endif
 #ifdef CONFIG_REVK_WEB_BETA
                 revk_web_setting(req, "Beta software", "otabeta");
 #endif
@@ -4577,6 +4851,14 @@ esp_err_t revk_web_settings(httpd_req_t *req)
         case -4: // Firmware upload
         {
             revk_web_setting_title(req, "Firmware upload");
+#ifdef CONFIG_REVK_OTA_CONFIRM
+            if (otac.noboot)
+                revk_web_setting_info(req, "Rollback not active: flash the bootloader over USB once");
+            if (otac.pending) {
+                revk_web_setting_info(req, "Keep or roll back the new firmware before uploading another");
+                break;
+            }
+#endif
             revk_web_send(req,
                           "<tr><td colspan=3>"
                           "<div id=_otamsg></div>"
@@ -4594,6 +4876,24 @@ esp_err_t revk_web_settings(httpd_req_t *req)
                           "<br><small>Upload <tt>%s%s.bin</tt></small>"
                           "</td></tr>",
                           revk_app, revk_build_suffix);
+#ifdef CONFIG_REVK_OTA_CONFIRM
+            {
+                esp_app_desc_t d;
+                const esp_partition_t *p = ota_previous(&d);
+                if (p) {
+                    char temp[20];
+                    revk_web_send(req,
+                                  "<tr><td colspan=3><input type=submit name=_otaprevious value='Boot previous "
+                                  "firmware: %.32s ",
+                                  d.project_name);
+                    revk_web_send(req, "%s %s'>", revk_web_safe(&qs, d.version), revk_build_date_app(&d, temp) ?: "?");
+                    if (!ota_confirms(p))
+                        revk_web_send(req, "<br><small>That firmware cannot confirm itself, so it is kept without "
+                                           "the 10 minute check.</small>");
+                    revk_web_send(req, "</td></tr>");
+                }
+            }
+#endif
         } break;
 #endif
 #ifdef CONFIG_REVK_WEB_EXTRA
