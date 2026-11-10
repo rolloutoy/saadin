@@ -1791,34 +1791,35 @@ static esp_err_t web_graph(httpd_req_t *req)
     web_head(req, "Heating graph");
     revk_web_send(
         req,
-        "<style>.g{background:white;max-width:1000px;padding:5px;margin-bottom:10px;}</style>"               //
-        "<p id=msg>Loading…</p>"                                                                             //
-        "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>"         //
-        "<p>One sample a minute, kept until a restart. Click a legend entry to show or hide it. "            //
-        "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "             //
-        "red rest after a defrost loop.</p>"                                                                 //
-        "<script src='/chart.js?%s'></script>"                                                               //
-        "<script>"                                                                                           //
-        "var F=%d,U=F?'℉':'℃';"                                                                              //
-        "function tc(v){return F?v*0.018+32:v/100;}"                                                         //
-        "function n(v){return v;}"                                                                           //
-        "fetch('/graph.json').then(r=>r.json()).then(d=>{"                                                   //
-        "var m=document.getElementById('msg'),k=d.ago.length;"                                               //
-        "if(!k){m.textContent='No samples yet, the first comes after a minute.';return;}"                    //
-        "var now=Date.now(),x=d.ago.map(a=>now-a*1000);"                                                     //
-        "m.textContent='Last '+Math.round(d.ago[0]/360)/10+' hours, to '+new Date(x[k-1]).toLocaleString();" //
-        "function p(a,f){return a.map((v,i)=>({x:x[i],y:v==null?null:f(v)}));}"                              //
+        "<style>.g{background:white;max-width:1000px;padding:5px;margin-bottom:10px;}</style>"       //
+        "<p id=msg>Loading…</p>"                                                                     //
+        "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>" //
+        "<p>One sample a minute, kept until a restart. Click a legend entry to show or hide it. "    //
+        "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "     //
+        "red rest after a defrost loop.</p>"                                                         //
+        "<script src='/chart.js?%s'></script>"                                                       //
+        "<script>"                                                                                   //
+        "var F=%d,U=F?'℉':'℃';"                                                                      //
+        "function tc(v){return F?v*0.018+32:v/100;}"                                                 //
+        "function n(v){return v;}"                                                                   //
+        "fetch('/graph.json').then(r=>r.json()).then(d=>{"                                           //
+        "var m=document.getElementById('msg'),k=d.ago.length;"                                       //
+        "if(!k){m.textContent='No samples yet, the first comes after a minute.';return;}"            //
+        "var now=Date.now(),x=d.ago.map(a=>now-a*1000);"                                             //
+        "m.textContent='Last '+(d.ago[0]>=172800?Math.round(d.ago[0]/8640)/10+' days':Math.round(d.ago[0]/360)/10+' hours')+', to '+new Date(x[k-1]).toLocaleString();" //
+        "function p(a,f){return a.map((v,i)=>({x:x[i],y:v==null?null:f(v)}));}" //
         "function ds(l,a,f,c,o){return Object.assign({label:l,data:p(a,f),borderColor:c,backgroundColor:c,"
         "borderWidth:1.5,pointRadius:0,spanGaps:false},o||{});}"           //
         "function shade(i){var s=d.subs[d.sub[i]],t=d.states[d.state[i]];" //
         "return s=='defrost'?'#bdf':s=='rest'?'#fcc':t=='idle'?'#e4e4e4':t=='cold'?'#dcf':"
-        "t=='nosensor'?'#fe9':null;}"                                                                         //
-        "var band={id:'band',beforeDatasetsDraw(c){var a=c.chartArea,g=c.ctx,s=c.scales.x;g.save();"          //
-        "g.beginPath();g.rect(a.left,a.top,a.width,a.height);g.clip();"                                       //
-        "for(var i=0;i<k;i++){var f=shade(i);if(!f)continue;"                                                 //
-        "var x0=s.getPixelForValue(x[i]-d.interval*1000),x1=s.getPixelForValue(x[i]);"                        //
-        "g.fillStyle=f;g.fillRect(x0,a.top,x1-x0+1,a.height);}g.restore();}};"                                //
-        "function time(v){return new Date(v).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}"      //
+        "t=='nosensor'?'#fe9':null;}"                                                                //
+        "var band={id:'band',beforeDatasetsDraw(c){var a=c.chartArea,g=c.ctx,s=c.scales.x;g.save();" //
+        "g.beginPath();g.rect(a.left,a.top,a.width,a.height);g.clip();"                              //
+        "for(var i=0;i<k;i++){var f=shade(i);if(!f)continue;"                                        //
+        "var x0=s.getPixelForValue(x[i]-d.interval*1000),x1=s.getPixelForValue(x[i]);"               //
+        "g.fillStyle=f;g.fillRect(x0,a.top,x1-x0+1,a.height);}g.restore();}};"                       //
+        "function time(v){return new Date(v).toLocaleString([],Object.assign({hour:'2-digit',minute:'2-digit'},"
+        "x[k-1]-x[0]>864e5?{weekday:'short'}:{}));}"                                                          //
         "function opt(y){return{animation:false,interaction:{mode:'index',intersect:false},"                  //
         "plugins:{tooltip:{callbacks:{title:t=>time(t[0].parsed.x)}}},"                                       //
         "scales:Object.assign({x:{type:'linear',min:x[0]-d.interval*1000,max:x[k-1],"                         //
@@ -3623,8 +3624,8 @@ void app_main()
 #endif
     blemutex = xSemaphoreCreateMutex();
     daikin.mutex = xSemaphoreCreateMutex();
-    { // Heating log for the graph page: a day, or 6 hours without PSRAM
-        uint32_t n = (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) ? 24 : 6) * 3600 / HEATLOG_INTERVAL;
+    { // Heating log for the graph page: 3 days, or 6 hours without PSRAM
+        uint32_t n = (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) ? 72 : 6) * 3600 / HEATLOG_INTERVAL;
         heatlog_init(&heatlog, mallocspi(n * sizeof(heatlog_sample_t)), n);
     }
     b.startup = 1;
