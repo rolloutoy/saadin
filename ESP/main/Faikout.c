@@ -1948,6 +1948,7 @@ static esp_err_t web_control(httpd_req_t *req)
         "function e(n,v){var d=g(n+v);if(d)d.checked=true;}"                                 //
         "function w(n,v){var m=new Object();m[n]=v;ws.send(JSON.stringify(m));}"             //
         "function t(n,v){s(n,v!=undefined?cf(v):'---');}"                                    //
+        "function kb(v){return Math.round(v/1024)+' KB';}"                                   //
         "function ctlt(o){"                                                                  //
         "if(!o.ctl||o.ctl=='off')return o.autoe?'Not running (unit off or not heating)':'';" //
         "var c=o.ctl_curve||0,cs=c?' (curve '+(c>0?'+':'')+c.toFixed(2)+')':'';"             //
@@ -2009,11 +2010,15 @@ static esp_err_t web_control(httpd_req_t *req)
         "if(g('quiet'))g('quiet').disabled=!!o.control;"                     //
         "s('0/1',(o.slave?'❋':'')+(o.antifreeze?'❄':''));"                   //
         "s('Fan',(o.antifreeze?'❄':'')+(o.control?'✷':'')+(o.fanrpm?' '+o.fanrpm+'RPM':'')+(o.consumption?' '+o.consumption+'W':''));" //
-        "e('fan',o.fan);"                                                                                      //
-        "if(o.shutdown){reboot=true;s('shutdown','Restarting: '+o.shutdown);g('shutdown').style.display='';};" //
-        "};};"                                                                                                 //
-        "c();"                                                                                                 //
-        "setInterval(function() {if(!ws.readyState)ws.close();else if(ws.readyState==1)ws.send('');},1000);"   //
+        "e('fan',o.fan);"                                                                                             //
+        "if(o.shutdown){reboot=true;s('shutdown','Restarting: '+o.shutdown);g('shutdown').style.display='';};"        //
+        "if(o.mem){var a=document.querySelector('address'),m=g('mem');"                                               //
+        "if(a&&!m){m=document.createElement('span');m.id='mem';a.append(' · ',m);}"                                   //
+        "if(m)m.textContent='RAM '+kb(o.mem.ram)+' free (min '+kb(o.mem.min)+', largest block '+kb(o.mem.block)+')'+" //
+        "(o.mem.psram?' · PSRAM '+kb(o.mem.psram)+' of '+kb(o.mem.psramtotal)+' free':'');};"                         //
+        "};};"                                                                                                        //
+        "c();"                                                                                                        //
+        "setInterval(function() {if(!ws.readyState)ws.close();else if(ws.readyState==1)ws.send('');},1000);"          //
         "</script>",
         fahrenheit ? "Math.round(10*((v*9/5)+32))/10+'℉'" : "v+'℃'");
     return revk_web_foot(req, 0, websettings, b.protocol_set ? proto_name() : NULL);
@@ -2088,6 +2093,15 @@ static esp_err_t web_status(httpd_req_t *req)
         int t = revk_shutting_down(&reason);
         if (t)
             jo_string(j, "shutdown", reason);
+        jo_object(j, "mem"); // Free memory, for the page footer
+        jo_int(j, "ram", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+        jo_int(j, "min", heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
+        jo_int(j, "block", heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        if (heap_caps_get_total_size(MALLOC_CAP_SPIRAM)) {
+            jo_int(j, "psram", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+            jo_int(j, "psramtotal", heap_caps_get_total_size(MALLOC_CAP_SPIRAM));
+        }
+        jo_close(j);
         return wsend(&j);
     }
     // received packet
