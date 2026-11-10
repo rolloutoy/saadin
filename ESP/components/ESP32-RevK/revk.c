@@ -3559,6 +3559,7 @@ revk_restart (int delay, const char *fmt, ...)
 #endif
 
 #ifdef CONFIG_REVK_WEB_OTA
+#include <sys/param.h>         // MIN
 static esp_err_t
 revk_web_ota (httpd_req_t *req)
 {                               // Local OTA firmware upload
