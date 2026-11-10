@@ -1608,7 +1608,7 @@ const char *mqtt_client_callback(int client, const char *prefix, const char *tar
 jo_t daikin_status(void)
 {
 #ifdef ELA
-    xSemaphoreTake(blemutex, portMAX_DELAY); // Before daikin.mutex, same order as main loop BLE logic, else deadlock
+    xSemaphoreTake(blemutex, portMAX_DELAY); // Always before daikin.mutex where both are held, else deadlock
 #endif
     xSemaphoreTake(daikin.mutex, portMAX_DELAY);
     jo_t j = jo_comms_alloc();
@@ -4125,9 +4125,9 @@ void app_main()
             uint32_t now = uptime();
             if (daikin.fanrun && daikin.fanrun < now)
                 daikin_set_v(power, 0);
-            if (daikin.power)
-                daikin.lastheat = daikin.heat;
             xSemaphoreTake(daikin.mutex, portMAX_DELAY);
+            if (daikin.power && daikin.lastheat != daikin.heat)
+                daikin.lastheat = daikin.heat; // Only on change, as it shares a byte with flags other tasks set
             float measured_temp = daikin.env;
             if (isnan(measured_temp)) // No env temp available, so use A/C internal temp
                 measured_temp = daikin.home;
