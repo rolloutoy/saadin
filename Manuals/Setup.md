@@ -86,4 +86,3 @@ Go to the web page, and select *WiFi settings*. You can click on *Upgrade*. This
 # Factory reset
 
 The back of the Faikout board has two round pads in the middle. You can short these three times in quick succession to factory reset. Each short lights the LED a solid colour, with red on the third one. The Faikout then reboots and factory resets.
-

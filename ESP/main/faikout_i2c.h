@@ -6,7 +6,6 @@
 #if CONFIG_SOC_I2C_NUM > 1 // we need 2 I2C bus for master and slave
 #define FAIKOUT_I2C_SENSOR
 
-
 /// @brief Init the I2C bus to communicate with both Daikin motherboard and temp/hum sensor
 /// @param i2cslsda GPIO to use for I2C slave with Daikin board - SDA
 /// @param i2cslscl GPIO to use for I2C slave with Daikin board - SCL

@@ -117,7 +117,7 @@ The `send` command when used for X50A is an object with `"cmd"` the command (two
 Regular status messages are sent.
 
 - `state/` topic indicate current state, and are reported periodically and on some state changes.
-- `Faikout/` topic are sent, typically every minute, and intended for the `faikoutlog` command to store in a database. 
+- `Faikout/` topic are sent, typically every minute, and intended for the `faikoutlog` command to store in a database.
 - `*MAC*/` topic are sent for HomeAssistant if enabled, and are reported periodically and on some state changes.
 
 The setting `livestatus` causes the `state/` topic on any change.

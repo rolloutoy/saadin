@@ -35,4 +35,3 @@ The default `custom format` advertisement is understood. The device will appear 
 <img src='https://github.com/revk/ESP32-Faikout/assets/996983/53e41957-9ab7-4d24-b80d-202e1d772534)' align=right width=25%>
 
 There is support for one of the [GoveeLife sensors](https://www.amazon.co.uk/gp/product/B0CDX6SNJ3/).
-

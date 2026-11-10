@@ -11,7 +11,7 @@ all:    main/settings.h
 	@cp build/$(PROJECT_NAME).bin $(PROJECT_NAME)$(SUFFIX).bin
 	@echo Done: $(PROJECT_NAME)$(SUFFIX).bin
 
-beta:   
+beta:
 	-git pull
 	-git submodule update --recursive
 	-git commit -a

@@ -32,7 +32,7 @@ You can do an upgrade from the web control pages for most apps with a link from 
 
 However, for most apps (based on the `otaauto` and `otadays` settings) upgrades will be checked every few days, and done if needed. If `otastart` is set, then a check is also done around an hour after startup, otherwise done in middle of the night. The server is checked and the update and restart is only done if there is a new version. If the update fails validation then `otadays` is set to `30` to avoid more frequent checks, as a failed update also causes a reboot.
 
-## MQTT 
+## MQTT
 
 The system will connect to an MQTT server and provide information via MQTT, allow commands over MQTT, and allow settings over MQTT.
 
@@ -42,7 +42,7 @@ The MQTT topic is used to allow messages to be directed to the device or for mes
 
 The *identity* aspect of the topic identifies the device. This can be set using `hostname`, and if not set then the MAC address is used (in HEX). The device responds to the `hostname` or MAC address. If a `hostname` is set, messages from the device use the `hostanme` set (with the exception of `setting`, which always uses MAC).
 
-The *topic* aspect of the topic is what sort of message it is. `command` and `setting` are instructions to the device, whereas `info`, `error`, `state`, and `event` are for information from the device (as well as `setting` feedback). All of these can be configured to use different words if needed. 
+The *topic* aspect of the topic is what sort of message it is. `command` and `setting` are instructions to the device, whereas `info`, `error`, `state`, and `event` are for information from the device (as well as `setting` feedback). All of these can be configured to use different words if needed.
 
 The *suffix* aspect of the topic is what sub-type of message, e.g. what `command` is to be performed.
 

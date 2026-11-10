@@ -135,7 +135,7 @@ This sets `sdkconfig` based on a requested build suffix. This can link in to som
 pico:
         components/ESP32-RevK/setbuildsuffix -S1-PICO
         @make
-        
+
 wroom:
         components/ESP32-RevK/setbuildsuffix -S1
         @make

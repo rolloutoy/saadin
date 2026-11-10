@@ -4,7 +4,7 @@
 //
 // ==========================================================================
 
-    /*
+/*
        Copyright (C) 2020-2020  RevK and Andrews & Arnold Ltd
 
        This program is free software: you can redistribute it and/or modify
@@ -30,30 +30,31 @@
 // rx is what is received, or NULL. If response is text non json then json string returned (can reuse tx if required)
 // Response is NULL is 2xx response with JSON, else malloc'd error string
 
-enum
-{
-	J_CURL_GET,	// Simple GET, tx is URL encoded
-	J_CURL_POST,	// Simple POST, tx is URL coded content
-	J_CURL_SENDRAW,	// POST, tx - assume headers pre-set
-	J_CURL_SEND,	// POST, tx is sent as application/json
-	J_CURL_PUT,	// PUT, tx is sent as application/json
-	J_CURL_DELETE,	// DELETE, tx is sent as application/json if present
-	J_CURL_FORM,	// Form POST, tx is coded as multipart/form-data
+enum {
+    J_CURL_GET,     // Simple GET, tx is URL encoded
+    J_CURL_POST,    // Simple POST, tx is URL coded content
+    J_CURL_SENDRAW, // POST, tx - assume headers pre-set
+    J_CURL_SEND,    // POST, tx is sent as application/json
+    J_CURL_PUT,     // PUT, tx is sent as application/json
+    J_CURL_DELETE,  // DELETE, tx is sent as application/json if present
+    J_CURL_FORM,    // Form POST, tx is coded as multipart/form-data
 };
 // Or these with type
-#define	J_CURL_AUTH_BEARER_BASIC	256	// authorisation is actually Basic not Bearer
-#define	J_CURL_AUTH_BEARER_APIKEY	512	// authorisation is actually ApiKey not Bearer
-#define	J_CURL_AUTH_APIKEY		1024	// bearer is apikey 
+#define J_CURL_AUTH_BEARER_BASIC 256  // authorisation is actually Basic not Bearer
+#define J_CURL_AUTH_BEARER_APIKEY 512 // authorisation is actually ApiKey not Bearer
+#define J_CURL_AUTH_APIKEY 1024       // bearer is apikey
 
 // Older names
-#define	J_CURL_BASIC			256
-#define	J_CURL_APIKEY			1024
+#define J_CURL_BASIC 256
+#define J_CURL_APIKEY 1024
 
-char *j_curl(int type, CURL * crl, j_t tx, j_t rx, const char *bearer, const char *url, ...);
-#define	j_curl_get(curl,tx,rx,bearer,...) j_curl(J_CURL_GET,curl,tx,rx,bearer,__VA_ARGS__)       // GET, formdata
-#define	j_curl_post(curl,tx,rx,bearer,...) j_curl(J_CURL_POST,curl,tx,rx,bearer,__VA_ARGS__)      // POST, formdata
-#define	j_curl_send(curl,tx,rx,bearer,...) j_curl(J_CURL_SEND,curl,tx,rx,bearer,__VA_ARGS__)      // POST, json
-#define	j_curl_sendraw(curl,tx,rx,bearer,...) j_curl(J_CURL_SENDRAW,curl,tx,rx,bearer,__VA_ARGS__)      // POST, json
-#define	j_curl_put(curl,tx,rx,bearer,...) j_curl(J_CURL_PUT,curl,tx,rx,bearer,__VA_ARGS__)      // PUT, json
-#define	j_curl_delete(curl,tx,rx,bearer,...) j_curl(J_CURL_DELETE,curl,tx,rx,bearer,__VA_ARGS__)      // DELETE, json
-#define	j_curl_form(curl,tx,rx,bearer,...) j_curl(J_CURL_FORM,curl,tx,rx,bearer,__VA_ARGS__)      // POST, formdata
+char *j_curl(int type, CURL *crl, j_t tx, j_t rx, const char *bearer, const char *url, ...);
+#define j_curl_get(curl, tx, rx, bearer, ...) j_curl(J_CURL_GET, curl, tx, rx, bearer, __VA_ARGS__)   // GET, formdata
+#define j_curl_post(curl, tx, rx, bearer, ...) j_curl(J_CURL_POST, curl, tx, rx, bearer, __VA_ARGS__) // POST, formdata
+#define j_curl_send(curl, tx, rx, bearer, ...) j_curl(J_CURL_SEND, curl, tx, rx, bearer, __VA_ARGS__) // POST, json
+#define j_curl_sendraw(curl, tx, rx, bearer, ...) \
+    j_curl(J_CURL_SENDRAW, curl, tx, rx, bearer, __VA_ARGS__)                                       // POST, json
+#define j_curl_put(curl, tx, rx, bearer, ...) j_curl(J_CURL_PUT, curl, tx, rx, bearer, __VA_ARGS__) // PUT, json
+#define j_curl_delete(curl, tx, rx, bearer, ...) \
+    j_curl(J_CURL_DELETE, curl, tx, rx, bearer, __VA_ARGS__)                                          // DELETE, json
+#define j_curl_form(curl, tx, rx, bearer, ...) j_curl(J_CURL_FORM, curl, tx, rx, bearer, __VA_ARGS__) // POST, formdata

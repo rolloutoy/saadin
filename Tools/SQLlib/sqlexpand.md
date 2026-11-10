@@ -72,5 +72,3 @@ The original variable or file is faithfully converted to an SQL string.
 - This means quotes that would break quoting are doubled as per SQL rules, so a quote is stored
 - This means characters such as a new line are coded to `\n` so SQL stores a newline
 - This means a backslash `\` is doubled too, so a `\` is stored in the string, this means if the original contains `\n` then the stored string has `\n` and not a new line
-
-

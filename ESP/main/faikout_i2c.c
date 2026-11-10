@@ -20,8 +20,7 @@
 
 static const char TAG[] = "Faikout_i2c";
 
-typedef struct
-{
+typedef struct {
     // Events and tasks
     QueueHandle_t event_queue; // Queue to handle I2C requests from Daikin motherboard
     TaskHandle_t i2cTask;      // Task to handle I2C requests from Daikin motherboard
@@ -45,24 +44,19 @@ static faikout_i2c_context_t faikout_i2c_context = {
     .is_started = false,
 };
 
-typedef enum
-{
-    I2C_SLAVE_EVT_RX,
-    I2C_SLAVE_EVT_TX
-} i2c_slave_event_t;
+typedef enum { I2C_SLAVE_EVT_RX, I2C_SLAVE_EVT_TX } i2c_slave_event_t;
 
 static void faikout_i2c_slave_task(void *p);
 
 esp_err_t faikout_i2c_init(revk_gpio_t i2cslsda, revk_gpio_t i2cslscl, revk_gpio_t i2cmasda, revk_gpio_t i2cmassl)
 {
-    if (faikout_i2c_context.is_init_done)
-    {
+    if (faikout_i2c_context.is_init_done) {
         ESP_LOGE(TAG, "Init already done!");
         return ESP_ERR_NOT_ALLOWED;
     }
     // Check GPIO are valid (both input and output)
-    if (!(((gpio_ok(i2cslsda.num) & 3) == 3) && ((gpio_ok(i2cslscl.num) & 3) == 3) && ((gpio_ok(i2cmasda.num) & 3) == 3) && ((gpio_ok(i2cmassl.num) & 3) == 3)))
-    {
+    if (!(((gpio_ok(i2cslsda.num) & 3) == 3) && ((gpio_ok(i2cslscl.num) & 3) == 3) &&
+          ((gpio_ok(i2cmasda.num) & 3) == 3) && ((gpio_ok(i2cmassl.num) & 3) == 3))) {
         ESP_LOGE(TAG, "Init with invalid GPIO!");
         return ESP_ERR_INVALID_ARG;
     }
@@ -80,8 +74,7 @@ esp_err_t faikout_i2c_init(revk_gpio_t i2cslsda, revk_gpio_t i2cslscl, revk_gpio
         .glitch_ignore_cnt = 7,
         .flags.enable_internal_pullup = (i2cmasda.nopull || i2cmassl.nopull) ? false : true,
     };
-    if (i2c_new_master_bus(&configM, &faikout_i2c_context.master_bus_handle) != ESP_OK)
-    {
+    if (i2c_new_master_bus(&configM, &faikout_i2c_context.master_bus_handle) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to init master bus");
         return ESP_FAIL;
     }
@@ -91,8 +84,8 @@ esp_err_t faikout_i2c_init(revk_gpio_t i2cslsda, revk_gpio_t i2cslscl, revk_gpio
         .device_address = INLET_SENSOR_ADDR,
         .scl_speed_hz = 20000,
     };
-    if (i2c_master_bus_add_device(faikout_i2c_context.master_bus_handle, &master_dev_config, &faikout_i2c_context.master_dev_handle) != ESP_OK)
-    {
+    if (i2c_master_bus_add_device(faikout_i2c_context.master_bus_handle, &master_dev_config,
+                                  &faikout_i2c_context.master_dev_handle) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to init device bus");
         i2c_del_master_bus(faikout_i2c_context.master_bus_handle);
         return ESP_FAIL;
@@ -111,8 +104,7 @@ esp_err_t faikout_i2c_init(revk_gpio_t i2cslsda, revk_gpio_t i2cslscl, revk_gpio
         .addr_bit_len = I2C_ADDR_BIT_LEN_7,
         .flags.enable_internal_pullup = (i2cslsda.nopull || i2cslscl.nopull) ? false : true,
     };
-    if (i2c_new_slave_device(&i2c_slv_config, &faikout_i2c_context.slave_handle) != ESP_OK)
-    {
+    if (i2c_new_slave_device(&i2c_slv_config, &faikout_i2c_context.slave_handle) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to init slave");
         i2c_master_bus_rm_device(faikout_i2c_context.master_dev_handle);
         i2c_del_master_bus(faikout_i2c_context.master_bus_handle);
@@ -128,7 +120,8 @@ bool faikout_i2c_is_init_done(void)
     return faikout_i2c_context.is_init_done;
 }
 
-static bool i2c_slave_request_cb(i2c_slave_dev_handle_t i2c_slave, const i2c_slave_request_event_data_t *evt_data, void *arg)
+static bool i2c_slave_request_cb(i2c_slave_dev_handle_t i2c_slave, const i2c_slave_request_event_data_t *evt_data,
+                                 void *arg)
 {
     faikout_i2c_context_t *context = (faikout_i2c_context_t *)arg;
     i2c_slave_event_t evt = I2C_SLAVE_EVT_TX;
@@ -137,7 +130,8 @@ static bool i2c_slave_request_cb(i2c_slave_dev_handle_t i2c_slave, const i2c_sla
     return xTaskWoken;
 }
 
-static bool i2c_slave_receive_cb(i2c_slave_dev_handle_t i2c_slave, const i2c_slave_rx_done_event_data_t *evt_data, void *arg)
+static bool i2c_slave_receive_cb(i2c_slave_dev_handle_t i2c_slave, const i2c_slave_rx_done_event_data_t *evt_data,
+                                 void *arg)
 {
     faikout_i2c_context_t *context = (faikout_i2c_context_t *)arg;
     i2c_slave_event_t evt = I2C_SLAVE_EVT_RX;
@@ -152,38 +146,30 @@ esp_err_t faikout_i2c_start(void)
 {
     float temp;
     float hum;
-    if (!faikout_i2c_context.is_init_done)
-    {
+    if (!faikout_i2c_context.is_init_done) {
         ESP_LOGE(TAG, "Init not done - not allowed to start!");
         return ESP_ERR_NOT_ALLOWED;
     }
-    if (faikout_i2c_context.is_started)
-    {
+    if (faikout_i2c_context.is_started) {
         ESP_LOGE(TAG, "Already started!");
         return ESP_ERR_NOT_ALLOWED;
     }
-    if (!faikout_i2c_get_inlet_sensor_values(&temp, &hum))
-    {
+    if (!faikout_i2c_get_inlet_sensor_values(&temp, &hum)) {
         faikout_i2c_set_external_sensor_values(temp, hum);
-    }
-    else
-    {
+    } else {
         ESP_LOGE(TAG, "Start: unable to get inlet sensor values!");
         return ESP_FAIL;
     }
-    if (!faikout_i2c_context.event_queue)
-    {
+    if (!faikout_i2c_context.event_queue) {
         faikout_i2c_context.event_queue = xQueueCreate(16, sizeof(i2c_slave_event_t));
-        if (!faikout_i2c_context.event_queue)
-        {
+        if (!faikout_i2c_context.event_queue) {
             ESP_LOGE(TAG, "Start: Creating queue failed!");
             return ESP_FAIL;
         }
     }
     faikout_i2c_context.is_started = true;
     faikout_i2c_context.i2cTask = revk_task(TAG, faikout_i2c_slave_task, &faikout_i2c_context, 4);
-    if (!faikout_i2c_context.i2cTask)
-    {
+    if (!faikout_i2c_context.i2cTask) {
         ESP_LOGE(TAG, "Start: Creating task failed!");
         faikout_i2c_context.is_started = false;
         return ESP_FAIL;
@@ -192,8 +178,7 @@ esp_err_t faikout_i2c_start(void)
         .on_receive = i2c_slave_receive_cb,
         .on_request = i2c_slave_request_cb,
     };
-    if (i2c_slave_register_event_callbacks(faikout_i2c_context.slave_handle, &cbs, &faikout_i2c_context))
-    {
+    if (i2c_slave_register_event_callbacks(faikout_i2c_context.slave_handle, &cbs, &faikout_i2c_context)) {
         faikout_i2c_context.is_started = false;
         ESP_LOGE(TAG, "Start: Creating callbacks failed!");
         return ESP_FAIL;
@@ -218,8 +203,7 @@ esp_err_t faikout_i2c_set_external_sensor_values(float temp, float hum)
 
 esp_err_t faikout_i2c_get_inlet_sensor_values(float *temp, float *hum)
 {
-    if (!faikout_i2c_context.is_init_done)
-    {
+    if (!faikout_i2c_context.is_init_done) {
         ESP_LOGE(TAG, "Init not done - not allowed to get inlet sensor values!");
         return ESP_ERR_NOT_ALLOWED;
     }
@@ -227,8 +211,8 @@ esp_err_t faikout_i2c_get_inlet_sensor_values(float *temp, float *hum)
     uint8_t reg_addr = SENSOR_HUMI1_COMMAND;
     uint8_t data[4];
     uint16_t tmp;
-    if (i2c_master_transmit_receive(faikout_i2c_context.master_dev_handle, &reg_addr, 1, data, len, MASTER_READ_TIMEOUT_MS / portTICK_PERIOD_MS))
-    {
+    if (i2c_master_transmit_receive(faikout_i2c_context.master_dev_handle, &reg_addr, 1, data, len,
+                                    MASTER_READ_TIMEOUT_MS / portTICK_PERIOD_MS)) {
         ESP_LOGE(TAG, "Failed to read from inlet sensor!");
         return ESP_FAIL;
     }
@@ -254,13 +238,10 @@ static void faikout_i2c_slave_task(void *arg)
     uint8_t tmp_buffer_slave_sensor[4];
     uint16_t tmp;
 
-    while (context->is_started)
-    {
+    while (context->is_started) {
         i2c_slave_event_t evt;
-        if (xQueueReceive(context->event_queue, &evt, SLAVE_READ_TIMEOUT_MS / portTICK_PERIOD_MS) == pdTRUE)
-        {
-            if (evt == I2C_SLAVE_EVT_TX)
-            {
+        if (xQueueReceive(context->event_queue, &evt, SLAVE_READ_TIMEOUT_MS / portTICK_PERIOD_MS) == pdTRUE) {
+            if (evt == I2C_SLAVE_EVT_TX) {
                 uint8_t *data_buffer;
                 // Update buffer
                 tmp = (uint16_t)((faikout_i2c_context.temp + 41.92f) * 50.0f);
@@ -272,8 +253,7 @@ static void faikout_i2c_slave_task(void *arg)
                 tmp_buffer_slave_sensor[1] = (tmp >> 8) & 0x1F;
 
                 // Assign
-                switch (context->command_data)
-                {
+                switch (context->command_data) {
                 case SENSOR_HUMI1_COMMAND:
                     data_buffer = tmp_buffer_slave_sensor;
                     buffer_size = sizeof(tmp_buffer_slave_sensor);
@@ -298,11 +278,10 @@ static void faikout_i2c_slave_task(void *arg)
                 }
 
                 total_written = 0;
-                while (total_written < buffer_size)
-                {
-                    ESP_ERROR_CHECK(i2c_slave_write(handle, data_buffer + total_written, buffer_size - total_written, &write_len, 1000));
-                    if (write_len == 0)
-                    {
+                while (total_written < buffer_size) {
+                    ESP_ERROR_CHECK(i2c_slave_write(handle, data_buffer + total_written, buffer_size - total_written,
+                                                    &write_len, 1000));
+                    if (write_len == 0) {
                         ESP_LOGE(TAG, "faikout_i2c_slave: Write error or timeout");
                         break;
                     }

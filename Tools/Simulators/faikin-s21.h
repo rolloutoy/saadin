@@ -1,29 +1,28 @@
-struct S21State
-{
-    int          power;    // Power on
-    int          mode;     // Mode
-    float        temp;     // Set point
-    int          fan;      // Fan speed
-    int          swing;    // Swing direction
-    int          humidity; // Humidity setting
-    int          powerful; // Powerful mode
-    int          comfort;  // Comfort mode
-    int          quiet;    // Quiet mode
-    int          sensor;   // Sensor mode
-    int          led;      // LED on/off
-    int          streamer; // Streamer mode
-    int          eco;      // Eco mode
-    int          demand;   // Demand setting
-    int          home;     // Reported temparatures (multiplied by 10 here)
-    int          outside;
-    int          inlet;
-    int          hum_sensor; // Humidity sensor value
-    unsigned int  fanrpm;         // Fan RPM (divided by 10 here)
-    unsigned int  comprpm;        // Compressor RPM
-    unsigned int  consumption;    // Power consumption
+struct S21State {
+    int power;    // Power on
+    int mode;     // Mode
+    float temp;   // Set point
+    int fan;      // Fan speed
+    int swing;    // Swing direction
+    int humidity; // Humidity setting
+    int powerful; // Powerful mode
+    int comfort;  // Comfort mode
+    int quiet;    // Quiet mode
+    int sensor;   // Sensor mode
+    int led;      // LED on/off
+    int streamer; // Streamer mode
+    int eco;      // Eco mode
+    int demand;   // Demand setting
+    int home;     // Reported temparatures (multiplied by 10 here)
+    int outside;
+    int inlet;
+    int hum_sensor;               // Humidity sensor value
+    unsigned int fanrpm;          // Fan RPM (divided by 10 here)
+    unsigned int comprpm;         // Compressor RPM
+    unsigned int consumption;     // Power consumption
     unsigned char protocol_major; // Protocol version
     unsigned char protocol_minor;
-    char          model[4];       // Reported A/C model code
+    char model[4]; // Reported A/C model code
     // The following aren't understood yet
     unsigned char F2[4];
     unsigned char F3[4];
