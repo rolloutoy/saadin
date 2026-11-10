@@ -45,9 +45,9 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 
 ### COLD
 - Sends demand 100 with QO **always off**.
-- A second PI loop drives the **setpoint** from room temperature error. It starts at `cold.set` (default 23 °C), is clamped to `t.min`…`t.max`, rounded to 0.5 °C, and moves at most 0.5 °C per `cold.rate` (default 600 s); big setpoint jumps are reported to cause defrost loops. Gains `cold.kp` (°C setpoint per °C error, default 2.0), `cold.ti` (minutes, default 120), not yet tested on hardware.
+- A second PI loop drives the **setpoint** from room temperature error. It starts at `cold.set` (default 23 °C), is clamped to `t.min`…`t.max`, rounded to 0.5 °C, and moves at most 0.5 °C per `cold.rate` (default 1800 s); big setpoint jumps are reported to cause defrost loops. Gains `cold.kp` (°C setpoint per °C error, default 2.0), `cold.ti` (minutes, default 120), not yet tested on hardware.
 - No IDLE from COLD: on overshoot the setpoint PI pulls the setpoint down and the unit thermostats off by itself.
-- Entered from DEMAND when the smoothed outdoor temperature stays below `cold.enter` (default −15 °C) for `cold.hold` (default 15 min). Exits to DEMAND when it stays above `cold.exit` (default −10 °C) for `cold.hold`.
+- Entered from DEMAND when the smoothed outdoor temperature stays below `cold.enter` (default −15 °C) for `cold.hold` (default 60 min). Exits to DEMAND when it stays above `cold.exit` (default −10 °C) for `cold.hold`.
 - On exit to DEMAND the integral starts at the watts of the 95% level (the house has just needed a lot of heat).
 - Unknown outdoor temperature never enters COLD.
 

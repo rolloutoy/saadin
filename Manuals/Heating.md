@@ -54,9 +54,9 @@ Heating starts again when the room falls below the target, after at least `idle.
 
 ### Cold weather
 
-When it stays below `cold.enter` (−15 °C) outside for `cold.hold` (15 minutes), the controller runs the unit at demand 100% with quiet outdoor off. It then controls the room by moving the setpoint, 0.5 °C at a time, at most once every `cold.rate` (10 minutes). It starts at `cold.set` (23 °C).
+When it stays below `cold.enter` (−15 °C) outside for `cold.hold` (60 minutes), the controller runs the unit at demand 100% with quiet outdoor off. It then controls the room by moving the setpoint, 0.5 °C at a time, at most once every `cold.rate` (30 minutes). It starts at `cold.set` (23 °C).
 
-It goes back to demand control when it stays above `cold.exit` (−10 °C) for 15 minutes.
+It goes back to demand control when it stays above `cold.exit` (−10 °C) for 60 minutes.
 
 ### Defrosts
 
@@ -133,9 +133,9 @@ Set these on the *Advanced* settings page, or over MQTT. While the controller is
 |-------|-------|-------|
 |`cold.enter`|−15 °C|Cold-weather mode below this outdoor temperature|
 |`cold.exit`|−10 °C|Back to demand control above this outdoor temperature|
-|`cold.hold`|15 min|The outdoor temperature must stay past `cold.enter` or `cold.exit` this long|
+|`cold.hold`|60 min|The outdoor temperature must stay past `cold.enter` or `cold.exit` this long|
 |`cold.set`|23 °C|Starting setpoint|
-|`cold.rate`|600 s|Minimum time between 0.5 °C setpoint steps|
+|`cold.rate`|1800 s|Minimum time between 0.5 °C setpoint steps|
 |`cold.kp`|2.0|Setpoint change, °C per degree below the target|
 |`cold.ti`|120 min|Integral time|
 |`cold.fan`|Leave|Fan speed in cold-weather mode|
