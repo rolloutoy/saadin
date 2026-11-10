@@ -1799,8 +1799,8 @@ static esp_err_t web_graph(httpd_req_t *req)
         req,
         "<style>.g{background:white;max-width:1000px;padding:5px;margin-bottom:10px;}</style>"       //
         "<p id=msg>Loading…</p>"                                                                     //
-        "<p id=zb hidden>Show <button data-s=3600>1 h</button> <button data-s=21600>6 h</button> "   //
-        "<button data-s=86400>24 h</button> <button data-s=0>All</button></p>"                       //
+        "<p id=zb hidden>Show <button data-s=0>All</button> <button data-s=86400>1 day</button> "    //
+        "<button data-s=43200>12 h</button> <button data-s=10800>3 h</button></p>"                   //
         "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>" //
         "<div class=g><canvas id=unit></canvas></div>"                                               //
         "<p>One sample every 30 s, kept until a restart. Click a legend entry to show or hide it. "  //
