@@ -1762,6 +1762,10 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     col("effective", offsetof(heatlog_sample_t, effective));
     col("setpoint", offsetof(heatlog_sample_t, setpoint));
     col("demand", offsetof(heatlog_sample_t, demand));
+    col("smoothed", offsetof(heatlog_sample_t, smoothed));
+    col("integral", offsetof(heatlog_sample_t, integral));
+    col("kp", offsetof(heatlog_sample_t, kp));
+    col("ti", offsetof(heatlog_sample_t, ti));
     out("],\"state\":[");
     for (uint32_t i = 0; i < n; i++)
         out("%s%u", i ? "," : "", s[i].state);
@@ -1796,7 +1800,8 @@ static esp_err_t web_graph(httpd_req_t *req)
         "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>" //
         "<p>One sample a minute, kept until a restart. Click a legend entry to show or hide it. "    //
         "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "     //
-        "red rest after a defrost loop.</p>"                                                         //
+        "green hold after a defrost (demand is not raised), red rest after a defrost loop. "         //
+        "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint.</p>"  //
         "<script src='/chart.js?%s'></script>"                                                       //
         "<script>"                                                                                   //
         "var F=%d,U=F?'℉':'℃';"                                                                      //
@@ -1811,28 +1816,42 @@ static esp_err_t web_graph(httpd_req_t *req)
         "function ds(l,a,f,c,o){return Object.assign({label:l,data:p(a,f),borderColor:c,backgroundColor:c,"
         "borderWidth:1.5,pointRadius:0,spanGaps:false},o||{});}"           //
         "function shade(i){var s=d.subs[d.sub[i]],t=d.states[d.state[i]];" //
-        "return s=='defrost'?'#bdf':s=='rest'?'#fcc':t=='idle'?'#e4e4e4':t=='cold'?'#dcf':"
-        "t=='nosensor'?'#fe9':null;}"                                                                //
-        "var band={id:'band',beforeDatasetsDraw(c){var a=c.chartArea,g=c.ctx,s=c.scales.x;g.save();" //
-        "g.beginPath();g.rect(a.left,a.top,a.width,a.height);g.clip();"                              //
-        "for(var i=0;i<k;i++){var f=shade(i);if(!f)continue;"                                        //
-        "var x0=s.getPixelForValue(x[i]-d.interval*1000),x1=s.getPixelForValue(x[i]);"               //
-        "g.fillStyle=f;g.fillRect(x0,a.top,x1-x0+1,a.height);}g.restore();}};"                       //
+        "return s=='defrost'?'#bdf':s=='hold'?'#cfc':s=='rest'?'#fcc':t=='idle'?'#e4e4e4':t=='cold'?'#dcf':"
+        "t=='nosensor'?'#fe9':null;}"                                                                          //
+        "var band={id:'band',beforeDatasetsDraw(c){var a=c.chartArea,g=c.ctx,s=c.scales.x;g.save();"           //
+        "g.beginPath();g.rect(a.left,a.top,a.width,a.height);g.clip();"                                        //
+        "for(var i=0;i<k;i++){var f=shade(i);if(!f)continue;"                                                  //
+        "var x0=s.getPixelForValue(x[i]-d.interval*1000),x1=s.getPixelForValue(x[i]);"                         //
+        "g.fillStyle=f;g.fillRect(x0,a.top,x1-x0+1,a.height);}g.restore();}};"                                 //
+        "function cold(i){return d.states[d.state[i]]=='cold';}"                                               //
+        "function only(a,c){return a.map((v,i)=>cold(i)==c?v:null);}"                                          //
+        "function tune(i){var v=d.kp[i];if(v==null)return '';"                                                 //
+        "return 'kp '+(cold(i)?v/100+' ℃/℃':v+' W/℃')+(d.ti[i]?', ti '+d.ti[i]+' min':', no integral');}"      //
+        "var mk=[],last=[];for(var i=0;i<k;i++){var t=tune(i),c=+cold(i);if(!t)continue;"                      //
+        "if(last[c]&&last[c]!=t)mk.push(i);last[c]=t;}"                                                        //
+        "var mark={id:'mark',afterDatasetsDraw(c){var a=c.chartArea,g=c.ctx,s=c.scales.x;g.save();"            //
+        "g.strokeStyle=g.fillStyle='#444';g.setLineDash([3,3]);g.font='11px sans-serif';"                      //
+        "mk.forEach(i=>{var v=s.getPixelForValue(x[i]-d.interval*1000);"                                       //
+        "g.beginPath();g.moveTo(v,a.top);g.lineTo(v,a.bottom);g.stroke();g.fillText(tune(i),v+3,a.top+11);});" //
+        "g.restore();}};"                                                                                      //
         "function time(v){return new Date(v).toLocaleString([],Object.assign({hour:'2-digit',minute:'2-digit'},"
         "x[k-1]-x[0]>864e5?{weekday:'short'}:{}));}"                                                          //
         "function opt(y){return{animation:false,interaction:{mode:'index',intersect:false},"                  //
-        "plugins:{tooltip:{callbacks:{title:t=>time(t[0].parsed.x)}}},"                                       //
+        "plugins:{tooltip:{callbacks:{title:t=>time(t[0].parsed.x),footer:t=>tune(t[0].dataIndex)}}},"        //
         "scales:Object.assign({x:{type:'linear',min:x[0]-d.interval*1000,max:x[k-1],"                         //
         "ticks:{callback:time,maxTicksLimit:12}}},y)};}"                                                      //
-        "new Chart(document.getElementById('temps'),{type:'line',plugins:[band],data:{datasets:["             //
+        "new Chart(document.getElementById('temps'),{type:'line',plugins:[band,mark],data:{datasets:["        //
         "ds('Room',d.room,tc,'#c00'),"                                                                        //
+        "ds('Room, smoothed',d.smoothed,tc,'#e99',{borderWidth:1}),"                                          //
         "ds('Target',d.target,tc,'#080',{stepped:true}),"                                                     //
         "ds('Effective target',d.effective,tc,'#0b0',{stepped:true,borderDash:[4,4]}),"                       //
         "ds('Setpoint',d.setpoint,tc,'#888',{stepped:true,hidden:true}),"                                     //
+        "ds('Setpoint integral',only(d.integral,true),tc,'#a6a',{stepped:true,hidden:true}),"                 //
         "ds('Outdoor',d.outdoor,tc,'#08c',{hidden:true})]},"                                                  //
         "options:opt({y:{title:{display:true,text:U}}})});"                                                   //
-        "new Chart(document.getElementById('power'),{type:'line',plugins:[band],data:{datasets:["             //
+        "new Chart(document.getElementById('power'),{type:'line',plugins:[band,mark],data:{datasets:["        //
         "ds('Heat wanted',d.heatw,n,'#f80'),"                                                                 //
+        "ds('Integral',only(d.integral,false),n,'#fb6',{borderDash:[4,4]}),"                                  //
         "ds('Power',d.power,n,'#c00'),"                                                                       //
         "ds('Demand',d.demand,n,'#06c',{stepped:true,yAxisID:'d'})]},"                                        //
         "options:opt({y:{title:{display:true,text:'W'}},"                                                     //
@@ -2057,7 +2076,7 @@ static esp_err_t web_control(httpd_req_t *req)
         tr(NULL);
         if (!*password)
             addb("Heat control", "autoe", "Heating\ncontrol");
-        revk_web_send(req, "<td colspan=4>Heating control (heat mode) <a href=/graph>Graph</a></td>");
+        revk_web_send(req, "<td colspan=4>Heating control (heat mode)</td>");
         tre();
         addslider("autoe", "Target", "autot", tmin, tmax, "0.1");
         tr("autoe");
@@ -2163,6 +2182,7 @@ static esp_err_t web_control(httpd_req_t *req)
         "setInterval(function() {if(!ws.readyState)ws.close();else if(ws.readyState==1)ws.send('');},1000);"   //
         "</script>",
         fahrenheit ? "Math.round(10*((v*9/5)+32))/10+'℉'" : "v+'℃'");
+    revk_web_send(req, "<p><a href=/graph>Heating graph</a></p>"); // Just above the footer's Settings link
     return revk_web_foot(req, 0, websettings, b.protocol_set ? proto_name() : NULL);
 }
 
@@ -3027,7 +3047,7 @@ static void send_ha_config(void)
     }
     addnumber(!nofaikoutauto, "autot", "Heating target", tmin, tmax, "0.1", "°C");
     addnumber(!nofaikoutauto, "pidkp", "Heating gain", 0, 5000, "10", "W/°C");
-    addnumber(!nofaikoutauto, "pidti", "Heating integral time", 1, 1000, "1", "min");
+    addnumber(!nofaikoutauto, "pidti", "Heating integral time", 0, 1000, "1", "min");
     if (asprintf(&topic, "%s/sensor/%sctl/config", topicha, revk_id) >= 0) {
         if (nofaikoutauto)
             revk_mqtt_send_str(topic);
@@ -3499,11 +3519,16 @@ static void heatctl_tick(uint32_t now)
     float wasset = ctl.setpoint;
     heatctl_out_t o = heatctl_step(&heatctl, &p, &in, now);
     ctl = o;
+    uint8_t cold = (o.state == HEATCTL_COLD), pi = (cold || o.state == HEATCTL_DEMAND); // A PI loop is running
     heatlog_in_t l = {
-        .room = isnan(o.room) ? daikin.env : o.room,
+        .room = in.room,
         .outdoor = in.outdoor,
         .heatw = o.heatw,
         .power = (daikin.status_known & CONTROL_consumption) ? daikin.consumption : NAN,
+        .smoothed = isnan(in.room) ? NAN : o.room, // o.room keeps the last reading once there is none
+        .integral = pi ? o.integral : NAN,
+        .kp = pi ? (cold ? p.cold_kp : p.kp) : NAN,
+        .ti = pi ? (cold ? p.cold_ti : p.ti) / 60.0 : NAN,
         .target = autot ? (float)autot / autot_scale : NAN,
         .effective = o.state != HEATCTL_OFF ? o.target : NAN,
         .setpoint = (daikin.status_known & CONTROL_temp) ? daikin.temp : NAN,

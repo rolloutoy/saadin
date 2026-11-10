@@ -8,14 +8,18 @@
 #define HEATLOG_NONE INT16_MIN // Value not known
 
 typedef struct {     // Inputs, about once a second, NAN if not known
-    float room;      // Room temperature (°C), mean over the sample
+    float room;      // Room temperature, raw sensor reading (°C), mean over the sample
     float outdoor;   // Outdoor temperature (°C), mean
     float heatw;     // Heat wanted (W), mean
     float power;     // Power consumption (W), mean
+    float smoothed;  // Room temperature as the controller sees it, smoothed (°C), mean
     float target;    // Target, auto.t (°C), last in the sample
     float effective; // Effective target, with the curve (°C), last
     float setpoint;  // Unit setpoint (°C), last
     float demand;    // Unit demand (%), last
+    float integral;  // PI integral, last: W, or setpoint (°C) in COLD
+    float kp;        // PI gain in use, last: W per °C, or °C per °C in COLD
+    float ti;        // PI integral time in use (min), last
     uint8_t state;   // heatctl_state_t, last
     uint8_t sub;     // heatctl_sub_t, last, but a defrost anywhere in the sample wins
 } heatlog_in_t;
@@ -26,15 +30,19 @@ typedef struct { // One sample, temperatures in 0.01 °C, HEATLOG_NONE if not kn
     int16_t outdoor;
     int16_t heatw; // W
     int16_t power; // W
+    int16_t smoothed;
     int16_t target;
     int16_t effective;
     int16_t setpoint;
-    int16_t demand; // %
+    int16_t demand;   // %
+    int16_t integral; // W, or 0.01 °C in COLD
+    int16_t kp;       // W per °C, or 0.01 °C per °C in COLD
+    int16_t ti;       // min
     uint8_t state;
     uint8_t sub;
 } heatlog_sample_t;
 
-#define HEATLOG_MEANS 4 // room, outdoor, heatw, power
+#define HEATLOG_MEANS 5 // room, outdoor, heatw, power, smoothed
 
 typedef struct {
     heatlog_sample_t *sample; // Ring of n samples

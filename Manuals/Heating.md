@@ -115,7 +115,7 @@ Set these on the *Advanced* settings page, or over MQTT. While the controller is
 |`demand.minrun`|30 min|Minimum heating time before heating off|
 |`demand.fan`|Leave|Fan speed: `Leave`, `Auto`, `1`–`5` or `Quiet`|
 |`pid.kp`|300 W/°C|Extra heat per degree below the target|
-|`pid.ti`|90 min|Integral time. Shorter corrects a steady error faster|
+|`pid.ti`|90 min|Integral time. Shorter corrects a steady error faster. 0 turns the integral off: it stays where it is, so heat wanted is that plus `pid.kp` times the error (P only)|
 
 ### Heating off
 
@@ -137,7 +137,7 @@ Set these on the *Advanced* settings page, or over MQTT. While the controller is
 |`cold.set`|23 °C|Starting setpoint|
 |`cold.rate`|1800 s|Minimum time between 0.5 °C setpoint steps|
 |`cold.kp`|2.0|Setpoint change, °C per degree below the target|
-|`cold.ti`|120 min|Integral time|
+|`cold.ti`|120 min|Integral time. 0 turns the integral off, so the setpoint is `cold.set` plus `cold.kp` times the error|
 |`cold.fan`|Leave|Fan speed in cold-weather mode|
 
 The cold-weather gains have not been tested on a real unit yet.
@@ -197,7 +197,7 @@ Or set `auto.topic` to a topic to follow and `auto.payload` to the JSON field in
 - **Status:** the status JSON (`state/GuestAC/status`) has `ctl` (state), `ctl_sub` (`defrost`, `hold` or `rest`), `ctl_target` (target with the curve offset), `ctl_curve` (the curve offset), `ctl_heatw` (heat wanted, W) and `ctl_i` (the integral). `ctl_i` is in watts, except in cold-weather mode, where it is the setpoint integral in °C.
 - **MQTT:** each change of state is sent to `info/GuestAC/heatctl`, with the reason and the inputs.
 - **Home Assistant:** a "Control state" sensor, "Heat wanted", "Heating integral" and "Effective target" sensors, and numbers for "Heating target", "Heating gain" (`pid.kp`) and "Heating integral time" (`pid.ti`). `hvac_action` shows heating, idle or defrosting.
-- **Graph:** the *Graph* link next to *Heating control* on the main page opens `/graph`. It shows two charts for up to the last 3 days. The first has the room temperature, target and effective target, plus the setpoint and outdoor temperature, which are hidden until you click them in the legend. The second has heat wanted, power (the unit's power consumption) and demand. Heating off, cold weather, no room reading and defrosts are shaded. The device keeps one sample a minute, 3 days of them (about 100 KB of PSRAM), or 6 hours on boards without PSRAM. The samples are lost when the device restarts. Reload the page to update it. Heat wanted and power are both electrical watts, so you can check the power the unit draws at each demand level against `demand.table`. The samples are also available as JSON at `/graph.json`.
+- **Graph:** the *Heating graph* link at the bottom of the main page, above *Settings*, opens `/graph`. It shows two charts for up to the last 3 days. The first has the room temperature as the sensor reads it and as the controller sees it after `auto.smooth`, the target and the effective target, plus the setpoint, the setpoint integral at full power and the outdoor temperature, which are hidden until you click them in the legend. The second has heat wanted, the integral part of it, power (the unit's power consumption) and demand. Heat wanted minus the integral is the proportional part, `pid.kp` times the error. Heating off, cold weather, no room reading, defrosts, the hold after a defrost and the rest after a defrost loop are shaded. A dashed line marks each change of kp or ti (`pid.kp`/`pid.ti`, or `cold.kp`/`cold.ti` at full power), and the tooltip shows the values in use. The device keeps one sample a minute, 3 days of them (about 140 KB of PSRAM), or 6 hours on boards without PSRAM. The samples are lost when the device restarts. Reload the page to update it. Heat wanted and power are both electrical watts, so you can check the power the unit draws at each demand level against `demand.table`. The samples are also available as JSON at `/graph.json`.
 - **Log:** each change of state with its reason, for example `heatctl: DEMAND -> IDLE (…)`, and a status line every 10 minutes.
 
 `no.faikoutauto` (*Hide heating control*) hides the heating control from Home Assistant. It also hides it from the web page, unless the controller is on and no settings password is set.

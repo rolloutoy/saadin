@@ -30,6 +30,10 @@ static heatlog_in_t in_none(void)
         .effective = NAN,
         .setpoint = NAN,
         .demand = NAN,
+        .smoothed = NAN,
+        .integral = NAN,
+        .kp = NAN,
+        .ti = NAN,
         .state = HEATCTL_OFF,
         .sub = HEATCTL_SUB_NONE,
     };
@@ -47,6 +51,10 @@ static heatlog_in_t in_demand(void)
         .effective = 21.3,
         .setpoint = 30,
         .demand = 70,
+        .smoothed = 21.1,
+        .integral = 350,
+        .kp = 300,
+        .ti = 90,
         .state = HEATCTL_DEMAND,
         .sub = HEATCTL_SUB_NONE,
     };
@@ -109,10 +117,11 @@ static void test_unknown(void)
     }
     CHECK("unknown one sample", heatlog_get(&l, out, 4) == 1);
     CHECK("partly known room", out[0].room == 2050);
-    CHECK("unknown values", out[0].outdoor == HEATLOG_NONE && out[0].heatw == HEATLOG_NONE &&
-                                out[0].power == HEATLOG_NONE && out[0].target == HEATLOG_NONE &&
-                                out[0].effective == HEATLOG_NONE && out[0].setpoint == HEATLOG_NONE &&
-                                out[0].demand == HEATLOG_NONE);
+    CHECK("unknown values",
+          out[0].outdoor == HEATLOG_NONE && out[0].heatw == HEATLOG_NONE && out[0].power == HEATLOG_NONE &&
+              out[0].target == HEATLOG_NONE && out[0].effective == HEATLOG_NONE && out[0].setpoint == HEATLOG_NONE &&
+              out[0].demand == HEATLOG_NONE && out[0].smoothed == HEATLOG_NONE && out[0].integral == HEATLOG_NONE &&
+              out[0].kp == HEATLOG_NONE && out[0].ti == HEATLOG_NONE);
     CHECK("off state", out[0].state == HEATCTL_OFF);
 }
 
@@ -132,6 +141,36 @@ static void test_defrost(void)
     CHECK("defrost two samples", heatlog_get(&l, out, 4) == 2);
     CHECK("a defrost in the sample wins", out[0].sub == HEATCTL_SUB_DEFROST);
     CHECK("defrost does not carry over", out[1].sub == HEATCTL_SUB_HOLD);
+}
+
+static void test_tuning(void)
+{
+    heatlog_sample_t buf[4], out[4];
+    heatlog_t l;
+    heatlog_init(&l, buf, 4);
+    heatlog_in_t in = in_demand();
+    uint32_t now = 1;
+    for (int i = 0; i < HEATLOG_INTERVAL; i++, now++) {
+        in.smoothed = i < 30 ? 21 : 21.2;
+        in.integral = i < 50 ? 300 : 360.4;
+        in.kp = i < 50 ? 300 : 400;
+        heatlog_add(&l, &in, now);
+    }
+    in.state = HEATCTL_COLD; // The COLD loop: integral as setpoint (°C), kp in °C per °C
+    in.integral = 24.25;
+    in.kp = 2;
+    in.ti = 120;
+    for (int i = 0; i < HEATLOG_INTERVAL; i++, now++)
+        heatlog_add(&l, &in, now);
+    heatlog_add(&l, &in, now);
+    CHECK("tuning two samples", heatlog_get(&l, out, 4) == 2);
+    CHECK("smoothed room is the mean", out[0].smoothed == 2110);
+    CHECK("integral is the last, in W", out[0].integral == 360);
+    CHECK("kp is the last", out[0].kp == 400);
+    CHECK("ti in minutes", out[0].ti == 90);
+    CHECK("cold integral in 0.01 °C", out[1].state == HEATCTL_COLD && out[1].integral == 2425);
+    CHECK("cold kp in 0.01", out[1].kp == 200);
+    CHECK("cold ti in minutes", out[1].ti == 120);
 }
 
 static void test_wrap(void)
@@ -174,6 +213,7 @@ int main(void)
     test_one();
     test_unknown();
     test_defrost();
+    test_tuning();
     test_wrap();
     test_gap_and_clamp();
     printf("%d passed, %d failed\n", passed, failed);

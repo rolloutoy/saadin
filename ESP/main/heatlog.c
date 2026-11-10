@@ -29,16 +29,21 @@ static void keep(heatlog_t *l, uint32_t now)
     float mean[HEATLOG_MEANS];
     for (int i = 0; i < HEATLOG_MEANS; i++)
         mean[i] = l->num[i] ? l->sum[i] / l->num[i] : NAN;
+    float pi = l->last.state == HEATCTL_COLD ? 100 : 1; // The COLD loop works on the setpoint, so finer units
     heatlog_sample_t s = {
         .t = now,
         .room = scaled(mean[0], 100),
         .outdoor = scaled(mean[1], 100),
         .heatw = scaled(mean[2], 1),
         .power = scaled(mean[3], 1),
+        .smoothed = scaled(mean[4], 100),
         .target = scaled(l->last.target, 100),
         .effective = scaled(l->last.effective, 100),
         .setpoint = scaled(l->last.setpoint, 100),
         .demand = scaled(l->last.demand, 1),
+        .integral = scaled(l->last.integral, pi),
+        .kp = scaled(l->last.kp, pi),
+        .ti = scaled(l->last.ti, 1),
         .state = l->last.state,
         .sub = l->defrost ? HEATCTL_SUB_DEFROST : l->last.sub,
     };
@@ -65,7 +70,7 @@ void heatlog_add(heatlog_t *l, const heatlog_in_t *in, uint32_t now)
         keep(l, now);
         reset(l, now);
     }
-    const float v[HEATLOG_MEANS] = {in->room, in->outdoor, in->heatw, in->power};
+    const float v[HEATLOG_MEANS] = {in->room, in->outdoor, in->heatw, in->power, in->smoothed};
     for (int i = 0; i < HEATLOG_MEANS; i++)
         if (!isnan(v[i])) {
             l->sum[i] += v[i];
