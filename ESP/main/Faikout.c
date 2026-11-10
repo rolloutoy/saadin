@@ -1383,6 +1383,7 @@ const char *daikin_control(jo_t j, uint8_t insecure)
             jo_string(j, "field", tag);
             jo_string(j, "error", err);
             revk_error("control", &j);
+            jo_free(&s);
             return err;
         }
         t = jo_skip(j);
