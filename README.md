@@ -60,13 +60,7 @@ Säädin is firmware only. It is meant to run on [Faikout boards](https://shop.r
 
 ## Planned
 
-- **Demand control:**
-  - The Daikin gets a fixed setpoint.
-  - A PI controller driven by a BLE room sensor sets the demand limit (30–100%).
-  - Optional outdoor-temperature feedforward.
-  - Slow on/off cycling below minimum demand.
-- **Fixes to the existing auto mode:** stop it controlling against a stale BLE reading, and let it power off on overshoot when `lockmode` is set.
-- **Safer updates:** firmware upload from the browser and automatic rollback after a bad OTA.
+- **Heating control, next steps:** slow on/off cycling below the lowest demand, time-proportioning in the gap between 95% and 100% with quiet outdoor, and optional outdoor-temperature feedforward.
 - **Releases:** builds published as GitHub Releases, with Säädin naming throughout.
 
 ## Building
@@ -104,6 +98,7 @@ These manuals come from upstream and still use the Faikout name:
 
 - [Setup](Manuals/Setup.md)
 - [Controls](Manuals/Controls.md)
+- [Heating control](Manuals/Heating.md) (new in Säädin)
 - [Advanced](Manuals/Advanced.md)
 - [BLE sensors](Manuals/BLE.md)
 - [S21 protocol](Manuals/S21.md). The [upstream wiki](https://codeberg.org/RevK/ESP32-Faikout/wiki/S21-Protocol) is more up to date.
@@ -113,6 +108,26 @@ These manuals come from upstream and still use the Faikout name:
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
 **2026-11-10**
+- Replaced Faikout auto with a new heating controller. [Manuals/Heating.md](Manuals/Heating.md) explains how to use it, and [docs/heat-control.md](docs/heat-control.md) has the design.
+  - It runs only in heat mode, while `auto.e` is on and a target (`auto.t`) is set. `auto.e` is now off by default.
+  - It sends the unit a fixed setpoint and limits demand to hold the room at the target. It uses the room temperature from a BLE sensor or MQTT.
+  - When the room is warm, it turns heating off with a low setpoint.
+  - Below −15 °C outside, it runs at demand 100% and controls the room with the setpoint.
+  - It keeps its outputs as they are during a defrost. After several defrosts in a row, it turns heating off for a while.
+  - If the room reading stops for 30 minutes, the unit's own thermostat takes over at the target.
+  - It never turns the unit on or off, and leaves cool, dry and fan mode alone.
+  - When it stops for any reason (switched off, unit off or out of heat mode), it sets demand back to 100%, quiet outdoor off, and the setpoint to `stop.temp` (default 22 °C). A setpoint someone set at the same moment is kept.
+- New settings: `auto.curve` (target offset by outdoor temperature), `auto.stale`, `auto.smooth`, `stop.temp`, `demand.set`, `demand.table`, `demand.full`, `demand.start`, `demand.rate`, `demand.minrun`, `demand.fan`, `pid.kp`, `pid.ti`, `idle.temp`, `idle.over`, `idle.under`, `idle.min`, `idle.fan`, `cold.enter`, `cold.exit`, `cold.hold`, `cold.set`, `cold.rate`, `cold.kp`, `cold.ti`, `cold.fan` and `defrost.enter`, `defrost.exit`, `defrost.max`, `defrost.hold`, `defrost.loops`, `defrost.window`, `defrost.rest`.
+- Removed support for the Faikout BLE remote. BLE is now only for room temperature sensors. A remote is ignored: it no longer changes the unit's power, mode, setpoint or fan, and Säädin no longer advertises its own state over BLE for a remote to show.
+- Removed from Faikout auto: timed on/off, auto power on/off by temperature, heat/cool switching, auto fan, and the target range of the MQTT `control` command (its `env` still sets the room temperature). Removed settings: `auto.0`, `auto.1`, `auto.r`, `auto.p`, `auto.ptemp`, `auto.fmax`, `auto.lcontrol`, `lockmode`, `thermostat`, `thermref`, `temp.track`, `temp.adjust`, `temp.noflap`, `heat.over`, `heat.back`, `cool.over`, `cool.back`, `switchtemp`, `pushtemp`, `t.predicts`, `t.predictt`, `t.sample`, `t.coolmin`, `t.heatmax`, `no.fanauto`.
+- Frost protection (`frosttemp`) still turns the unit on in heat mode, but no longer changes its setpoint.
+- The web page's auto section is now an on switch, a target slider and a status line, for example "Demand 60% QO · target 21.3 (curve +0.3) · heat 350 W". Manual temperature, demand and quiet outdoor are greyed out while the controller runs. The settings page has the target curve, demand table and fan per state.
+- The status JSON has `ctl`, `ctl_sub`, `ctl_target`, `ctl_heatw` and `ctl_i`, and every change of state is sent as `info/<host>/heatctl` with the reason.
+- Home Assistant gets a "Control state" sensor, sensors for heat wanted, the integral and the effective target, and number entities for the target, `pid.kp` and `pid.ti`. The climate's target sets `auto.t` while the controller is on and the unit heats. Its mode no longer shows `heat_cool` while controlling. `hvac_action` is now reported by default (`no.hvacaction` is off), showing defrosting, idle or heating.
+- When a BLE room sensor stops reporting, its reading is dropped after 5 minutes instead of being kept.
+- The MQTT `temp` command sets `auto.t` while the controller is on and the unit is in heat mode, like the Home Assistant climate target.
+- `no.faikoutauto` (*Hide heating control*) now hides the heating controller from Home Assistant, and from the web page unless the controller is on and no settings password is set.
+- Fixed a small memory leak when a `control` command has a field that fails.
 - Firmware uploaded from the browser now starts on probation. Every page shows a banner with **Keep** and **Roll back now** buttons and a 10-minute countdown. Restarting from the web UI also keeps the firmware. If nobody keeps it in time, if it gets no IP address within 3 minutes, or if the device restarts any other way first (crash, power loss, MQTT `restart`), the device goes back to the previous firmware. The old firmware then says why the update was rolled back, until its next restart, and sends `info/upgrade` over MQTT. While new firmware is on probation, another upload is refused. This needs the new bootloader, flashed over USB once.
 - The "Firmware" tab can boot the previous firmware, which then goes through the same probation.
 - Faikout, or any other firmware that can't confirm itself, is installed without probation, so the bootloader doesn't switch it back on its next reset.

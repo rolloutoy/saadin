@@ -1,6 +1,6 @@
 # Web controls
 
-The web controls can be accesses using the name that has been set, we'll use `GuestAC` as an example. So visit `GuestAC.local` as a web page.
+Open the web controls with the hostname you set. This page uses `GuestAC` as the example, so the address is `GuestAC.local`.
 
 Example
 
@@ -8,24 +8,24 @@ Example
 
 ## Main operation
 
-The first section coverrs teh direct controls and status for the air-con unit. the exact options depends on the units and settings.
+The first section has the direct controls and the status of the aircon. The controls shown depend on the unit and on the settings.
 
-Making changes has immediate effect, and changes by other means, such as IR remote, show immediately (within seconds).
+A change takes effect at once. Changes made elsewhere, for example with the IR remote, show up within seconds.
 
-## Automated controls
+## Heating control
 
-The automated controls allow a separate layer of controls to be applied. These work by setting "Cool" and "Heat" as needed to achieve a desired temperature, much like the air-con's own "Auto" mode. But with more options.
+The heating control section has:
 
-The "Track" setting, if not "Off", enables the auto setting of *heat* and *cool* modes to aim for a target within a range.
+- **Heating control**: turns Säädin's heating controller on or off.
+- **Target**: the room temperature to keep, in 0.1 °C steps.
+- **A status line**: what the controller is doing, for example "Demand 60% QO · target 21.3 · heat 350 W".
 
-The "Target" is the target temperature. You will see the "Set" in the main controls change to be many degrees below or above the target at various times to *aim* for the target.
+The controller works only when the unit is on in heat mode. It does not turn the unit on or off. While it runs, *Set*, *Demand* and *Quiet outdoor* in the main section are greyed out, because the controller sets them. *Set* shows 30 °C most of the time, which is expected.
 
-The "On"/"Off" times can be set. If not `00:00` (midnight) then they cause the air-con to turn on, or off, at the time specified. Note, you may need to ensure the correct timezone in *settings*. Each is disabled by setting `00:00` (midnight) or setting both to the same time.
-
-The "Auto⏻" control enables automatic *on*/*off* based on temperature. If well outside target range and off, it turns on. When inside range for a time when on, it turns off.
+See [Heating control](Heating.md) for how it works and for its settings.
 
 ## BLE
 
-The *Target* uses the air-con's own temperature sensor normally, but if you have a BlueCoinT BLE or Telink sensor you can select that as an external reference. This allows the room to be controlled based on a sensor that may be by your bed or where your sit.
+The heating control needs a room temperature reading, which the unit's own sensor does not give. If BLE is on, choose a BlueCoinT, Telink or GoveeLife sensor here, ideally one placed where you sit or sleep. Without a BLE sensor, send the room temperature over MQTT instead (see [Heating control](Heating.md#room-temperature-over-mqtt)).
 
-For more about sensors, see [here](BLE.md).
+For more about sensors, see [BLE sensors](BLE.md).

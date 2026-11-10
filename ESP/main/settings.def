@@ -39,9 +39,8 @@ bit	no.humidity								// Unit does not have humidity
 bit	no.humidify	1							// Unit does not have humidifier
 bit	no.hourly	1		.live					// Do not do hourly S21 poll (DH)
 
-bit	no.faikoutauto			.live.old="nofaikinauto"		// Do not show Faikout auto controls (unless already set up and no password)
-bit	no.hvacaction	1							// Do not track/report hvac_action for Faikout auto mode in HA
-bit	no.fanauto								// Do not control fan in Faikout auto mode
+bit	no.faikoutauto			.live.old="nofaikinauto"		// Do not show heating control (unless enabled and no password)
+bit	no.hvacaction								// Do not report hvac_action in HA
 bit	no.homepreset								// Do not include a home in HA preset list
 bit	no.icons			.live					// Do not show icons on web UI
 
@@ -61,8 +60,6 @@ bit	cn.mark900			.live					// CN_WIRED. mark using 900uS not 1000uS
 
 enum	fantype				.enums="Default,5 level+auto,3 level,3 level+auto"	.old="fanstep"	// Fan type override
 
-bit	lockmode								// Do not auto switch heat/cool modes in Faikout auto
-
 u8	protocol			.hide					// Internal protocol as found, saved when found, can be used with protofix
 bit	protofix			.hide					// Protofix forces no change, use nos21, nox50a, etc instead maybe
 
@@ -70,56 +67,64 @@ u32	reporting	60							// Status report period (s)
 
 u8	uart		1		.fix .hide				// UART number
 
-u8	thermref	50		.live					// Percentage inlet rather than home temp used by your aircon
-
-u8	switchtemp	0.5		.live	.decimal=1 .unit="℃" .old="switch10"	// Increase max (heating) or decrease min (cooling)
-u8	pushtemp	0.1		.live	.decimal=1 .unit="℃" .old="push10"	// Increase min (heating) or decrease max (cooling)
-
-s8	cool.over	6		.live	.unit="℃"			// For cooling, push (decrease) target sent to aircon by this from min to force cooling before reaching target
-u8	cool.back	6		.live	.unit="℃"			// For cooling, pull (increase) target sent to aircon by this from max to stop cooling after reaching target
-
-s8	heat.over	6		.live	.unit="℃"			// For heating, push (increase) target sent to aircon by this from max to force heating before reaching target
-u8	heat.back	6		.live	.unit="℃"			// For heating, pull (decrease) target sent to aircon by this from min to stop heating after reaching target
-
 s8	min.outside	-100		.live	.unit="℃"			// Lowest allowed outside temp allowed for operation (if known)
 
 u8	fanrun				.live	.unit="min"			// Auto run fan after cool/dry
 
 s8	frosttemp	-100		.live	.unit="℃"			// Frost protect (below this, turn on hot regardless)
 
-bit	temp.track	0		.live					// Set target temp based on Daikin measured temp not required target
-bit	temp.adjust	1		.live					// Adjust target temp allowing for different Daikin measure to external measure
-u16	temp.noflap	0		.live	.unit="s"			// Min time between target temp changes
-
 #ifdef CONFIG_BT_NIMBLE_ENABLED
-bit	ble.enable			.hide .old="ble"				// Enable BLE for sensors or remote
+bit	ble.enable			.hide .old="ble"				// Enable BLE for room temperature sensors
 s	auto.b				.live					// BLE sensor ID
 #endif
 
-bit	auto.e		1		.live					// Enable auto time and power operations
-u16	auto.0				.live					// HHMM format turn off time
-u16	auto.1				.live					// HHMM format turn on time
-u16	auto.t				.live	.decimal=1			// Faikout auto target temperature
-u8	auto.r				.live	.decimal=1			// Faikout auto margin either side of autot
-bit	auto.p				.live					// Enable auto power on/off (regardless of times)
-u8	auto.fmax	5		.live	.old="fmaxauto"			// Max fan setting when starting heat/cool way off from target
-u8	auto.ptemp	0.5		.live	.decimal=1	.old="autop10"	// Auto power on/off by temperature deviation by this amount
-bit	auto.lcontrol	0		.live					// Auto toggle on/off LED based on current HVAC action
+// Heating control (heatctl), see docs/heat-control.md
+bit	auto.e				.live					// Heating control on (heat mode only)
+u16	auto.t				.live	.decimal=1 .unit="℃"		// Heating control target room temperature
+s	auto.curve			.live					// Target offset by outdoor temperature, outdoor:offset,... e.g. -25:1.0,-10:0.5,0:0
+u16	auto.stale	1800		.live	.unit="s"			// No room reading for this long falls back to the unit's own thermostat
+u16	auto.smooth	300		.live	.unit="s"			// Room temperature smoothing
+u16	stop.temp	22		.live	.decimal=1 .unit="℃"		// Setpoint left on the unit when heating control stops
 
-s	auto.topic								// Topic to follow for reference temperature for Faikout auto
-s	auto.payload								// JSON field in payload of above topic for reference temp
+s	auto.topic								// Topic to follow for room temperature
+s	auto.payload								// JSON field in payload of above topic for room temperature
 
-bit	thermostat			.live					// Faikout auto simple thermostat mode (heat to max, cool to min)
+u16	demand.set	30		.live	.decimal=1 .unit="℃"		// Setpoint while heating on demand
+s	demand.table	"40:220,50:280,60:350,70:400,80:520,85:580,95:640,100q:1510,100:2470"	.live	// Demand table, demand:watts,... (100q is 100 with quiet outdoor)
+bit	demand.full	1		.live					// Heating on demand may use plain 100% (quiet outdoor off)
+u8	demand.start	60		.live	.unit="%"			// On start, the integral is the watts of this demand
+u16	demand.rate	600		.live	.unit="s"			// Minimum time between demand changes
+u8	demand.minrun	30		.live	.unit="min"			// Minimum heating before heating off
+enum	demand.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet"	// Fan while heating on demand
+u16	pid.kp		300		.live	.unit="W/℃"			// Heat wanted per degree below target
+u16	pid.ti		90		.live	.unit="min"			// Integral time
 
+u16	idle.temp	16		.live	.decimal=1 .unit="℃"		// Setpoint while heating is off
+u8	idle.over	0.5		.live	.decimal=1 .unit="℃"		// Heating off above target by more than this
+u8	idle.under	0		.live	.decimal=1 .unit="℃"		// Heating back on below target by more than this
+u8	idle.min	30		.live	.unit="min"			// Minimum time heating off
+enum	idle.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet"	// Fan while heating is off
+
+s8	cold.enter	-15		.live	.unit="℃"			// Full power below this outdoor temperature
+s8	cold.exit	-10		.live	.unit="℃"			// Back to demand above this outdoor temperature
+u8	cold.hold	15		.live	.unit="min"			// Outdoor temperature must stay past cold.enter or cold.exit this long
+u16	cold.set	23		.live	.decimal=1 .unit="℃"		// Starting setpoint at full power
+u16	cold.rate	600		.live	.unit="s"			// Minimum time between 0.5℃ setpoint steps at full power
+u8	cold.kp		2		.live	.decimal=1			// Setpoint change per degree below target at full power
+u16	cold.ti		120		.live	.unit="min"			// Integral time at full power
+enum	cold.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet"	// Fan at full power
+
+u8	defrost.enter	5		.live	.unit="℃"			// Defrost when liquid drops below this
+u8	defrost.exit	25		.live	.unit="℃"			// Defrost over when liquid is back to this
+u8	defrost.max	30		.live	.unit="min"			// Defrost over after this long anyway
+u8	defrost.hold	10		.live	.unit="min"			// After a defrost, demand at most 95% for this long (0 for no hold)
+u8	defrost.loops	3		.live					// More defrosts than this...
+u8	defrost.window	90		.live	.unit="min"			// ...within this long...
+u8	defrost.rest	15		.live	.unit="min"			// ...turn heating off for this long
 
 u8	t.min		16		.live					// Min temp setting of system
-u8	t.coolmin	16		.live					// Min temp setting for Faikout auto when cooling
 u8	t.max		32		.live					// Max temp setting of system
-u8	t.heatmax	32		.live					// Max temp setting for Faikout auto when heating
-u32	t.predicts	30		.unit="s"				// Temp prediction sample time
-u32	t.predictt	120		.unit="s"				// Temp prediction total time factor
-u32	t.sample	900		.unit="s"				// Sample period for making adjustments
-u32	t.control	600		.unit="s"					// Control messages timeout
+u32	t.control	600		.unit="s"					// Room temperature (env) timeout
 
 #ifdef  CONFIG_IDF_TARGET_ESP32S3
 gpio	tx	-48								// Tx
