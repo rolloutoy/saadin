@@ -2233,8 +2233,9 @@ web_status (httpd_req_t *req)
    if (req->method == HTTP_GET)
       return ESP_OK;            // pre handshake
    int fd = httpd_req_to_sockfd (req);
-   void wsend (jo_t * jp)
+   esp_err_t wsend (jo_t * jp)
    {
+      esp_err_t e = ESP_OK;
       char *js = jo_finisha (jp);
       if (js)
       {
@@ -2243,12 +2244,13 @@ web_status (httpd_req_t *req)
          ws_pkt.payload = (uint8_t *) js;
          ws_pkt.len = strlen (js);
          ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-         // If the async send fails the peer is gone; close the session so its socket slot is freed
-         // rather than leaked (a leaked slot is invisible to the select() loop forever).
-         if (httpd_ws_send_frame_async (req->handle, fd, &ws_pkt))
-            httpd_sess_trigger_close (req->handle, fd);
+         // If the async send fails the peer is gone; returning the error makes httpd close the session
+         // straight away so its socket slot is freed. Do not use httpd_sess_trigger_close() here, it
+         // queues work from the httpd task itself, which can block that task forever.
+         e = httpd_ws_send_frame_async (req->handle, fd, &ws_pkt);
          free (js);
       }
+      return e;
    }
    esp_err_t status (void)
    {
@@ -2257,8 +2259,7 @@ web_status (httpd_req_t *req)
       int t = revk_shutting_down (&reason);
       if (t)
          jo_string (j, "shutdown", reason);
-      wsend (&j);
-      return ESP_OK;
+      return wsend (&j);
    }
    // received packet
    httpd_ws_frame_t ws_pkt;
