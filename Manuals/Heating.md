@@ -170,7 +170,7 @@ The watts are the power the unit drew at each level in a test on one unit. The c
 
 `auto.curve` raises or lowers the target with the outdoor temperature. It is a list of `outdoor:offset` points, for example `-25:1.0,-10:0.5,0:0`: 1 °C warmer at −25 °C outside, 0.5 °C at −10 °C, and no change at 0 °C and above. Between points the offset is interpolated linearly. Beyond the ends it stays at the end value. The outdoor temperature is smoothed over 30 minutes.
 
-The web status line shows the curve offset, for example "target 21.3 (curve +0.3)". An invalid curve is reported on `error/GuestAC/heatctl` and no offset is used.
+The web status line shows the curve offset to 0.01 °C, for example "target 21.3 (curve +0.30)". It is left out when the offset is 0. An invalid curve is reported on `error/GuestAC/heatctl` and no offset is used.
 
 ## Tuning
 
@@ -194,7 +194,7 @@ Or set `auto.topic` to a topic to follow and `auto.payload` to the JSON field in
 
 ## Watching it
 
-- **Status:** the status JSON (`state/GuestAC/status`) has `ctl` (state), `ctl_sub` (`defrost`, `hold` or `rest`), `ctl_target` (target with the curve offset), `ctl_heatw` (heat wanted, W) and `ctl_i` (the integral). `ctl_i` is in watts, except in cold-weather mode, where it is the setpoint integral in °C.
+- **Status:** the status JSON (`state/GuestAC/status`) has `ctl` (state), `ctl_sub` (`defrost`, `hold` or `rest`), `ctl_target` (target with the curve offset), `ctl_curve` (the curve offset), `ctl_heatw` (heat wanted, W) and `ctl_i` (the integral). `ctl_i` is in watts, except in cold-weather mode, where it is the setpoint integral in °C.
 - **MQTT:** each change of state is sent to `info/GuestAC/heatctl`, with the reason and the inputs.
 - **Home Assistant:** a "Control state" sensor, "Heat wanted", "Heating integral" and "Effective target" sensors, and numbers for "Heating target", "Heating gain" (`pid.kp`) and "Heating integral time" (`pid.ti`). `hvac_action` shows heating, idle or defrosting.
 - **Log:** each change of state with its reason, for example `heatctl: DEMAND -> IDLE (…)`, and a status line every 10 minutes.

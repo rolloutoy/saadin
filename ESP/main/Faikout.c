@@ -337,6 +337,7 @@ static void heatctl_status_json(jo_t j)
         jo_string(j, "ctl_sub", heatctl_sub_name(ctl.sub));
     if (ctl.state != HEATCTL_OFF) {
         jo_litf(j, "ctl_target", "%.2f", ctl.target);
+        jo_litf(j, "ctl_curve", "%.2f", ctl.curve);
         if (!isnan(ctl.heatw))
             jo_int(j, "ctl_heatw", lroundf(ctl.heatw));
         jo_litf(j, "ctl_i", "%.1f", ctl.integral);
@@ -1925,32 +1926,32 @@ static esp_err_t web_control(httpd_req_t *req)
     }
     revk_web_send(
         req,
-        "</form>"                                                                                               //
-        "</div>"                                                                                                //
-        "<style>"                                                                                               //
-        ".xautoe .autoe,"                                                                                       //
-        ".xslave .slave,"                                                                                       //
-        ".xloopback .loopback,"                                                                                 //
-        ".xantifreeze .antifreeze,"                                                                             //
-        ".xcontrol .control,"                                                                                   //
-        ".xoffline .offline {display:none;}"                                                                    //
-        ".isctl .ctl{opacity:0.4;pointer-events:none;}"                                                         //
-        "</style>"                                                                                              //
-        "<script>"                                                                                              //
-        "var ws=undefined;"                                                                                     //
-        "var reboot=false;"                                                                                     //
-        "function cf(v){return %s;}"                                                                            //
-        "function g(n){return document.getElementById(n);};"                                                    //
-        "function b(n,v){var d=g(n);if(d)d.checked=v;}"                                                         //
-        "function s(n,v){var d=g(n);if(d)d.textContent=v;}"                                                     //
-        "function n(n,v){var d=g(n);if(d)d.value=v;}"                                                           //
-        "function e(n,v){var d=g(n+v);if(d)d.checked=true;}"                                                    //
-        "function w(n,v){var m=new Object();m[n]=v;ws.send(JSON.stringify(m));}"                                //
-        "function t(n,v){s(n,v!=undefined?cf(v):'---');}"                                                       //
-        "function ctlt(o){"                                                                                     //
-        "if(!o.ctl||o.ctl=='off')return o.autoe?'Not running (unit off or not heating)':'';"                    //
-        "var c=(o.ctl_target!=undefined&&o.autot!=undefined)?Math.round(10*(o.ctl_target-o.autot))/10:0;"       //
-        "var tg=o.ctl_target!=undefined?' · target '+cf(o.ctl_target)+(c?' (curve '+(c>0?'+':'')+c+')':''):'';" //
+        "</form>"                                                                            //
+        "</div>"                                                                             //
+        "<style>"                                                                            //
+        ".xautoe .autoe,"                                                                    //
+        ".xslave .slave,"                                                                    //
+        ".xloopback .loopback,"                                                              //
+        ".xantifreeze .antifreeze,"                                                          //
+        ".xcontrol .control,"                                                                //
+        ".xoffline .offline {display:none;}"                                                 //
+        ".isctl .ctl{opacity:0.4;pointer-events:none;}"                                      //
+        "</style>"                                                                           //
+        "<script>"                                                                           //
+        "var ws=undefined;"                                                                  //
+        "var reboot=false;"                                                                  //
+        "function cf(v){return %s;}"                                                         //
+        "function g(n){return document.getElementById(n);};"                                 //
+        "function b(n,v){var d=g(n);if(d)d.checked=v;}"                                      //
+        "function s(n,v){var d=g(n);if(d)d.textContent=v;}"                                  //
+        "function n(n,v){var d=g(n);if(d)d.value=v;}"                                        //
+        "function e(n,v){var d=g(n+v);if(d)d.checked=true;}"                                 //
+        "function w(n,v){var m=new Object();m[n]=v;ws.send(JSON.stringify(m));}"             //
+        "function t(n,v){s(n,v!=undefined?cf(v):'---');}"                                    //
+        "function ctlt(o){"                                                                  //
+        "if(!o.ctl||o.ctl=='off')return o.autoe?'Not running (unit off or not heating)':'';" //
+        "var c=o.ctl_curve||0,cs=c?' (curve '+(c>0?'+':'')+c.toFixed(2)+')':'';"             //
+        "var tg=o.ctl_target!=undefined?' · target '+cf(o.ctl_target)+cs:'';"                //
         "var r=o.ctl=='demand'?'Demand '+o.demand+'%%'+(o.quiet?' QO':'')+tg+(o.ctl_heatw!=undefined?' · heat '+o.ctl_heatw+' W':''):" //
         "o.ctl=='cold'?'Cold · setpoint '+cf(o.temp)+tg:"                                                   //
         "o.ctl=='idle'?'Heating off'+tg:"                                                                   //

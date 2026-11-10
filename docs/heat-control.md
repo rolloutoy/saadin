@@ -100,8 +100,8 @@ If the unit reports a demand, setpoint, QO or fan that differs from what the con
 ## Visibility
 
 - **Log:** every state or sub-state change with its reason, e.g. `heatctl: DEMAND -> IDLE (room 21.6 > target 21.0+0.5)`; a status line every 10 min.
-- **MQTT:** `info/<host>/heatctl` on every transition (state, sub-state, reason, inputs). Status JSON gains `ctl` (state), `ctl_sub`, `ctl_target`, `ctl_heatw`, `ctl_i`.
-- **Web:** the old auto section is replaced by an enable switch, a target slider and a status line such as "Demand 65% · target 21.3 (curve +0.3) · heat 410 W" or "Cold · setpoint 24.5 · ❄ defrost". Manual temperature, demand and QO controls are greyed out while the controller runs.
+- **MQTT:** `info/<host>/heatctl` on every transition (state, sub-state, reason, inputs). Status JSON gains `ctl` (state), `ctl_sub`, `ctl_target`, `ctl_curve`, `ctl_heatw`, `ctl_i`.
+- **Web:** the old auto section is replaced by an enable switch, a target slider and a status line such as "Demand 65% · target 21.3 (curve +0.30) · heat 410 W" or "Cold · setpoint 24.5 · ❄ defrost". Manual temperature, demand and QO controls are greyed out while the controller runs.
 - **Home Assistant:** an enum sensor "Control state"; `hvac_action` reports `defrosting` / `idle` / `heating`; the climate target sets `auto.t`. Tuning entities: number entities for `auto.t`, `pid.kp`, `pid.ti`; sensors for heat wanted (W), integral and effective target.
 
 ## Code layout
