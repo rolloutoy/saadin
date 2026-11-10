@@ -507,6 +507,16 @@ static void test_stale(void)
     CHECK("NOSENSOR setpoint after curve", NEAR(x.out.setpoint, 21.25) && NEAR(x.out.target, 21.25));
 }
 
+static void test_gap(void)
+{ // The main loop stalls (comms restart): the next step must not integrate the whole gap
+    sim_t x;
+    start(&x);
+    x.in.room = 19;
+    x.now += 3600;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    CHECK("long gap: integral grows by at most a minute", x.out.integral - 350 <= 300 * 2 * 60 / 5400.0 + 0.01);
+}
+
 static void test_rate_and_rungs(void)
 {
     sim_t x;
@@ -641,6 +651,7 @@ int main(void)
     test_watchdog(4);
     test_watchdog_slow();
     test_stale();
+    test_gap();
     test_rate_and_rungs();
     // First-order room, loads of 300, 700 and 1550 W
     test_room_model(15, 5e6, 0);

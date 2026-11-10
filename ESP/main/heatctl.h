@@ -9,6 +9,7 @@
 #define HEATCTL_CURVE_MAX 8
 #define HEATCTL_DEFROSTS_MAX 16     // Defrost start times kept for the defrost-loop watchdog
 #define HEATCTL_OUTDOOR_SMOOTH 1800 // Outdoor temperature smoothing (s)
+#define HEATCTL_DT_MAX 60           // Longest step integrated (s)
 #define HEATCTL_FAN_LEAVE (-1)      // Fan: leave alone
 
 typedef struct {
