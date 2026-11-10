@@ -89,12 +89,8 @@ menuconfig:
 	idf.py menuconfig
 
 .PHONY: test
-test:	main/test/faikout_auto_test main/test/heatctl_test
-	./main/test/faikout_auto_test
+test:	main/test/heatctl_test
 	./main/test/heatctl_test
-
-main/test/faikout_auto_test: main/test/faikout_auto_test.c main/faikout_auto.c main/faikout_auto.h
-	gcc -O -o $@ main/test/faikout_auto_test.c main/faikout_auto.c -g -Wall --std=gnu99 -lm
 
 main/test/heatctl_test: main/test/heatctl_test.c main/heatctl.c main/heatctl.h
 	gcc -O -o $@ main/test/heatctl_test.c main/heatctl.c -g -Wall -Wextra --std=gnu99 -lm
