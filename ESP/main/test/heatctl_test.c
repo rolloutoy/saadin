@@ -764,6 +764,36 @@ static void test_ble_env(void)
     CHECK("MQTT reading kept without BLE", env == 20.0f && !from_ble);
 }
 
+static void test_no_integral(void)
+{ // ti 0: no integral, it stays where it is, so P only around that
+    sim_t x;
+    start(&x);
+    x.p.ti = 0;
+    run(&x, 60);
+    CHECK("ti 0: DEMAND", x.out.state == HEATCTL_DEMAND);
+    float i0 = x.out.integral;
+    x.in.room = 20.5;
+    run(&x, 2 * 3600);
+    CHECK("ti 0: integral does not move", NEAR(x.out.integral, i0));
+    CHECK("ti 0: heat wanted is kp x error on top",
+          fabsf(x.out.heatw - (i0 + 300 * 0.5f)) < 0.5f); // Smoothing leaves a hair of error
+    x.p.ti = 90 * 60;                                     // Back on: it moves again
+    run(&x, 600);
+    CHECK("ti back on: integral moves", x.out.integral > i0 + 1);
+
+    // COLD: cold.ti 0 keeps the integral at cold.set
+    memset(&x.s, 0, sizeof(x.s));
+    x.p.cold_ti = 0;
+    x.in.room = 21;
+    x.in.outdoor = -20;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    run_until(&x, HEATCTL_COLD, -1, 4000);
+    x.in.room = 20;
+    run(&x, 6 * 3600);
+    CHECK("cold.ti 0: integral stays at cold.set", NEAR(x.out.integral, 23));
+    CHECK("cold.ti 0: setpoint is cold.set + cold.kp x error", NEAR(x.out.setpoint, 25));
+}
+
 int main(void)
 {
     test_table();
@@ -785,6 +815,7 @@ int main(void)
     test_stale();
     test_gap();
     test_rate_and_levels();
+    test_no_integral();
     // First-order room, loads of 300, 700 and 1550 W
     test_room_model(15, 5e6, 0);
     test_room_model(7, 5e6, 0);

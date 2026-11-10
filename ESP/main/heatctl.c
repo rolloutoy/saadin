@@ -420,7 +420,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         int clamp = level_top(p, 0); // The hold stops growth, it does not pull the integral down
         int was = s->level;
         if (!freeze) { // PI, the integral in W, with anti-windup at the top and bottom levels
-            float di = p->kp * e * dt / (p->ti > 0 ? p->ti : 1);
+            float di = p->ti > 0 ? p->kp * e * dt / p->ti : 0; // ti 0: no integral, P only
             int r = level_wanted(t, top, p->kp * e + s->integral);
             if (di > 0 && (r >= top || noraise))
                 di = 0;
@@ -462,7 +462,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         break;
     case HEATCTL_COLD:
         if (!freeze) { // PI on the setpoint, the integral in °C
-            float di = p->cold_kp * e * dt / (p->cold_ti > 0 ? p->cold_ti : 1);
+            float di = p->cold_ti > 0 ? p->cold_kp * e * dt / p->cold_ti : 0;
             if (di > 0 && noraise)
                 di = 0;
             s->cold_integral = clampf(s->cold_integral + di, p->tmin, p->tmax);
