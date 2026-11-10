@@ -19,8 +19,8 @@ static const char *parse_table(heatctl_table_t *t, const char *s)
     t->n = 0;
     s = skipspace(s);
     while (*s) {
-        if (t->n >= HEATCTL_RUNGS_MAX)
-            return "Too many rungs";
+        if (t->n >= HEATCTL_LEVELS_MAX)
+            return "Too many levels";
         char *e;
         long d = strtol(s, &e, 10);
         if (e == s)
@@ -44,12 +44,12 @@ static const char *parse_table(heatctl_table_t *t, const char *s)
         if (!(w > 0))
             return "Watts not positive";
         s = skipspace(e);
-        heatctl_rung_t *r = &t->rung[t->n];
+        heatctl_level_t *r = &t->level[t->n];
         if (t->n && (w <= r[-1].watts || d < r[-1].demand))
-            return "Rungs not increasing";
+            return "Levels not increasing";
         r->demand = d;
         r->watts = w;
-        r->quiet = (d < 100 || q); // QO on for every rung except plain 100
+        r->quiet = (d < 100 || q); // QO on for every level except plain 100
         t->n++;
         if (*s == ',')
             s = skipspace(s + 1);
@@ -159,35 +159,35 @@ float heatctl_ble_env(float env, uint8_t *from_ble, float reading)
     return env; // Not from the BLE sensor (e.g. MQTT), so leave it
 }
 
-// Rung for a demand (%): the highest rung at or below it, plain 100 before 100q
-static int rung_for(const heatctl_table_t *t, int demand)
+// Level for a demand (%): the highest level at or below it, plain 100 before 100q
+static int level_for(const heatctl_table_t *t, int demand)
 {
     int r = 0;
     for (int i = 0; i < t->n; i++)
-        if (t->rung[i].demand <= demand)
+        if (t->level[i].demand <= demand)
             r = i;
     return r;
 }
 
-// Highest rung allowed, in the post-defrost hold or not
-static int rung_top(const heatctl_params_t *p, uint8_t hold)
+// Highest level allowed, in the post-defrost hold or not
+static int level_top(const heatctl_params_t *p, uint8_t hold)
 {
     int top = p->table.n - 1;
     if (!p->demand_full) // No plain 100
-        while (top > 0 && !p->table.rung[top].quiet)
+        while (top > 0 && !p->table.level[top].quiet)
             top--;
     if (hold) // Capped at 95, no 100q or plain 100
-        while (top > 0 && p->table.rung[top].demand > 95)
+        while (top > 0 && p->table.level[top].demand > 95)
             top--;
     return top;
 }
 
-// Highest rung whose watts are at or below w, up to top
-static int rung_wanted(const heatctl_table_t *t, int top, float w)
+// Highest level whose watts are at or below w, up to top
+static int level_wanted(const heatctl_table_t *t, int top, float w)
 {
     int r = 0;
     for (int i = 1; i <= top; i++)
-        if (t->rung[i].watts <= w)
+        if (t->level[i].watts <= w)
             r = i;
     return r;
 }
@@ -234,10 +234,10 @@ static heatctl_sub_t keep_hold(const heatctl_t *s)
 }
 
 static void enter_demand(heatctl_t *s, const heatctl_params_t *p, heatctl_out_t *out, uint32_t now, int demand)
-{ // DEMAND with the integral at the watts of this demand's rung
+{ // DEMAND with the integral at the watts of this demand's level
     enter(s, out, now, HEATCTL_DEMAND, keep_hold(s));
-    s->integral = p->table.rung[rung_for(&p->table, demand)].watts;
-    s->rung = -1; // Set at once
+    s->integral = p->table.level[level_for(&p->table, demand)].watts;
+    s->level = -1; // Set at once
 }
 
 static void enter_cold(heatctl_t *s, const heatctl_params_t *p, heatctl_out_t *out, uint32_t now)
@@ -389,11 +389,11 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
                     if (s->resume == HEATCTL_COLD)
                         enter_cold(s, p, &out, now);
                     else
-                        enter_demand(s, p, &out, now, p->table.rung[0].demand);
+                        enter_demand(s, p, &out, now, p->table.level[0].demand);
                     reason(&out, "defrost rest over");
                 }
             } else if (room < target - p->idle_under && now - s->since >= p->idle_min) {
-                enter_demand(s, p, &out, now, p->table.rung[0].demand);
+                enter_demand(s, p, &out, now, p->table.level[0].demand);
                 reason(&out, "room %.2f < target %.2f-%.1f", room, target, p->idle_under);
             }
             break;
@@ -416,37 +416,37 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
     switch (s->state) {
     case HEATCTL_DEMAND: {
         const heatctl_table_t *t = &p->table;
-        int top = rung_top(p, noraise);
-        int clamp = rung_top(p, 0); // The hold stops growth, it does not pull the integral down
-        int was = s->rung;
-        if (!freeze) { // PI, the integral in W, with anti-windup at the top and bottom rungs
+        int top = level_top(p, noraise);
+        int clamp = level_top(p, 0); // The hold stops growth, it does not pull the integral down
+        int was = s->level;
+        if (!freeze) { // PI, the integral in W, with anti-windup at the top and bottom levels
             float di = p->kp * e * dt / (p->ti > 0 ? p->ti : 1);
-            int r = rung_wanted(t, top, p->kp * e + s->integral);
+            int r = level_wanted(t, top, p->kp * e + s->integral);
             if (di > 0 && (r >= top || noraise))
                 di = 0;
             if (di < 0 && r <= 0)
                 di = 0;
-            s->integral = clampf(s->integral + di, t->rung[0].watts, t->rung[clamp].watts);
+            s->integral = clampf(s->integral + di, t->level[0].watts, t->level[clamp].watts);
         }
         if (!stale)
             s->heatw = p->kp * e + s->integral;
-        else if (s->rung < 0)
+        else if (s->level < 0)
             s->heatw = s->integral; // Starting with no reading
-        int want = rung_wanted(t, top, s->heatw);
-        if (s->rung < 0) // Just entered
-            s->rung = want;
-        else if (s->rung > top)
-            s->rung = top; // Cap at once, also in defrost (e.g. a shorter table)
+        int want = level_wanted(t, top, s->heatw);
+        if (s->level < 0) // Just entered
+            s->level = want;
+        else if (s->level > top)
+            s->level = top; // Cap at once, also in defrost (e.g. a shorter table)
         else if (s->sub == HEATCTL_SUB_DEFROST)
             ; // Hold
         else if (stale)
             ; // Hold
-        else if (want != s->rung && now - s->rung_at >= p->demand_rate && !(noraise && want > s->rung))
-            s->rung = want;
-        if (s->rung != was)
-            s->rung_at = now;
-        out.demand = t->rung[s->rung].demand;
-        out.quiet = t->rung[s->rung].quiet || s->sub == HEATCTL_SUB_DEFROST;
+        else if (want != s->level && now - s->level_at >= p->demand_rate && !(noraise && want > s->level))
+            s->level = want;
+        if (s->level != was)
+            s->level_at = now;
+        out.demand = t->level[s->level].demand;
+        out.quiet = t->level[s->level].quiet || s->sub == HEATCTL_SUB_DEFROST;
         out.setpoint = p->demand_set;
         out.fan = p->demand_fan;
         out.heatw = s->heatw;
@@ -454,7 +454,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         break;
     }
     case HEATCTL_IDLE:
-        out.demand = p->table.rung[0].demand;
+        out.demand = p->table.level[0].demand;
         out.quiet = 1;
         out.setpoint = p->idle_temp;
         out.fan = p->idle_fan;
@@ -482,8 +482,8 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         out.fan = p->cold_fan;
         out.integral = s->cold_integral;
         for (int i = p->table.n - 1; i >= 0; i--)
-            if (!p->table.rung[i].quiet) {
-                out.heatw = p->table.rung[i].watts;
+            if (!p->table.level[i].quiet) {
+                out.heatw = p->table.level[i].watts;
                 break;
             }
         break;

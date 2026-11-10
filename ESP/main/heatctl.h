@@ -5,22 +5,22 @@
 #include <stdint.h>
 
 #define HEATCTL_TABLE_DEFAULT "40:220,50:280,60:350,70:400,80:520,85:580,95:640,100q:1510,100:2470"
-#define HEATCTL_RUNGS_MAX 12
+#define HEATCTL_LEVELS_MAX 12
 #define HEATCTL_CURVE_MAX 8
 #define HEATCTL_DEFROSTS_MAX 16     // Defrost start times kept for the defrost-loop watchdog
 #define HEATCTL_OUTDOOR_SMOOTH 1800 // Outdoor temperature smoothing (s)
 #define HEATCTL_DT_MAX 60           // Longest step integrated (s)
 #define HEATCTL_FAN_LEAVE (-1)      // Fan: leave alone
 
-typedef struct {
+typedef struct {    // A demand level, one entry of demand.table
     uint8_t demand; // Demand (%)
-    uint8_t quiet;  // Quiet outdoor (QO) with this rung, on for all but plain 100
-    float watts;    // Electrical watts at this rung
-} heatctl_rung_t;
+    uint8_t quiet;  // Quiet outdoor (QO) with this level, on for all but plain 100
+    float watts;    // Electrical watts at this level
+} heatctl_level_t;
 
 typedef struct {
     int n;
-    heatctl_rung_t rung[HEATCTL_RUNGS_MAX]; // In order of increasing watts
+    heatctl_level_t level[HEATCTL_LEVELS_MAX]; // In order of increasing watts
 } heatctl_table_t;
 
 typedef struct {
@@ -133,8 +133,8 @@ typedef struct {
     float integral;       // DEMAND integral (W)
     float cold_integral;  // COLD integral (°C)
     float heatw;          // Last heat wanted (W)
-    int rung;             // Current rung (DEMAND)
-    uint32_t rung_at;     // Time of the last demand change
+    int level;            // Current level (DEMAND)
+    uint32_t level_at;    // Time of the last demand change
     float setpoint;       // Current setpoint (COLD)
     uint32_t setpoint_at; // Time of the last setpoint change (COLD)
     uint8_t defrosts;     // Entries in defrost_at

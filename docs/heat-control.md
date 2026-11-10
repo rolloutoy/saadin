@@ -23,22 +23,22 @@ Controller disabled (`auto.e` off or `auto.t` 0), unit off, or unit not in heat 
 
 On the way into OFF, for whichever reason, the controller leaves nothing behind: demand goes back to 100% and QO off, and the setpoint goes to `stop.temp` (default 22 °C), clamped to `t.min`…`t.max`. The setpoint is only replaced if it is still the one the controller sent, so a setpoint set by hand at the same time (e.g. with a switch to cool) is kept.
 
-When the controller starts (enabled, unit on in heat) it starts **fresh** in DEMAND with the integral at the watts of the `demand.start` rung (default 60%). No NVS persistence.
+When the controller starts (enabled, unit on in heat) it starts **fresh** in DEMAND with the integral at the watts of the `demand.start` level (default 60%). No NVS persistence.
 
 ### IDLE ("heating off")
-- Sends setpoint `idle.temp` (default 16 °C) so the unit stops heating. Demand stays at the lowest rung with QO on, so the restart is gentle.
+- Sends setpoint `idle.temp` (default 16 °C) so the unit stops heating. Demand stays at the lowest level with QO on, so the restart is gentle.
 - Entered only from DEMAND, when room > target + `idle.over` (default 0.5 °C) **and** DEMAND has run at least `demand.minrun` (default 30 min; short runs stop defrosts working, Faikout #930).
 - Exits to DEMAND when room < target − `idle.under` (default 0.0 °C) **and** IDLE has lasted at least `idle.min` (default 30 min).
-- On exit the PI integral starts at the watts of the lowest rung.
+- On exit the PI integral starts at the watts of the lowest level.
 
 ### DEMAND
 - Sends the fixed setpoint `demand.set` (default 31 °C).
 - PI loop on room temperature error. Output is **heat wanted in electrical watts**. No D term.
-- The demand table (below) maps watts to a rung: the highest rung whose watts ≤ wanted.
-- **Quiet outdoor (QO) is on for every rung except plain 100%.** That includes the `100q` rung, IDLE and the DEFROST sub-state; it calms defrosts and the ramp-up after them.
+- The demand table (below) maps watts to a demand level (a demand % with or without QO): the highest level whose watts ≤ wanted.
+- **Quiet outdoor (QO) is on for every level except plain 100%.** That includes the `100q` level, IDLE and the DEFROST sub-state; it calms defrosts and the ramp-up after them.
 - `demand.full` (bit, default on): when on, DEMAND may use plain 100% (QO off). When off, DEMAND tops out at 100 + QO.
-- Demand changes at most once per `demand.rate` (default 600 s), but one change may jump several rungs.
-- Anti-windup: the integral stops growing when at the top or bottom rung, during DEFROST and the post-defrost hold, and while the room reading is stale.
+- Demand changes at most once per `demand.rate` (default 600 s), but one change may jump several levels.
+- Anti-windup: the integral stops growing when at the top or bottom level, during DEFROST and the post-defrost hold, and while the room reading is stale.
 - Gains: `pid.kp` (W per °C), `pid.ti` (minutes). Pick sensible starting defaults from the step-test table (e.g. kp ≈ 300 W/°C, ti ≈ 90 min) and say so in the PR.
 
 ### COLD
@@ -46,7 +46,7 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 - A second PI loop drives the **setpoint** from room temperature error. It starts at `cold.set` (default 23 °C), is clamped to `t.min`…`t.max`, rounded to 0.5 °C, and moves at most 0.5 °C per `cold.rate` (default 600 s); big setpoint jumps are reported to cause defrost loops. Gains `cold.kp` (°C setpoint per °C error), `cold.ti` (minutes).
 - No IDLE from COLD: on overshoot the setpoint PI pulls the setpoint down and the unit thermostats off by itself.
 - Entered from DEMAND when the smoothed outdoor temperature stays below `cold.enter` (default −15 °C) for `cold.hold` (default 15 min). Exits to DEMAND when it stays above `cold.exit` (default −10 °C) for `cold.hold`.
-- On exit to DEMAND the integral starts at the watts of the 95% rung (the house has just needed a lot of heat).
+- On exit to DEMAND the integral starts at the watts of the 95% level (the house has just needed a lot of heat).
 - Unknown outdoor temperature never enters COLD.
 
 ### DEFROST sub-state (of DEMAND and of COLD)
@@ -79,7 +79,7 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 40:220,50:280,60:350,70:400,80:520,85:580,95:640,100q:1510,100:2470
 ```
 
-`demand:watts` per rung; `100q` is 100% with QO (QO is on for every rung except `100` anyway). Defaults come from the step test in `saadin-ideas.md` 1.3. Rungs that add nothing are left out. The integral absorbs table error, so only the shape matters. Invalid table → fall back to the default and log it.
+`demand:watts` per demand level; `100q` is 100% with QO (QO is on for every level except `100` anyway). Defaults come from the step test in `saadin-ideas.md` 1.3. Levels that add nothing are left out. The integral absorbs table error, so only the shape matters. Invalid table → fall back to the default and log it.
 
 ## Fan
 
@@ -110,6 +110,6 @@ If the unit reports a demand, setpoint, QO or fan that differs from what the con
 
 ## Tests
 
-- `ESP/main/test/heatctl_test.c`, run by `make -C ESP test`: every transition with hysteresis and minimum times; defrost enter / exit / cap; post-defrost hold; watchdog; stale sensor and NOSENSOR; integral start values after each transition; anti-windup; rate limits; QO per rung and `demand.full`; table and curve parsing including bad input.
+- `ESP/main/test/heatctl_test.c`, run by `make -C ESP test`: every transition with hysteresis and minimum times; defrost enter / exit / cap; post-defrost hold; watchdog; stale sensor and NOSENSOR; integral start values after each transition; anti-windup; rate limits; QO per level and `demand.full`; table and curve parsing including bad input.
 - A small first-order room model inside the test to check the loop settles without hunting between DEMAND and IDLE.
 - Firmware builds clean with `make s3` and `make pico`. Hardware testing is done by a human.

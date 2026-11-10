@@ -112,17 +112,17 @@ static void test_table(void)
 {
     heatctl_table_t t;
     CHECK("table default ok", !heatctl_parse_table(&t, HEATCTL_TABLE_DEFAULT));
-    CHECK("table default rungs", t.n == 9);
-    CHECK("table first", t.rung[0].demand == 40 && NEAR(t.rung[0].watts, 220) && t.rung[0].quiet);
-    CHECK("table 100q", t.rung[7].demand == 100 && t.rung[7].quiet && NEAR(t.rung[7].watts, 1510));
-    CHECK("table plain 100 has no QO", t.rung[8].demand == 100 && !t.rung[8].quiet && NEAR(t.rung[8].watts, 2470));
+    CHECK("table default levels", t.n == 9);
+    CHECK("table first", t.level[0].demand == 40 && NEAR(t.level[0].watts, 220) && t.level[0].quiet);
+    CHECK("table 100q", t.level[7].demand == 100 && t.level[7].quiet && NEAR(t.level[7].watts, 1510));
+    CHECK("table plain 100 has no QO", t.level[8].demand == 100 && !t.level[8].quiet && NEAR(t.level[8].watts, 2470));
     int qo = 1;
     for (int i = 0; i < 8; i++)
-        qo &= t.rung[i].quiet;
-    CHECK("table QO on every rung but plain 100", qo);
+        qo &= t.level[i].quiet;
+    CHECK("table QO on every level but plain 100", qo);
     CHECK("table empty is default", !heatctl_parse_table(&t, "") && t.n == 9);
-    CHECK("table custom", !heatctl_parse_table(&t, " 30:100, 60:300 ,100:900") && t.n == 3 && t.rung[0].demand == 30 &&
-                              NEAR(t.rung[2].watts, 900) && !t.rung[2].quiet && t.rung[1].quiet);
+    CHECK("table custom", !heatctl_parse_table(&t, " 30:100, 60:300 ,100:900") && t.n == 3 && t.level[0].demand == 30 &&
+                              NEAR(t.level[2].watts, 900) && !t.level[2].quiet && t.level[1].quiet);
     const char *bad[] = {"40:220,50", "40:220,x:300",  "40:220,50:200",
                          "20:100",    "101:900",       "40:220,50:280q",
                          "40:-5",     "40:220;50:300", "1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,11:11,12:12,13:13",
@@ -131,7 +131,7 @@ static void test_table(void)
         heatctl_parse_table(&t, "30:1,100:2"); // Something else first
         char name[80];
         snprintf(name, sizeof(name), "table bad \"%s\"", bad[i]);
-        CHECK(name, heatctl_parse_table(&t, bad[i]) && t.n == 9 && NEAR(t.rung[8].watts, 2470));
+        CHECK(name, heatctl_parse_table(&t, bad[i]) && t.n == 9 && NEAR(t.level[8].watts, 2470));
     }
 }
 
@@ -160,7 +160,7 @@ static void test_off_and_start(void)
     sim_t x;
     start(&x);
     CHECK("start: DEMAND", x.out.state == HEATCTL_DEMAND && x.out.sub == HEATCTL_SUB_NONE && x.out.changed);
-    CHECK("start: integral at demand.start rung", NEAR(x.out.integral, 350));
+    CHECK("start: integral at demand.start level", NEAR(x.out.integral, 350));
     CHECK("start: demand 60 with QO", x.out.demand == 60 && x.out.quiet);
     CHECK("start: setpoint demand.set", NEAR(x.out.setpoint, 31));
     CHECK("start: target", NEAR(x.out.target, 21));
@@ -202,7 +202,7 @@ static void test_demand_idle(void)
     CHECK("DEMAND -> IDLE after demand.minrun", t == 1800);
     CHECK("IDLE reason", strstr(x.out.reason, "room") != NULL);
     CHECK("IDLE: setpoint idle.temp", NEAR(x.out.setpoint, 16));
-    CHECK("IDLE: lowest rung with QO", x.out.demand == 40 && x.out.quiet);
+    CHECK("IDLE: lowest level with QO", x.out.demand == 40 && x.out.quiet);
 
     start(&x);
     x.in.room = 21.5; // Exactly target + idle.over
@@ -216,7 +216,7 @@ static void test_demand_idle(void)
     x.in.room = 20.9;
     t = run_until(&x, HEATCTL_DEMAND, -1, 4000);
     CHECK("IDLE -> DEMAND after idle.min", t == 1800);
-    CHECK("after IDLE: integral at lowest rung", NEAR(x.out.integral, 220));
+    CHECK("after IDLE: integral at lowest level", NEAR(x.out.integral, 220));
     CHECK("after IDLE: setpoint demand.set", NEAR(x.out.setpoint, 31));
 
     start(&x);
@@ -264,7 +264,7 @@ static void test_cold(void)
     }
     CHECK("COLD -> DEMAND", left && x.out.state == HEATCTL_DEMAND);
     CHECK("COLD -> DEMAND after cold.hold above cold.exit", crossed && x.now - crossed == 900);
-    CHECK("after COLD: integral at 95% rung", NEAR(x.out.integral, 640));
+    CHECK("after COLD: integral at 95% level", NEAR(x.out.integral, 640));
 
     // Unknown outdoor never enters COLD
     start(&x);
@@ -493,7 +493,7 @@ static void test_no_hold(void)
     CHECK("no hold: demand stays at the top", x.out.demand == 100);
 }
 
-// demand.table saved with fewer rungs during a defrost
+// demand.table saved with fewer levels during a defrost
 static void test_table_shrinks_in_defrost(void)
 {
     sim_t x;
@@ -532,7 +532,7 @@ static void test_hold_cap(int full)
         CHECK("cold room reaches plain 100", x.out.demand == 100 && !x.out.quiet);
     else
         CHECK("demand.full off tops out at 100q", x.out.demand == 100 && x.out.quiet);
-    CHECK("anti-windup: integral at most top rung", x.out.integral <= (full ? 2470 : 1510) + 1e-3f);
+    CHECK("anti-windup: integral at most top level", x.out.integral <= (full ? 2470 : 1510) + 1e-3f);
     x.in.liquid = -20;
     run(&x, 1);
     CHECK("defrost at 100: QO on", x.out.sub == HEATCTL_SUB_DEFROST && x.out.demand == 100 && x.out.quiet);
@@ -566,7 +566,7 @@ static void test_watchdog(int defrosts)
     CHECK("rest: setpoint idle.temp", NEAR(x.out.setpoint, 16));
     int t = run_until(&x, HEATCTL_DEMAND, -1, 4000);
     CHECK("rest lasts defrost.rest", t == 900);
-    CHECK("after rest: integral at lowest rung", NEAR(x.out.integral, 220));
+    CHECK("after rest: integral at lowest level", NEAR(x.out.integral, 220));
 }
 
 static void test_watchdog_slow(void)
@@ -638,7 +638,7 @@ static void test_gap(void)
     CHECK("long gap: integral grows by at most a minute", x.out.integral - 350 <= 300 * 2 * 60 / 5400.0 + 0.01);
 }
 
-static void test_rate_and_rungs(void)
+static void test_rate_and_levels(void)
 {
     sim_t x;
     start(&x);
@@ -646,7 +646,7 @@ static void test_rate_and_rungs(void)
     run(&x, 599);
     CHECK("demand held for demand.rate", x.out.demand == 60);
     run(&x, 1);
-    CHECK("one change may jump several rungs", x.out.demand == 95);
+    CHECK("one change may jump several levels", x.out.demand == 95);
     uint8_t d = x.out.demand;
     uint32_t at = x.now;
     int ok = 1;
@@ -667,11 +667,11 @@ static void test_rate_and_rungs(void)
     x.p.idle_over = 5;
     x.in.room = 23;
     run(&x, 6 * 3600);
-    CHECK("warm room: lowest rung", x.out.demand == 40 && x.out.state == HEATCTL_DEMAND);
-    CHECK("anti-windup: integral not below lowest rung", x.out.integral >= 220 - 1e-3f);
+    CHECK("warm room: lowest level", x.out.demand == 40 && x.out.state == HEATCTL_DEMAND);
+    CHECK("anti-windup: integral not below lowest level", x.out.integral >= 220 - 1e-3f);
     x.in.room = 21;
     run(&x, 1200);
-    CHECK("back at target: demand leaves the lowest rung", x.out.demand > 40);
+    CHECK("back at target: demand leaves the lowest level", x.out.demand > 40);
 
     // Fan per state
     start(&x);
@@ -697,9 +697,9 @@ static float model_watts(const sim_t *x)
     if (x->out.state != HEATCTL_DEMAND || x->out.sub == HEATCTL_SUB_DEFROST)
         return 0; // IDLE: setpoint far below the room, so the unit stops
     for (int r = x->p.table.n - 1; r >= 0; r--)
-        if (x->p.table.rung[r].demand == x->out.demand &&
-            (x->p.table.rung[r].quiet == x->out.quiet || x->out.demand < 100))
-            return x->p.table.rung[r].watts;
+        if (x->p.table.level[r].demand == x->out.demand &&
+            (x->p.table.level[r].quiet == x->out.quiet || x->out.demand < 100))
+            return x->p.table.level[r].watts;
     return 0;
 }
 
@@ -778,7 +778,7 @@ int main(void)
     test_watchdog_slow();
     test_stale();
     test_gap();
-    test_rate_and_rungs();
+    test_rate_and_levels();
     // First-order room, loads of 300, 700 and 1550 W
     test_room_model(15, 5e6, 0);
     test_room_model(7, 5e6, 0);
