@@ -105,6 +105,10 @@ These manuals come from upstream and still use the Faikout name:
 
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
+**2026-11-10**
+- Reformatted all C code to ESP-IDF style. Only whitespace changed.
+- Added clang-format and whitespace checks, run with prek.
+
 **2026-10-04**
 - Fixed a memory leak on every view of the settings page that shows a drop-down (enum) setting, such as the fan type.
 - Fixed heap corruption when the Library settings page shows a stored certificate or key.
@@ -123,10 +127,6 @@ As required by GPL-3.0 §5(a), this section lists how Säädin differs from upst
 - Removed the Makefile targets that published releases to the upstream OTA server.
 - Removed these files from the git history as well.
 - Rewrote this README.
-
-**2026-11-10**
-- Reformatted all C code to ESP-IDF style. Only whitespace changed.
-- Added clang-format and whitespace checks, run with prek.
 
 ## Security
 
