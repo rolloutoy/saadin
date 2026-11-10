@@ -116,7 +116,7 @@ typedef struct {
     heatctl_sub_t sub;
     heatctl_state_t resume; // State to resume after the watchdog rest
     uint8_t ticked;         // last is valid
-    uint8_t armed;          // Liquid has been hot since the last defrost, so a drop is a defrost
+    uint8_t armed;          // Liquid hot since DEMAND/COLD began and since the last defrost, so a drop is a defrost
     uint32_t last;          // Time of last step
     uint32_t since;         // Time the state was entered
     uint32_t sub_since;     // Time the sub-state was entered

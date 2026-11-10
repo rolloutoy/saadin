@@ -46,7 +46,9 @@ Controller disabled (`auto.e` off), unit off, or unit not in heat mode. Nothing 
 - Unknown outdoor temperature never enters COLD.
 
 ### DEFROST sub-state (of DEMAND and of COLD)
-- Enter when `liquid` < `defrost.enter` (default 20 °C). Exit when `liquid` ≥ `defrost.exit` (default 25 °C), or after `defrost.max` (default 30 min) as a safety cap.
+- Enter when `liquid` < `defrost.enter` (default 5 °C). Exit when `liquid` ≥ `defrost.exit` (default 25 °C), or after `defrost.max` (default 30 min) as a safety cap.
+- A defrost pulls the coil to about −25…−30 °C. A coil that only stopped heating (the unit thermostats off, or the compressor restarts) drifts down towards room temperature, so 5 °C keeps clear of both.
+- A drop only counts once `liquid` has reached `defrost.exit` since DEMAND or COLD was entered. A coil that cooled in IDLE, NOSENSOR or the watchdog rest is not a defrost when heating starts again.
 - Holds the current outputs, freezes the integral. No IDLE/COLD transitions are evaluated during defrost. Unknown `liquid` never enters defrost.
 - Start with `liquid` only. Log `fanrpm`, `comp` and power at entry and exit so the detection can be refined later.
 - **Post-defrost hold** (after leaving DEFROST, `defrost.hold`, default 10 min): demand capped at 95% (no plain 100, no 100q), and the integral may not raise demand.

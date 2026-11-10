@@ -47,7 +47,7 @@ static heatctl_params_t params(void)
         .cold_rate = 600,
         .cold_kp = 2,
         .cold_ti = 120 * 60,
-        .defrost_enter = 20,
+        .defrost_enter = 5,
         .defrost_exit = 25,
         .defrost_max = 30 * 60,
         .defrost_hold = 10 * 60,
@@ -320,7 +320,7 @@ static void test_defrost(void)
     start(&x);
     run(&x, 100);
     x.in.room = 20;
-    x.in.liquid = 15;
+    x.in.liquid = -20;
     run(&x, 1);
     CHECK("defrost entered", x.out.state == HEATCTL_DEMAND && x.out.sub == HEATCTL_SUB_DEFROST && x.out.changed);
     float integral = x.out.integral;
@@ -345,7 +345,7 @@ static void test_defrost(void)
 
     // Cap
     start(&x);
-    x.in.liquid = 15;
+    x.in.liquid = -20;
     run(&x, 1);
     int t = run_until(&x, HEATCTL_DEMAND, HEATCTL_SUB_HOLD, 4000);
     CHECK("defrost capped at defrost.max", t == 1800);
@@ -356,7 +356,7 @@ static void test_defrost(void)
     // Liquid low from the start (unit not heating yet): not a defrost
     start(&x);
     memset(&x.s, 0, sizeof(x.s));
-    x.in.liquid = 15;
+    x.in.liquid = -20;
     x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
     run(&x, 3600);
     CHECK("cold liquid at start is not a defrost", x.out.sub == HEATCTL_SUB_NONE && x.changes == 0);
@@ -370,7 +370,7 @@ static void test_defrost(void)
     // No IDLE during defrost
     start(&x);
     run(&x, 1);
-    x.in.liquid = 15;
+    x.in.liquid = -20;
     x.in.room = 22.5;
     run(&x, 1799);
     CHECK("no IDLE during defrost", x.out.state == HEATCTL_DEMAND && x.out.sub == HEATCTL_SUB_DEFROST);
@@ -381,7 +381,7 @@ static void test_defrost(void)
     // No COLD during defrost, and outdoor frozen during defrost
     start(&x);
     run(&x, 1);
-    x.in.liquid = 15;
+    x.in.liquid = -20;
     float outdoor = x.out.outdoor;
     x.in.outdoor = -25; // The unit's reading jumps during defrost
     run(&x, 1700);
@@ -394,10 +394,64 @@ static void test_defrost(void)
     x.in.outdoor = -20;
     x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
     run_until(&x, HEATCTL_COLD, -1, 4000);
-    x.in.liquid = 10;
+    x.in.liquid = -20;
     run(&x, 1);
     CHECK("COLD defrost", x.out.state == HEATCTL_COLD && x.out.sub == HEATCTL_SUB_DEFROST);
     CHECK("COLD defrost: demand 100 QO off", x.out.demand == 100 && !x.out.quiet);
+}
+
+// The coil cooled while the controller was not heating: back in DEMAND that is not a defrost until heating is
+// established again
+static void test_defrost_rearm(void)
+{
+    sim_t x;
+    start(&x);
+    x.in.room = 21.6;
+    run_until(&x, HEATCTL_IDLE, -1, 4000);
+    x.in.liquid = x.p.defrost_enter - 1;
+    x.in.room = 20.9;
+    run_until(&x, HEATCTL_DEMAND, -1, 4000);
+    x.changes = 0;
+    run(&x, 600);
+    CHECK("IDLE -> DEMAND with a cool coil is not a defrost", x.out.sub == HEATCTL_SUB_NONE && x.changes == 0);
+    x.in.liquid = 35;
+    run(&x, 60);
+    x.in.liquid = -20;
+    run(&x, 1);
+    CHECK("after IDLE: defrost once heating again", x.out.sub == HEATCTL_SUB_DEFROST);
+
+    start(&x);
+    x.in.room = NAN;
+    run_until(&x, HEATCTL_NOSENSOR, -1, 4000);
+    x.in.liquid = x.p.defrost_enter - 1;
+    run(&x, 60);
+    x.in.room = 21;
+    run(&x, 1);
+    x.changes = 0;
+    run(&x, 600);
+    CHECK("NOSENSOR -> DEMAND with a cool coil is not a defrost",
+          x.out.state == HEATCTL_DEMAND && x.out.sub == HEATCTL_SUB_NONE && x.changes == 0);
+
+    start(&x);
+    for (int i = 0; i < 4; i++) {
+        run(&x, 600);
+        x.in.liquid = -20;
+        run(&x, 300);
+        x.in.liquid = 35;
+        run(&x, 1);
+    }
+    x.in.liquid = x.p.defrost_enter - 1; // Cooled during the rest
+    run_until(&x, HEATCTL_DEMAND, -1, 4000);
+    x.changes = 0;
+    run(&x, 600);
+    CHECK("rest -> DEMAND with a cool coil is not a defrost", x.out.sub == HEATCTL_SUB_NONE && x.changes == 0);
+
+    // The unit thermostats off by itself (in COLD it does) and its coil drifts towards room temperature
+    start(&x);
+    run(&x, 100);
+    x.in.liquid = 15;
+    run(&x, 600);
+    CHECK("coil at room temperature is not a defrost", x.out.sub == HEATCTL_SUB_NONE);
 }
 
 static void test_hold_cap(int full)
@@ -412,7 +466,7 @@ static void test_hold_cap(int full)
     else
         CHECK("demand.full off tops out at 100q", x.out.demand == 100 && x.out.quiet);
     CHECK("anti-windup: integral at most top rung", x.out.integral <= (full ? 2470 : 1510) + 1e-3f);
-    x.in.liquid = 15;
+    x.in.liquid = -20;
     run(&x, 1);
     CHECK("defrost at 100: QO on", x.out.sub == HEATCTL_SUB_DEFROST && x.out.demand == 100 && x.out.quiet);
     x.in.liquid = 30;
@@ -431,7 +485,7 @@ static void test_watchdog(int defrosts)
     start(&x);
     for (int i = 0; i < defrosts; i++) {
         run(&x, 600);
-        x.in.liquid = 15; // 5 min defrost
+        x.in.liquid = -20; // 5 min defrost
         run(&x, 300);
         x.in.liquid = 35;
         run(&x, 1);
@@ -454,7 +508,7 @@ static void test_watchdog_slow(void)
     start(&x);
     for (int i = 0; i < 6; i++) { // A defrost every 40 min: never more than 3 in 90 min
         run(&x, 2100);
-        x.in.liquid = 15;
+        x.in.liquid = -20;
         run(&x, 300);
         x.in.liquid = 35;
         run(&x, 1);
@@ -645,6 +699,7 @@ int main(void)
     test_demand_idle();
     test_cold();
     test_defrost();
+    test_defrost_rearm();
     test_hold_cap(1);
     test_hold_cap(0);
     test_watchdog(3);

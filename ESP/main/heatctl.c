@@ -310,7 +310,8 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
             enter_sub(s, &out, now, HEATCTL_SUB_NONE);
             reason(&out, "post-defrost hold over");
         }
-    }
+    } else
+        s->armed = 0; // Not heating, so the coil may cool; heating has to be established again
 
     // Outdoor, smoothed, frozen during defrost (the unit's reading jumps)
     if (!isnan(in->outdoor) && s->sub != HEATCTL_SUB_DEFROST) {
