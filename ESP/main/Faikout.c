@@ -1776,6 +1776,9 @@ mqtt_client_callback (int client, const char *prefix, const char *target, const 
 jo_t
 daikin_status (void)
 {
+#ifdef	ELA
+   xSemaphoreTake (blemutex, portMAX_DELAY);    // Before daikin.mutex, same order as main loop BLE logic, else deadlock
+#endif
    xSemaphoreTake (daikin.mutex, portMAX_DELAY);
    jo_t j = jo_comms_alloc ();
 #define b(name)         if(daikin.status_known&CONTROL_##name)jo_bool(j,#name,daikin.name);
@@ -1785,7 +1788,6 @@ daikin_status (void)
 #define s(name,len)     if((daikin.status_known&CONTROL_##name)&&*daikin.name)jo_string(j,#name,daikin.name);
 #include "acextras.m"
 #ifdef	ELA
-   xSemaphoreTake (blemutex, portMAX_DELAY);
    if (ble_sensor_connected ())
    {
       jo_object (j, "ble");
@@ -1799,7 +1801,6 @@ daikin_status (void)
          jo_litf (j, "volt", "%.3f", bletemp->volt / 1000.0);
       jo_close (j);
    }
-   xSemaphoreGive (blemutex);
    if (ble_sensor_enabled ())
       jo_string (j, "autob", autob);
 #endif
@@ -1818,6 +1819,9 @@ daikin_status (void)
       jo_bool (j, "autoe", autoe);
    }
    xSemaphoreGive (daikin.mutex);
+#ifdef	ELA
+   xSemaphoreGive (blemutex);
+#endif
    return j;
 }
 
