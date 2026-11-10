@@ -1799,9 +1799,12 @@ static esp_err_t web_graph(httpd_req_t *req)
         req,
         "<style>.g{background:white;max-width:1000px;padding:5px;margin-bottom:10px;}</style>"       //
         "<p id=msg>Loading…</p>"                                                                     //
+        "<p id=zb hidden>Show <button data-s=3600>1 h</button> <button data-s=21600>6 h</button> "   //
+        "<button data-s=86400>24 h</button> <button data-s=0>All</button></p>"                       //
         "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>" //
         "<div class=g><canvas id=unit></canvas></div>"                                               //
         "<p>One sample every 30 s, kept until a restart. Click a legend entry to show or hide it. "  //
+        "Pinch or ctrl+scroll to zoom, drag to pan. "                                                //
         "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "     //
         "green hold after a defrost (demand is not raised), red rest after a defrost loop. "         //
         "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint.</p>"  //
@@ -1833,38 +1836,48 @@ static esp_err_t web_graph(httpd_req_t *req)
         "var mk=[],last=[];for(var i=0;i<k;i++){var t=tune(i),c=+cold(i);if(!t)continue;"                      //
         "if(last[c]&&last[c]!=t)mk.push(i);last[c]=t;}"                                                        //
         "var mark={id:'mark',afterDatasetsDraw(c){var a=c.chartArea,g=c.ctx,s=c.scales.x;g.save();"            //
+        "g.beginPath();g.rect(a.left,a.top,a.width,a.height);g.clip();"                                        //
         "g.strokeStyle=g.fillStyle='#444';g.setLineDash([3,3]);g.font='11px sans-serif';"                      //
         "mk.forEach(i=>{var v=s.getPixelForValue(x[i]-d.interval*1000);"                                       //
         "g.beginPath();g.moveTo(v,a.top);g.lineTo(v,a.bottom);g.stroke();g.fillText(tune(i),v+3,a.top+11);});" //
         "g.restore();}};"                                                                                      //
         "function time(v){return new Date(v).toLocaleString([],Object.assign({hour:'2-digit',minute:'2-digit'},"
-        "x[k-1]-x[0]>864e5?{weekday:'short'}:{}));}"                                                          //
-        "function opt(y){return{animation:false,interaction:{mode:'index',intersect:false},"                  //
-        "plugins:{tooltip:{callbacks:{title:t=>time(t[0].parsed.x),footer:t=>tune(t[0].dataIndex)}}},"        //
-        "scales:Object.assign({x:{type:'linear',min:x[0]-d.interval*1000,max:x[k-1],"                         //
-        "ticks:{callback:time,maxTicksLimit:12}}},y)};}"                                                      //
-        "new Chart(document.getElementById('temps'),{type:'line',plugins:[band,mark],data:{datasets:["        //
-        "ds('Room',d.room,tc,'#c00'),"                                                                        //
-        "ds('Room, smoothed',d.smoothed,tc,'#e99',{borderWidth:1}),"                                          //
-        "ds('Target',d.target,tc,'#080',{stepped:true}),"                                                     //
-        "ds('Effective target',d.effective,tc,'#0b0',{stepped:true,borderDash:[4,4]}),"                       //
-        "ds('Setpoint',d.setpoint,tc,'#888',{stepped:true,hidden:true}),"                                     //
-        "ds('Setpoint integral',only(d.integral,true),tc,'#a6a',{stepped:true,hidden:true}),"                 //
-        "ds('Outdoor',d.outdoor,tc,'#08c',{hidden:true})]},"                                                  //
-        "options:opt({y:{title:{display:true,text:U}}})});"                                                   //
-        "new Chart(document.getElementById('power'),{type:'line',plugins:[band,mark],data:{datasets:["        //
-        "ds('Heat wanted',d.heatw,n,'#f80'),"                                                                 //
-        "ds('Integral',only(d.integral,false),n,'#fb6',{borderDash:[4,4]}),"                                  //
-        "ds('Power',d.power,n,'#c00'),"                                                                       //
-        "ds('Demand',d.demand,n,'#06c',{stepped:true,yAxisID:'d'})]},"                                        //
-        "options:opt({y:{title:{display:true,text:'W'}},"                                                     //
-        "d:{position:'right',min:0,max:100,title:{display:true,text:'%%'},grid:{drawOnChartArea:false}}})});" //
-        "new Chart(document.getElementById('unit'),{type:'line',plugins:[band,mark],data:{datasets:["         //
-        "ds('Liquid',d.liquid,tc,'#a0a'),"                                                                    //
-        "ds('Compressor',d.comp,n,'#555',{yAxisID:'h'})]},"                                                   //
-        "options:opt({y:{title:{display:true,text:U}},"                                                       //
-        "h:{position:'right',min:0,title:{display:true,text:'Hz'},grid:{drawOnChartArea:false}}})});"         //
-        "}).catch(e=>{document.getElementById('msg').textContent='Could not load the log: '+e;});"            //
+        "x[k-1]-x[0]>864e5?{weekday:'short'}:{}));}"                                                           //
+        "var cs=[];function sync(e){var s=e.chart.scales.x;"                                                   //
+        "cs.forEach(c=>{if(c!=e.chart)c.zoomScale('x',{min:s.min,max:s.max},'none');});}"                      //
+        "function span(s){cs.forEach(c=>s?c.zoomScale('x',{min:x[k-1]-s*1000,max:x[k-1]},'none'):"             //
+        "c.resetZoom('none'));}"                                                                               //
+        "var zb=document.getElementById('zb');zb.hidden=false;"                                                //
+        "zb.querySelectorAll('button').forEach(b=>b.onclick=()=>span(+b.dataset.s));"                          //
+        "function opt(y){return{animation:false,interaction:{mode:'index',intersect:false},"                   //
+        "plugins:{tooltip:{callbacks:{title:t=>time(t[0].parsed.x),footer:t=>tune(t[0].dataIndex)}},"          //
+        "zoom:{limits:{x:{min:'original',max:'original',minRange:6e5}},"                                       //
+        "pan:{enabled:true,mode:'x',onPanComplete:sync},"                                                      //
+        "zoom:{wheel:{enabled:true,modifierKey:'ctrl'},pinch:{enabled:true},mode:'x',onZoomComplete:sync}}},"  //
+        "scales:Object.assign({x:{type:'linear',min:x[0]-d.interval*1000,max:x[k-1],"                          //
+        "ticks:{callback:time,maxTicksLimit:12}}},y)};}"                                                       //
+        "cs.push(new Chart(document.getElementById('temps'),{type:'line',plugins:[band,mark],data:{datasets:[" //
+        "ds('Room',d.room,tc,'#c00'),"                                                                         //
+        "ds('Room, smoothed',d.smoothed,tc,'#e99',{borderWidth:1}),"                                           //
+        "ds('Target',d.target,tc,'#080',{stepped:true}),"                                                      //
+        "ds('Effective target',d.effective,tc,'#0b0',{stepped:true,borderDash:[4,4]}),"                        //
+        "ds('Setpoint',d.setpoint,tc,'#888',{stepped:true,hidden:true}),"                                      //
+        "ds('Setpoint integral',only(d.integral,true),tc,'#a6a',{stepped:true,hidden:true}),"                  //
+        "ds('Outdoor',d.outdoor,tc,'#08c',{hidden:true})]},"                                                   //
+        "options:opt({y:{title:{display:true,text:U}}})}));"                                                   //
+        "cs.push(new Chart(document.getElementById('power'),{type:'line',plugins:[band,mark],data:{datasets:[" //
+        "ds('Heat wanted',d.heatw,n,'#f80'),"                                                                  //
+        "ds('Integral',only(d.integral,false),n,'#fb6',{borderDash:[4,4]}),"                                   //
+        "ds('Power',d.power,n,'#c00'),"                                                                        //
+        "ds('Demand',d.demand,n,'#06c',{stepped:true,yAxisID:'d'})]},"                                         //
+        "options:opt({y:{title:{display:true,text:'W'}},"                                                      //
+        "d:{position:'right',min:0,max:100,title:{display:true,text:'%%'},grid:{drawOnChartArea:false}}})}));" //
+        "cs.push(new Chart(document.getElementById('unit'),{type:'line',plugins:[band,mark],data:{datasets:["  //
+        "ds('Liquid',d.liquid,tc,'#a0a'),"                                                                     //
+        "ds('Compressor',d.comp,n,'#555',{yAxisID:'h'})]},"                                                    //
+        "options:opt({y:{title:{display:true,text:U}},"                                                        //
+        "h:{position:'right',min:0,title:{display:true,text:'Hz'},grid:{drawOnChartArea:false}}})}));"         //
+        "}).catch(e=>{document.getElementById('msg').textContent='Could not load the log: '+e;});"             //
         "</script>",
         revk_version, fahrenheit);
     return revk_web_foot(req, 1, websettings, NULL);
