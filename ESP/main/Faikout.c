@@ -1804,7 +1804,8 @@ static esp_err_t web_graph(httpd_req_t *req)
         "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>" //
         "<div class=g><canvas id=unit></canvas></div>"                                               //
         "<p>One sample every 30 s, kept until a restart. Click a legend entry to show or hide it. "  //
-        "Pinch or ctrl+scroll to zoom, drag to pan. "                                                //
+        "Drag across a chart or ctrl+scroll to zoom in, shift+drag to pan. "                         //
+        "On a phone, pinch to zoom and drag to pan. "                                                //
         "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "     //
         "green hold after a defrost (demand is not raised), red rest after a defrost loop. "         //
         "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint.</p>"  //
@@ -1849,12 +1850,15 @@ static esp_err_t web_graph(httpd_req_t *req)
         "function span(s){cs.forEach(c=>s?c.zoomScale('x',{min:x[k-1]-s*1000,max:x[k-1]},'none'):"             //
         "c.resetZoom('none'));}"                                                                               //
         "var zb=document.getElementById('zb');zb.hidden=false;"                                                //
-        "zb.querySelectorAll('button').forEach(b=>b.onclick=()=>span(+b.dataset.s));"                          //
+        "zb.querySelectorAll('button').forEach(b=>{var s=+b.dataset.s;b.onclick=()=>span(s);"                  //
+        "b.hidden=s>0&&s*1000>=x[k-1]-x[0];});"                                                                //
         "function opt(y){return{animation:false,interaction:{mode:'index',intersect:false},"                   //
         "plugins:{tooltip:{callbacks:{title:t=>time(t[0].parsed.x),footer:t=>tune(t[0].dataIndex)}},"          //
         "zoom:{limits:{x:{min:'original',max:'original',minRange:6e5}},"                                       //
-        "pan:{enabled:true,mode:'x',onPanComplete:sync},"                                                      //
-        "zoom:{wheel:{enabled:true,modifierKey:'ctrl'},pinch:{enabled:true},mode:'x',onZoomComplete:sync}}},"  //
+        "pan:{enabled:true,mode:'x',modifierKey:'shift',onPanComplete:sync},"                                  //
+        "zoom:{wheel:{enabled:true,modifierKey:'ctrl'},pinch:{enabled:true},"                                  //
+        "drag:{enabled:true,threshold:5,borderColor:'#06c',borderWidth:1,"                                     //
+        "backgroundColor:'rgba(0,102,204,.15)'},mode:'x',onZoomComplete:sync}}},"                              //
         "scales:Object.assign({x:{type:'linear',min:x[0]-d.interval*1000,max:x[k-1],"                          //
         "ticks:{callback:time,maxTicksLimit:12}}},y)};}"                                                       //
         "cs.push(new Chart(document.getElementById('temps'),{type:'line',plugins:[band,mark],data:{datasets:[" //
