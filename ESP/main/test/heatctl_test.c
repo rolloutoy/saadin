@@ -117,15 +117,16 @@ static void test_table(void)
 {
     heatctl_table_t t;
     CHECK("table default ok", !heatctl_parse_table(&t, DEMAND_TABLE, DEMAND_TABLE));
-    CHECK("table default levels", t.n == 9);
-    CHECK("table first", t.level[0].demand == 40 && NEAR(t.level[0].watts, 220) && t.level[0].quiet);
-    CHECK("table 100q", t.level[7].demand == 100 && t.level[7].quiet && NEAR(t.level[7].watts, 1510));
-    CHECK("table plain 100 has no QO", t.level[8].demand == 100 && !t.level[8].quiet && NEAR(t.level[8].watts, 2470));
+    CHECK("table default levels", t.n == 11);
+    CHECK("table first", t.level[0].demand == 40 && NEAR(t.level[0].watts, 270) && t.level[0].quiet);
+    CHECK("table 100q", t.level[9].demand == 100 && t.level[9].quiet && NEAR(t.level[9].watts, 1510));
+    CHECK("table plain 100 has no QO",
+          t.level[10].demand == 100 && !t.level[10].quiet && NEAR(t.level[10].watts, 2470));
     int qo = 1;
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 10; i++)
         qo &= t.level[i].quiet;
     CHECK("table QO on every level but plain 100", qo);
-    CHECK("table empty is default", !heatctl_parse_table(&t, "", DEMAND_TABLE) && t.n == 9);
+    CHECK("table empty is default", !heatctl_parse_table(&t, "", DEMAND_TABLE) && t.n == 11);
     CHECK("table custom", !heatctl_parse_table(&t, " 30:100, 60:300 ,100:900", DEMAND_TABLE) && t.n == 3 &&
                               t.level[0].demand == 30 && NEAR(t.level[2].watts, 900) && !t.level[2].quiet &&
                               t.level[1].quiet);
@@ -137,7 +138,7 @@ static void test_table(void)
         heatctl_parse_table(&t, "30:1,100:2", DEMAND_TABLE); // Something else first
         char name[80];
         snprintf(name, sizeof(name), "table bad \"%s\"", bad[i]);
-        CHECK(name, heatctl_parse_table(&t, bad[i], DEMAND_TABLE) && t.n == 9 && NEAR(t.level[8].watts, 2470));
+        CHECK(name, heatctl_parse_table(&t, bad[i], DEMAND_TABLE) && t.n == 11 && NEAR(t.level[10].watts, 2470));
     }
     CHECK("table bad uses the given default", heatctl_parse_table(&t, "x", "30:1,100:2") && t.n == 2);
 }
@@ -167,11 +168,11 @@ static void test_off_and_start(void)
     sim_t x;
     start(&x);
     CHECK("start: DEMAND", x.out.state == HEATCTL_DEMAND && x.out.sub == HEATCTL_SUB_NONE && x.out.changed);
-    CHECK("start: integral at demand.start level", NEAR(x.out.integral, 350));
+    CHECK("start: integral at demand.start level", NEAR(x.out.integral, 400));
     CHECK("start: demand 60 with QO", x.out.demand == 60 && x.out.quiet);
     CHECK("start: setpoint demand.set", NEAR(x.out.setpoint, 30));
     CHECK("start: target", NEAR(x.out.target, 21));
-    CHECK("start: heat wanted", NEAR(x.out.heatw, 350));
+    CHECK("start: heat wanted", NEAR(x.out.heatw, 400));
     CHECK("start: fan left alone", x.out.fan == HEATCTL_FAN_LEAVE);
 
     x.in.heat = 0;
@@ -197,7 +198,7 @@ static void test_off_and_start(void)
     x.in.enabled = 1;
     run(&x, 1);
     CHECK("restart: DEMAND", x.out.state == HEATCTL_DEMAND && x.out.changed);
-    CHECK("restart: fresh integral", NEAR(x.out.integral, 350));
+    CHECK("restart: fresh integral", NEAR(x.out.integral, 400));
 }
 
 static void test_demand_idle(void)
@@ -223,7 +224,7 @@ static void test_demand_idle(void)
     x.in.room = 20.9;
     t = run_until(&x, HEATCTL_DEMAND, -1, 4000);
     CHECK("IDLE -> DEMAND after idle.min", t == 1800);
-    CHECK("after IDLE: integral at lowest level", NEAR(x.out.integral, 220));
+    CHECK("after IDLE: integral at lowest level", NEAR(x.out.integral, 270));
     CHECK("after IDLE: setpoint demand.set", NEAR(x.out.setpoint, 30));
 
     start(&x);
@@ -601,7 +602,7 @@ static void test_watchdog(int defrosts)
     CHECK("rest: setpoint idle.temp", NEAR(x.out.setpoint, 16));
     int t = run_until(&x, HEATCTL_DEMAND, -1, 4000);
     CHECK("rest lasts defrost.rest", t == 900);
-    CHECK("after rest: integral at lowest level", NEAR(x.out.integral, 220));
+    CHECK("after rest: integral at lowest level", NEAR(x.out.integral, 270));
 }
 
 // defrost.watchdog off (the default): no rest however many defrosts
@@ -657,7 +658,7 @@ static void test_stale(void)
     x.in.room = 22;
     run(&x, 1);
     CHECK("reading back: DEMAND", x.out.state == HEATCTL_DEMAND && x.out.changed);
-    CHECK("reading back: fresh integral", NEAR(x.out.integral, 350));
+    CHECK("reading back: fresh integral", NEAR(x.out.integral, 400));
 
     // No reading at all from the start
     start(&x);
@@ -686,7 +687,7 @@ static void test_gap(void)
     x.in.room = 19;
     x.now += 3600;
     x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
-    CHECK("long gap: integral grows by at most a minute", x.out.integral - 350 <= 300 * 2 * 60 / 5400.0 + 0.01);
+    CHECK("long gap: integral grows by at most a minute", x.out.integral - 400 <= 300 * 2 * 60 / 5400.0 + 0.01);
 }
 
 static void test_rate_and_levels(void)

@@ -78,10 +78,10 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 `demand.table`, string, default:
 
 ```
-40:220,50:280,60:350,70:400,80:520,85:580,95:640,100q:1510,100:2470
+40:270,50:340,60:400,70:465,75:500,80:530,85:570,90:605,95:640,100q:1510,100:2470
 ```
 
-`demand:watts` per demand level; `100q` is 100% with QO (QO is on for every level except `100` anyway). Defaults come from the step test in `saadin-ideas.md` 1.3. Levels that add nothing are left out. The integral absorbs table error, so only the shape matters. Invalid table → fall back to the default and log it.
+`demand:watts` per demand level; `100q` is 100% with QO (QO is on for every level except `100` anyway). Up to 95% the defaults follow about 6.7 W per %, from the `/graph` log on 2026-11-10 (50/60/70% measured at 353/407/460 W at −1…−2 °C outdoor) and forum data for the 4 kW Perfera Cold Region (40% ≈ 270, 70% ≈ 470, 95% ≈ 640 W). 75% and 90% are there to keep the steps even. `100q` and `100` come from the step test in `saadin-ideas.md` 1.3. Levels that add nothing are left out. The integral absorbs table error, so only the shape matters. Invalid table → fall back to the default and log it.
 
 ## Fan
 
