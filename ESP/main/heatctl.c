@@ -293,7 +293,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
                 else
                     reason(&out, "defrost over, liquid %.1f >= %.1f", in->liquid, p->defrost_exit);
                 out.resend_fan = 1;
-                if (n > p->defrost_loops)
+                if (p->defrost_watchdog && n > p->defrost_loops)
                     defrost_rest = n;
                 else
                     enter_sub(s, &out, now, p->defrost_hold ? HEATCTL_SUB_HOLD : HEATCTL_SUB_NONE);

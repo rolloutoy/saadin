@@ -72,13 +72,14 @@ typedef struct {
     float cold_kp;      // °C setpoint per °C error
     float cold_ti;      // Integral time (s), 0 for none
     // DEFROST
-    float defrost_enter;     // Liquid below this is a defrost
-    float defrost_exit;      // Liquid at or above this ends it
-    uint32_t defrost_max;    // Safety cap on a defrost (s)
-    uint32_t defrost_hold;   // Post-defrost hold (s)
-    uint8_t defrost_loops;   // More defrosts than this within defrost_window...
-    uint32_t defrost_window; // ...(s)...
-    uint32_t defrost_rest;   // ...rest in IDLE for this long (s)
+    float defrost_enter;      // Liquid below this is a defrost
+    float defrost_exit;       // Liquid at or above this ends it
+    uint32_t defrost_max;     // Safety cap on a defrost (s)
+    uint32_t defrost_hold;    // Post-defrost hold (s)
+    uint8_t defrost_watchdog; // Defrost-loop watchdog on
+    uint8_t defrost_loops;    // More defrosts than this within defrost_window...
+    uint32_t defrost_window;  // ...(s)...
+    uint32_t defrost_rest;    // ...rest in IDLE for this long (s)
     // Fan per state: HEATCTL_FAN_LEAVE, or 0 auto, 1-5, 6 quiet (as daikin.fan)
     int8_t idle_fan, demand_fan, cold_fan;
 } heatctl_params_t;

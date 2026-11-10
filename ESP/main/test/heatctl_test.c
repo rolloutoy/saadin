@@ -55,6 +55,7 @@ static heatctl_params_t params(void)
         .defrost_exit = 25,
         .defrost_max = 30 * 60,
         .defrost_hold = 10 * 60,
+        .defrost_watchdog = 0,
         .defrost_loops = 3,
         .defrost_window = 90 * 60,
         .defrost_rest = 15 * 60,
@@ -440,6 +441,7 @@ static void test_defrost_rearm(void)
           x.out.state == HEATCTL_DEMAND && x.out.sub == HEATCTL_SUB_NONE && x.changes == 0);
 
     start(&x);
+    x.p.defrost_watchdog = 1;
     for (int i = 0; i < 4; i++) {
         run(&x, 600);
         x.in.liquid = -20;
@@ -582,6 +584,7 @@ static void test_watchdog(int defrosts)
 {
     sim_t x;
     start(&x);
+    x.p.defrost_watchdog = 1;
     for (int i = 0; i < defrosts; i++) {
         run(&x, 600);
         x.in.liquid = -20; // 5 min defrost
@@ -601,10 +604,26 @@ static void test_watchdog(int defrosts)
     CHECK("after rest: integral at lowest level", NEAR(x.out.integral, 220));
 }
 
+// defrost.watchdog off (the default): no rest however many defrosts
+static void test_watchdog_off(void)
+{
+    sim_t x;
+    start(&x);
+    for (int i = 0; i < 4; i++) { // As test_watchdog(4), which rests
+        run(&x, 600);
+        x.in.liquid = -20;
+        run(&x, 300);
+        x.in.liquid = 35;
+        run(&x, 1);
+    }
+    CHECK("watchdog off: no rest", x.out.state == HEATCTL_DEMAND && x.out.sub == HEATCTL_SUB_HOLD);
+}
+
 static void test_watchdog_slow(void)
 {
     sim_t x;
     start(&x);
+    x.p.defrost_watchdog = 1;
     for (int i = 0; i < 6; i++) { // A defrost every 40 min: never more than 3 in 90 min
         run(&x, 2100);
         x.in.liquid = -20;
@@ -838,6 +857,7 @@ int main(void)
     test_hold_cap(0);
     test_watchdog(3);
     test_watchdog(4);
+    test_watchdog_off();
     test_watchdog_slow();
     test_stale();
     test_gap();
