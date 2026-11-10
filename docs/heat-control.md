@@ -57,7 +57,7 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 - A drop only counts once `liquid` has reached `defrost.exit` since DEMAND or COLD was entered. A coil that cooled in IDLE, NOSENSOR or the watchdog rest is not a defrost when heating starts again.
 - Holds the current outputs, freezes the integral. No IDLE/COLD transitions are evaluated during defrost. Unknown `liquid` never enters defrost.
 - Start with `liquid` only. Log `fanrpm`, `comp` and power at entry and exit so the detection can be refined later.
-- **Post-defrost hold** (after leaving DEFROST, `defrost.hold`, default 10 min, 0 for no hold): demand capped at 95% (no plain 100, no 100q), and the integral may not raise demand. It carries over between DEMAND and COLD without restarting, so it lasts `defrost.hold` in all.
+- **Post-defrost hold** (after leaving DEFROST, `defrost.hold`, default 10 min, 0 for no hold): demand capped at 95% (no plain 100, no 100q), and demand may go down but not up. In COLD the setpoint may go down but not up. The integral keeps running, so it learns the heat the defrost cost. It carries over between DEMAND and COLD without restarting, so it lasts `defrost.hold` in all.
 - **Fan resend:** after each defrost, resend the configured fan for the current state (the unit doesn't restore a forced fan speed).
 - **Defrost-loop watchdog:** more than `defrost.loops` (default 3) defrosts within `defrost.window` (default 90 min) → go to IDLE for `defrost.rest` (default 15 min), then resume DEMAND/COLD. Logged and sent on `info/<host>/heatctl`. Breaks the "death loop" users report at −5…−12 °C.
 

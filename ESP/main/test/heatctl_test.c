@@ -342,12 +342,13 @@ static void test_defrost(void)
     CHECK("fan resend only once", !x.out.resend_fan);
     integral = x.out.integral;
     run(&x, 598);
-    CHECK("hold: integral may not rise", x.out.integral <= integral);
+    CHECK("hold: integral keeps running", x.out.integral > integral);
+    CHECK("hold: demand not raised", x.out.demand == 60);
     CHECK("hold: still in hold", x.out.sub == HEATCTL_SUB_HOLD);
     run(&x, 1);
     CHECK("hold ends after defrost.hold", x.out.sub == HEATCTL_SUB_NONE && x.out.changed);
-    run(&x, 600);
-    CHECK("integral rises again after hold", x.out.integral > integral);
+    run(&x, 1);
+    CHECK("demand rises after hold", x.out.demand > 60);
 
     // Cap
     start(&x);
@@ -479,6 +480,31 @@ static void test_hold_carry(void)
     CHECK("hold carry: hold carried into COLD", x.out.sub == HEATCTL_SUB_HOLD);
     run_until(&x, HEATCTL_COLD, HEATCTL_SUB_NONE, 4000);
     CHECK("hold carry: hold lasts defrost.hold in all", x.now - hold == 600);
+}
+
+// In the post-defrost hold the COLD integral keeps running, but the setpoint does not rise
+static void test_cold_hold(void)
+{
+    sim_t x;
+    start(&x);
+    memset(&x.s, 0, sizeof(x.s));
+    x.in.outdoor = -20;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    run_until(&x, HEATCTL_COLD, -1, 4000);
+    run(&x, 1800); // Room at target, so the setpoint stays at cold.set past cold.rate
+    x.in.liquid = -20;
+    run(&x, 300);
+    x.in.liquid = 35;
+    run(&x, 1);
+    CHECK("COLD hold: in hold", x.out.state == HEATCTL_COLD && x.out.sub == HEATCTL_SUB_HOLD);
+    x.in.room = 19;
+    float integral = x.out.integral, sp = x.out.setpoint;
+    run(&x, 598);
+    CHECK("COLD hold: integral keeps running", x.out.integral > integral);
+    CHECK("COLD hold: setpoint not raised", x.out.setpoint == sp);
+    run_until(&x, HEATCTL_COLD, HEATCTL_SUB_NONE, 10);
+    run(&x, 1);
+    CHECK("COLD hold over: setpoint rises", x.out.setpoint > sp);
 }
 
 // defrost.hold 0 turns the hold off
@@ -804,6 +830,7 @@ int main(void)
     test_defrost();
     test_defrost_rearm();
     test_hold_carry();
+    test_cold_hold();
     test_no_hold();
     test_table_shrinks_in_defrost();
     test_no_smoothing();

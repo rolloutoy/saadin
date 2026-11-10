@@ -417,12 +417,12 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
     case HEATCTL_DEMAND: {
         const heatctl_table_t *t = &p->table;
         int top = level_top(p, noraise);
-        int clamp = level_top(p, 0); // The hold stops growth, it does not pull the integral down
+        int clamp = level_top(p, 0); // The hold caps the level, not the integral
         int was = s->level;
         if (!freeze) { // PI, the integral in W, with anti-windup at the top and bottom levels
             float di = p->ti > 0 ? p->kp * e * dt / p->ti : 0; // ti 0: no integral, P only
-            int r = level_wanted(t, top, p->kp * e + s->integral);
-            if (di > 0 && (r >= top || noraise))
+            int r = level_wanted(t, clamp, p->kp * e + s->integral);
+            if (di > 0 && r >= clamp)
                 di = 0;
             if (di < 0 && r <= 0)
                 di = 0;
@@ -463,8 +463,6 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
     case HEATCTL_COLD:
         if (!freeze) { // PI on the setpoint, the integral in °C
             float di = p->cold_ti > 0 ? p->cold_kp * e * dt / p->cold_ti : 0;
-            if (di > 0 && noraise)
-                di = 0;
             s->cold_integral = clampf(s->cold_integral + di, p->tmin, p->tmax);
         }
         if (!stale && s->sub != HEATCTL_SUB_DEFROST && now - s->setpoint_at >= p->cold_rate) {
