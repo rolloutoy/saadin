@@ -522,6 +522,17 @@ menu "RevK"
 		own, e.g. the app this one was renamed from, so a device can be
 		switched back to it without USB.
 
+	config REVK_OTA_CONFIRM
+	bool "Roll back web uploads unless confirmed"
+	default y
+	depends on REVK_WEB_OTA && BOOTLOADER_APP_ROLLBACK_ENABLE
+        help
+		After a web upload the new firmware runs on probation. Click
+		Keep on any page, or restart from the web UI, to keep it. If
+		nobody does within 10 minutes, if there is no IP address after
+		3 minutes, or if the device resets first, it goes back to the
+		previous firmware. Needs the bootloader flashed over USB once.
+
 	config REVK_OTA_PULL
 	bool "OTA download from an OTA host"
 	default y
