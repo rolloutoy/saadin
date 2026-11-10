@@ -56,7 +56,8 @@ static const char TAG[] = "Saadin";
 // They set new values for parameters inside the big "daikin" state struct
 // and also set appropriate flags, so that changes are picked up by the main
 // loop and commands are sent to the aircon to apply the settings
-#define daikin_set_v(name, value) daikin_set_value(#name, &daikin.name, CONTROL_##name, value)
+#define daikin_set_v(name, value) daikin_set_value(#name, &daikin.name, CONTROL_##name, value, 0)
+#define daikin_force_v(name, value) daikin_set_value(#name, &daikin.name, CONTROL_##name, value, 1) // Even if unchanged
 #define daikin_set_i(name, value) daikin_set_int(#name, &daikin.name, CONTROL_##name, value)
 #define daikin_set_e(name, value) daikin_set_enum(#name, &daikin.name, CONTROL_##name, value, CONTROL_##name##_VALUES)
 #define daikin_set_t(name, value) daikin_set_temp(#name, &daikin.name, CONTROL_##name, value)
@@ -329,14 +330,27 @@ const char *const hvac_action[] = {"off", "preheating", "heating", "cooling", "d
 static heatctl_t heatctl;                          // Controller state, main loop only
 static heatctl_out_t ctl = {.state = HEATCTL_OFF}; // Last outputs, for status
 
+static void heatctl_status_json(jo_t j)
+{ // Controller state, for the web status and the HA state
+    jo_string(j, "ctl", heatctl_state_name(ctl.state));
+    if (ctl.sub)
+        jo_string(j, "ctl_sub", heatctl_sub_name(ctl.sub));
+    if (ctl.state != HEATCTL_OFF) {
+        jo_litf(j, "ctl_target", "%.2f", ctl.target);
+        if (!isnan(ctl.heatw))
+            jo_int(j, "ctl_heatw", lroundf(ctl.heatw));
+        jo_litf(j, "ctl_i", "%.1f", ctl.integral);
+    }
+}
+
 static int heatctl_target(void)
 { // The climate target is the heating control target (auto.t) rather than the unit setpoint
     return autoe && daikin.mode == FAIKIN_MODE_HEAT;
 }
 
-const char *daikin_set_value(const char *name, uint8_t *ptr, uint64_t flag, uint8_t value)
-{ // Setting a value (uint8_t)
-    if (*ptr == value)
+const char *daikin_set_value(const char *name, uint8_t *ptr, uint64_t flag, uint8_t value, uint8_t force)
+{ // Setting a value (uint8_t), force sends it even if unchanged
+    if (*ptr == value && !force)
         return NULL; // No change
     if (b.startup && !(daikin.status_known & flag))
         return "Setting cannot be controlled";
@@ -383,18 +397,24 @@ const char *daikin_set_enum(const char *name, uint8_t *ptr, uint64_t flag, char 
     char *found = strchr(values, *value);
     if (!found)
         return "Value is not a valid value";
-    daikin_set_value(name, ptr, flag, (int)(found - values));
+    daikin_set_value(name, ptr, flag, (int)(found - values), 0);
     return NULL;
+}
+
+static float daikin_temp_step(float value)
+{ // Setpoint as the unit takes it
+    if (proto_type() == PROTO_TYPE_CN_WIRED)
+        return roundf(value); // CN_WIRED only does 1C steps
+    if (proto_type() == PROTO_TYPE_S21)
+        return roundf(value * 2.0) / 2.0; // S21 only does 0.5C steps
+    return value;
 }
 
 const char *daikin_set_temp(const char *name, float *ptr, uint64_t flag, float value)
 { // Setting a value (float)
     if (*ptr == value)
         return NULL; // No change
-    if (proto_type() == PROTO_TYPE_CN_WIRED)
-        value = roundf(value); // CN_WIRED only does 1C steps
-    else if (proto_type() == PROTO_TYPE_S21)
-        value = roundf(value * 2.0) / 2.0; // S21 only does 0.5C steps
+    value = daikin_temp_step(value);
     xSemaphoreTake(daikin.mutex, portMAX_DELAY);
     *ptr = value;
     daikin.control_changed |= flag;
@@ -1629,15 +1649,7 @@ jo_t daikin_status(void)
 #endif
     jo_litf(j, "autot", "%.1f", (float)autot / autot_scale);
     jo_bool(j, "autoe", autoe);
-    jo_string(j, "ctl", heatctl_state_name(ctl.state));
-    if (ctl.sub)
-        jo_string(j, "ctl_sub", heatctl_sub_name(ctl.sub));
-    if (ctl.state != HEATCTL_OFF) {
-        jo_litf(j, "ctl_target", "%.2f", ctl.target);
-        if (!isnan(ctl.heatw))
-            jo_int(j, "ctl_heatw", lroundf(ctl.heatw));
-        jo_litf(j, "ctl_i", "%.1f", ctl.integral);
-    }
+    heatctl_status_json(j);
     xSemaphoreGive(daikin.mutex);
 #ifdef ELA
     xSemaphoreGive(blemutex);
@@ -3105,16 +3117,10 @@ void revk_state_extra(jo_t j)
     if (haswitches)
         jo_bool(j, "autoe", autoe);
     if (!nofaikoutauto) {
-        jo_string(j, "ctl", heatctl_state_name(ctl.state));
         jo_litf(j, "autot", "%.1f", (float)autot / autot_scale);
         jo_int(j, "pidkp", pidkp);
         jo_int(j, "pidti", pidti);
-        if (ctl.state != HEATCTL_OFF) {
-            jo_litf(j, "ctl_target", "%.2f", ctl.target);
-            if (!isnan(ctl.heatw))
-                jo_int(j, "ctl_heatw", lroundf(ctl.heatw));
-            jo_litf(j, "ctl_i", "%.1f", ctl.integral);
-        }
+        heatctl_status_json(j);
     }
 }
 
@@ -3278,15 +3284,6 @@ static void heatctl_settings(heatctl_params_t *p)
     p->cold_fan = heatctl_fan(coldfan);
 }
 
-static float heatctl_temp_step(float t)
-{ // Setpoint as the unit takes it
-    if (proto_type() == PROTO_TYPE_CN_WIRED)
-        return roundf(t);
-    if (proto_type() == PROTO_TYPE_S21)
-        return roundf(t * 2) / 2;
-    return roundf(t * 10) / 10;
-}
-
 enum {
     HEATCTL_SEND_DEMAND,
     HEATCTL_SEND_QUIET,
@@ -3399,20 +3396,15 @@ static void heatctl_tick(uint32_t now)
         if ((daikin.status_known & CONTROL_quiet) && !noquiet &&
             heatctl_send(HEATCTL_SEND_QUIET, "quiet", daikin.quiet, o.quiet, o.changed, now))
             daikin_set_v(quiet, o.quiet);
-        float t = heatctl_temp_step(o.setpoint);
+        float t = daikin_temp_step(o.setpoint);
         if ((daikin.status_known & CONTROL_temp) &&
             heatctl_send(HEATCTL_SEND_TEMP, "temp", isnan(daikin.temp) ? -1 : lroundf(daikin.temp * 10),
                          lroundf(t * 10), o.changed, now))
             daikin_set_t(temp, t);
         if (o.fan != HEATCTL_FAN_LEAVE && (daikin.status_known & CONTROL_fan)) {
-            if (o.resend_fan) { // After a defrost, as the unit doesn't restore a forced fan speed
-                heatctl_send(HEATCTL_SEND_FAN, "fan", o.fan, o.fan, 1, now);
-                xSemaphoreTake(daikin.mutex, portMAX_DELAY);
-                daikin.fan = o.fan;
-                daikin.control_changed |= CONTROL_fan;
-                daikin.mode_changed = 1;
-                xSemaphoreGive(daikin.mutex);
-            } else if (heatctl_send(HEATCTL_SEND_FAN, "fan", daikin.fan, o.fan, o.changed, now))
+            if (o.resend_fan) // After a defrost, as the unit doesn't restore a forced fan speed
+                daikin_force_v(fan, o.fan);
+            else if (heatctl_send(HEATCTL_SEND_FAN, "fan", daikin.fan, o.fan, o.changed, now))
                 daikin_set_v(fan, o.fan);
         }
         if ((daikin.status_known & CONTROL_econo) && !noecono && // Econo and demand share D7
@@ -3420,7 +3412,7 @@ static void heatctl_tick(uint32_t now)
             daikin_set_v(econo, 0);
     } else if (o.changed && was != HEATCTL_OFF && daikin.power && daikin.mode == FAIKIN_MODE_HEAT && autot) {
         // Switched off while heating: back to a plain unit thermostat at the target
-        daikin_set_t(temp, heatctl_temp_step(o.target < tmin ? tmin : o.target > tmax ? tmax : o.target));
+        daikin_set_t(temp, o.target < tmin ? tmin : o.target > tmax ? tmax : o.target);
         if ((daikin.status_known & CONTROL_demand) && !nodemand)
             daikin_set_i(demand, 100);
         if ((daikin.status_known & CONTROL_quiet) && !noquiet)
