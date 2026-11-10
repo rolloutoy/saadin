@@ -6,6 +6,10 @@
 #include <string.h>
 #include "../heatctl.h"
 
+#ifndef DEMAND_TABLE
+#error DEMAND_TABLE (the demand.table default from settings.def) comes from the Makefile
+#endif
+
 static int failed = 0, passed = 0;
 
 #define CHECK(name, cond)                         \
@@ -58,7 +62,7 @@ static heatctl_params_t params(void)
         .demand_fan = HEATCTL_FAN_LEAVE,
         .cold_fan = HEATCTL_FAN_LEAVE,
     };
-    heatctl_parse_table(&p.table, "");
+    heatctl_parse_table(&p.table, "", DEMAND_TABLE);
     return p;
 }
 
@@ -111,7 +115,7 @@ static int run_until(sim_t *x, heatctl_state_t st, int sub, uint32_t secs)
 static void test_table(void)
 {
     heatctl_table_t t;
-    CHECK("table default ok", !heatctl_parse_table(&t, HEATCTL_TABLE_DEFAULT));
+    CHECK("table default ok", !heatctl_parse_table(&t, DEMAND_TABLE, DEMAND_TABLE));
     CHECK("table default levels", t.n == 9);
     CHECK("table first", t.level[0].demand == 40 && NEAR(t.level[0].watts, 220) && t.level[0].quiet);
     CHECK("table 100q", t.level[7].demand == 100 && t.level[7].quiet && NEAR(t.level[7].watts, 1510));
@@ -120,19 +124,21 @@ static void test_table(void)
     for (int i = 0; i < 8; i++)
         qo &= t.level[i].quiet;
     CHECK("table QO on every level but plain 100", qo);
-    CHECK("table empty is default", !heatctl_parse_table(&t, "") && t.n == 9);
-    CHECK("table custom", !heatctl_parse_table(&t, " 30:100, 60:300 ,100:900") && t.n == 3 && t.level[0].demand == 30 &&
-                              NEAR(t.level[2].watts, 900) && !t.level[2].quiet && t.level[1].quiet);
+    CHECK("table empty is default", !heatctl_parse_table(&t, "", DEMAND_TABLE) && t.n == 9);
+    CHECK("table custom", !heatctl_parse_table(&t, " 30:100, 60:300 ,100:900", DEMAND_TABLE) && t.n == 3 &&
+                              t.level[0].demand == 30 && NEAR(t.level[2].watts, 900) && !t.level[2].quiet &&
+                              t.level[1].quiet);
     const char *bad[] = {"40:220,50", "40:220,x:300",  "40:220,50:200",
                          "20:100",    "101:900",       "40:220,50:280q",
                          "40:-5",     "40:220;50:300", "1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,11:11,12:12,13:13",
                          "40:220,"};
     for (unsigned i = 0; i < sizeof(bad) / sizeof(*bad); i++) {
-        heatctl_parse_table(&t, "30:1,100:2"); // Something else first
+        heatctl_parse_table(&t, "30:1,100:2", DEMAND_TABLE); // Something else first
         char name[80];
         snprintf(name, sizeof(name), "table bad \"%s\"", bad[i]);
-        CHECK(name, heatctl_parse_table(&t, bad[i]) && t.n == 9 && NEAR(t.level[8].watts, 2470));
+        CHECK(name, heatctl_parse_table(&t, bad[i], DEMAND_TABLE) && t.n == 9 && NEAR(t.level[8].watts, 2470));
     }
+    CHECK("table bad uses the given default", heatctl_parse_table(&t, "x", "30:1,100:2") && t.n == 2);
 }
 
 static void test_curve(void)
@@ -503,7 +509,7 @@ static void test_table_shrinks_in_defrost(void)
     x.in.liquid = -20;
     run(&x, 1);
     CHECK("table shrink: defrost at plain 100", x.out.sub == HEATCTL_SUB_DEFROST && x.out.demand == 100);
-    CHECK("table shrink: parsed", !heatctl_parse_table(&x.p.table, "40:220,60:400,80:700"));
+    CHECK("table shrink: parsed", !heatctl_parse_table(&x.p.table, "40:220,60:400,80:700", DEMAND_TABLE));
     run(&x, 1);
     CHECK("table shrink: demand from the new table", x.out.demand == 80);
 }

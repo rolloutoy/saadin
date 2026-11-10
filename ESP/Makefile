@@ -92,8 +92,11 @@ menuconfig:
 test:	main/test/heatctl_test
 	./main/test/heatctl_test
 
-main/test/heatctl_test: main/test/heatctl_test.c main/heatctl.c main/heatctl.h
-	gcc -O -o $@ main/test/heatctl_test.c main/heatctl.c -g -Wall -Wextra --std=gnu99 -lm
+# The demand.table default from settings.def, so the test runs on the real default
+DEMAND_TABLE := $(shell sed -n 's/^s[[:space:]]*demand\.table[[:space:]]*\("[^"]*"\).*/\1/p' main/settings.def)
+
+main/test/heatctl_test: main/test/heatctl_test.c main/heatctl.c main/heatctl.h main/settings.def
+	gcc -O -o $@ main/test/heatctl_test.c main/heatctl.c -g -Wall -Wextra --std=gnu99 -lm -DDEMAND_TABLE='$(DEMAND_TABLE)'
 
 pull:
 	git pull

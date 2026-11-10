@@ -3236,9 +3236,11 @@ static void heatctl_settings(heatctl_params_t *p)
 {
     static char *table = NULL, *curve = NULL; // As last parsed
     if (!table || strcmp(table, demandtable ?: "")) {
+        extern revk_settings_t *revk_settings_find(const char *name, int *index); // ESP32-RevK settings_lib.h
+        revk_settings_t *s = revk_settings_find("demandtable", NULL);
         free(table);
         table = strdup(demandtable ?: "");
-        const char *e = heatctl_parse_table(&p->table, table);
+        const char *e = heatctl_parse_table(&p->table, table, s->def); // Default from settings.def
         if (e) {
             ESP_LOGE(TAG, "heatctl: demand.table \"%s\": %s, using the default", table, e);
             jo_t j = jo_object_alloc();

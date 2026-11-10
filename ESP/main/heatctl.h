@@ -4,7 +4,6 @@
 
 #include <stdint.h>
 
-#define HEATCTL_TABLE_DEFAULT "40:220,50:280,60:350,70:400,80:520,85:580,95:640,100q:1510,100:2470"
 #define HEATCTL_LEVELS_MAX 12
 #define HEATCTL_CURVE_MAX 8
 #define HEATCTL_DEFROSTS_MAX 16     // Defrost start times kept for the defrost-loop watchdog
@@ -141,9 +140,9 @@ typedef struct {
     uint32_t defrost_at[HEATCTL_DEFROSTS_MAX];
 } heatctl_t;
 
-// Parse a demand table "demand:watts,..." ("100q" is 100 with QO). Empty means the default. Returns NULL if OK, else
-// an error, and the table is then the default.
-const char *heatctl_parse_table(heatctl_table_t *t, const char *s);
+// Parse a demand table "demand:watts,..." ("100q" is 100 with QO). Empty means def, the default (demand.table's
+// default in settings.def). Returns NULL if OK, else an error, and the table is then def.
+const char *heatctl_parse_table(heatctl_table_t *t, const char *s, const char *def);
 
 // Parse a target curve "outdoor:offset,...". Empty means no offset. Returns NULL if OK, else an error, and the curve
 // is then empty.

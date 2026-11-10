@@ -63,13 +63,13 @@ static const char *parse_table(heatctl_table_t *t, const char *s)
     return NULL;
 }
 
-const char *heatctl_parse_table(heatctl_table_t *t, const char *s)
+const char *heatctl_parse_table(heatctl_table_t *t, const char *s, const char *def)
 {
     const char *err = NULL;
     if (s && *skipspace(s))
         err = parse_table(t, s);
     if (!s || !*skipspace(s) || err)
-        parse_table(t, HEATCTL_TABLE_DEFAULT);
+        parse_table(t, def);
     return err;
 }
 
