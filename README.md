@@ -4,7 +4,7 @@ Local ESP32 firmware for Daikin heat pumps and air conditioners. MQTT, Home Assi
 
 Säädin is a fork of [Faikout](https://codeberg.org/RevK/ESP32-Faikout) by Adrian Kennard ([RevK](https://codeberg.org/RevK)). The aim is to run the heat pump at a steady, modulated output: the firmware sets the unit's power limit ("demand") from a room temperature control loop instead of switching it on and off around a setpoint.
 
-> **Status: early fork.** Apart from the [changes listed below](#changes-from-faikout), the code is still upstream Faikout. Identifiers in the code (project name, binaries, hostname, MQTT topics, Home Assistant entities) still say `Faikout` and will be renamed later. There are no Säädin releases yet.
+> **Status: early fork.** Apart from the [changes listed below](#changes-from-faikout), the code is still upstream Faikout. The app is named `Saadin`, but most source files and settings still use Faikout names. There are no Säädin releases yet.
 
 ## Credit
 
@@ -87,7 +87,7 @@ Libraries are included as git subtrees, so a plain clone is enough; `--recursive
 
 > **No OTA downloads, no signing.** Säädin never fetches firmware from a server. There is no OTA host, no automatic update check, and no `upgrade` command or button. Builds are not signed. To update, download a release and upload the `.bin` on the "Firmware" settings tab.
 >
-> A device running signed upstream firmware rejects unsigned images over OTA, so flash the first Säädin build over USB.
+> A device running upstream Faikout rejects Säädin images over OTA, because they are unsigned and have a different app name. Flash the first Säädin build over USB. To go back, upload an upstream Faikout `.bin` on the "Firmware" tab; Säädin accepts it.
 
 ## Set-up and documentation
 
@@ -106,6 +106,8 @@ These manuals come from upstream and still use the Faikout name:
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
 **2026-11-10**
+- Renamed the app from `Faikout` to `Saadin`. Binaries are `Saadin-<board>.bin`, the setup access point is `Saadin-…`, the Home Assistant device model is `Saadin`, and the app-wide MQTT topics use `Saadin` (for example `command/Saadin` for all devices). Settings are kept.
+- The "Firmware" upload also accepts upstream Faikout images, so a device can go back to Faikout without USB.
 - Reformatted all C code to ESP-IDF style. Only whitespace changed.
 - Added clang-format and whitespace checks, run with prek.
 
