@@ -3121,7 +3121,9 @@ void revk_state_extra(jo_t j)
         jo_litf(j, "autot", "%.1f", (float)autot / autot_scale);
         jo_int(j, "pidkp", pidkp);
         jo_int(j, "pidti", pidti);
+        xSemaphoreTake(daikin.mutex, portMAX_DELAY); // ctl is written by the main loop
         heatctl_status_json(j);
+        xSemaphoreGive(daikin.mutex);
     }
 }
 
