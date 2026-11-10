@@ -162,10 +162,10 @@ A liquid temperature drop counts as a defrost only after the coil has been hot (
 `demand.table` lists the demand levels the controller may use, as `demand:watts`, lowest first. `100q` is 100% with quiet outdoor. The default is:
 
 ```
-40:220,50:280,60:350,70:400,80:520,85:580,95:640,100q:1510,100:2470
+40:270,50:340,60:400,70:465,75:500,80:530,85:570,90:605,95:640,100q:1510,100:2470
 ```
 
-The watts are the power the unit drew at each level in a test on one unit. The controller picks the highest level whose watts are at or below the heat it wants. The loop corrects for errors in the table, so the order of the levels matters more than the exact watts. An invalid table is reported on `error/GuestAC/heatctl` and the default is used instead.
+The watts are the power one unit drew at each level. Up to 95% they follow about 6.7 W per %: 50, 60 and 70% were measured at −1…−2 °C outside, and the other levels lie on the same line. The 75% and 90% levels make the steps more even, about 30–65 W each. The unit draws more at the same level in colder weather. The controller picks the highest level whose watts are at or below the heat it wants. The loop corrects for errors in the table, so the order of the levels matters more than the exact watts. An invalid table is reported on `error/GuestAC/heatctl` and the default is used instead.
 
 ### Target curve
 
