@@ -5,7 +5,7 @@ Säädin is a fork of Faikout (by RevK / Andrews & Arnold). Firmware only.
 ## Engineering constraints
 
 - Säädin diverges from Faikout for good. Nothing is sent upstream, and the fork is never rebased onto or merged with upstream. Refactor, rename, or remove upstream code when that serves Säädin.
-- Exception: keep the S21 protocol code (`ESP/main/daikin_s21.h`) exactly as upstream has it. Build Säädin features on top of it, not into it.
+- Exception: make no logical changes to the S21 protocol code, that is `ESP/main/daikin_s21.h` and the S21 handling in `ESP/main/Faikout.c`. Reformatting it is fine. Build Säädin features on top of it, not into it.
 - Make the smallest change that solves the problem. Match the surrounding style (indentation, naming, comment density) instead of imposing a new one.
 - Do NOT enable hardware secure boot, flash encryption, or eFuse burning. These are permanent and can brick the board.
 - Use ASCII `saadin` / `Saadin` in code, hostnames, binaries, and topics. Use "Säädin" only in display text.
