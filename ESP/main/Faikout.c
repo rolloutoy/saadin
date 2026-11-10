@@ -1716,7 +1716,7 @@ static esp_err_t web_graph_json(httpd_req_t *req)
         return ESP_OK;
 #endif
     heatlog_sample_t *s = heatlog.n ? mallocspi(heatlog.n * sizeof(*s)) : NULL;
-    const size_t size = 1024;
+    const size_t size = 4096; // Reply buffer, PSRAM if there is any
     char *buf = mallocspi(size);
     if (!buf) {
         free(s);
