@@ -5,7 +5,7 @@ prek = "0.5.2"
 [tools.'github:espressif/idf-im-ui']
 # ESP-IDF Installation Manager (eim). The CLI moved from the archived
 # espressif/idf-im-cli repo into espressif/idf-im-ui; select the CLI zip per platform.
-version = "0.19.0"
+version = "v0.20.1"
 bin = "eim"
 platforms.macos-arm64.asset_pattern = "eim-cli-macos-aarch64.zip"
 platforms.macos-x64.asset_pattern = "eim-cli-macos-x64.zip"
