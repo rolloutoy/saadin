@@ -108,6 +108,7 @@ These manuals come from upstream and still use the Faikout name:
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
 **2026-11-10**
+- Fixed a memory leak (about 1–3 KB) each time the settings page's "Save settings" or "Upload settings" button is used.
 - The default `demand.table` is now `40:270,50:340,60:400,70:465,75:500,80:530,85:570,90:605,95:640,100q:1510,100:2470` (was `40:220,50:280,60:350,70:400,80:520,85:580,95:640,100q:1510,100:2470`). The lower levels match what the unit draws, and 75% and 90% make the steps more even, so the controller no longer sticks at 70% because 80% looks 120 W away. A device with its own `demand.table` keeps it.
 - The defrost-loop watchdog (heating off for `defrost.rest` after more than `defrost.loops` defrosts in `defrost.window`) is now off by default. Turn it on with the new `defrost.watchdog` setting. With the old defaults it also fired on normal defrosts every 27 minutes around −2 °C, turning heating off for 15 minutes.
 - `auto.smooth` now defaults to 0 (no room temperature smoothing) instead of 300 s. A sensor that reports in 0.01 °C steps barely flickers, so smoothing only added lag. A device that never changed `auto.smooth` switches to no smoothing on update; one with its own value keeps it.
