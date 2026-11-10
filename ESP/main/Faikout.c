@@ -13,6 +13,7 @@ static const char TAG[] = "Saadin";
 #include <math.h>
 #include "mdns.h"
 #include "faikout_i2c.h"
+#include "faikout_auto.h"
 #ifdef CONFIG_BT_NIMBLE_ENABLED
 #include "bleenv.h"
 #endif
@@ -3409,15 +3410,18 @@ void app_main()
                         }
                 }
                 if (bletemp != was)
-                    daikin.ha_send = 1;            // Change
-                if (bletemp && bletemp->tempset) { // Use temp
-                    float env = bletemp->temp / 100.0;
-                    if (daikin.env != env) {
-                        daikin.status_changed = 1;
-                        daikin.env = env;
-                    }
+                    daikin.ha_send = 1; // Change
+                // External temperature from the BLE sensor
+                static uint8_t envble = 0; // daikin.env holds a BLE reading
+                float env =
+                    auto_ble_env(daikin.env, &envble, bletemp && bletemp->tempset ? bletemp->temp / 100.0 : NAN);
+                if (env != daikin.env && !(isnan(env) && isnan(daikin.env))) {
+                    daikin.status_changed = 1;
+                    daikin.env = env;
+                }
+                if (bletemp && bletemp->tempset)
                     daikin.status_known |= CONTROL_env; // So we report it
-                } else
+                else
                     daikin.status_known &= ~CONTROL_env; // So we don't report it
                 if (bletemp && bletemp->faikoutset) {
                     float min = NAN, max = NAN;
@@ -4096,63 +4100,56 @@ void app_main()
                     jo_litf(j, "max", "%.2f", max);
                     if (daikin.countTotalPrev) // Skip first cycle
                     {                          // Power, mode, fan, automation
-                        if (daikin.power)      // Daikin is on
-                        {
-                            int step = fan_5_auto() ? 1 : 2;
-                            // A lot more beyond than total counts and no approaching in the last two cycles
-                            // Time to switch modes (heating/cooling) and reduce fan to minimum
-                            if ((countBeyond2Samples * 2 > count_total_2_samples || daikin.slave) &&
-                                !count_approaching_2_samples) { // Mode switch
-                                if (!lockmode) {
-                                    jo_string(j, "set-mode", hot ? "C" : "H");
-                                    daikin_set_e(mode, hot ? "C" : "H"); // Swap mode
-                                    if (!nofanauto && step && daikin.fan > 1 && daikin.fan <= 5) {
-                                        jo_int(j, "set-fan", 1);
-                                        daikin_set_v(fan, 1);
-                                    }
-                                }
+                        int step = fan_5_auto() ? 1 : 2;
+                        auto_review_t r = {
+                            .approaching = daikin.countApproaching,
+                            .beyond = daikin.countBeyond,
+                            .total = daikin.countTotal,
+                            .approaching2 = count_approaching_2_samples,
+                            .beyond2 = countBeyond2Samples,
+                            .total2 = count_total_2_samples,
+                            .power = daikin.power,
+                            .slave = daikin.slave,
+                            .lock_mode = lockmode,
+                            .autopower = (autoe && autop) || (daikin.remote && autoptemp),
+                            .fan_down = !nofanauto && step && daikin.fan > 1 && daikin.fan <= 5,
+                            .fan_up = !nofanauto && step && daikin.fan >= 1 && daikin.fan < autofmax,
+                            .out_of_band = measured_temp >= max + (float)autoptemp / autoptemp_scale ||
+                                           measured_temp <= min - (float)autoptemp / autoptemp_scale,
+                        };
+                        auto_review_action_t action = auto_review(&r);
+                        switch (action) {
+                        case AUTO_REVIEW_MODE:
+                            jo_string(j, "set-mode", hot ? "C" : "H");
+                            daikin_set_e(mode, hot ? "C" : "H"); // Swap mode
+                            if (r.fan_down) {
+                                jo_int(j, "set-fan", 1);
+                                daikin_set_v(fan, 1);
                             }
-                            // Less approaching, but still close to min in heating or max in cooling
-                            // Time to reduce the fan a bit
-                            else if (!nofanauto && count_approaching_2_samples * 10 < count_total_2_samples * 7 &&
-                                     step && daikin.fan > 1 && daikin.fan <= 5) {
-                                jo_int(j, "set-fan", daikin.fan - step);
-                                daikin_set_v(fan, daikin.fan - step); // Reduce fan
-                            }
-                            // A lot of approaching means still far away from desired temp
-                            // Time to increase the fan speed
-                            else if (!nofanauto && !daikin.slave &&
-                                     count_approaching_2_samples * 10 > count_total_2_samples * 9 && step &&
-                                     daikin.fan >= 1 && daikin.fan < autofmax) {
-                                jo_int(j, "set-fan", daikin.fan + step);
-                                daikin_set_v(fan, daikin.fan + step); // Increase fan
-                            }
-                            // No Approaching and no Beyond, so it's in desired range (autot +/- autor)
-                            // Only affects if autop is active
-                            // Turn off as 100% in band for last two period
-                            else if (((autoe && autop) || (daikin.remote && autoptemp)) &&
-                                     !count_approaching_2_samples && !countBeyond2Samples) { // Auto off
-                                jo_bool(j, "set-power", 0);
-                                daikin_set_v(power, 0); // Turn off as 100% in band for last two period
-                            }
-                        }
-                        // Daikin is off
-                        else if (((autoe && autop) || (daikin.remote && autoptemp)) // AutoP Mode only
-                                 && (daikin.countApproaching == daikin.countTotal ||
-                                     daikin.countBeyond ==
-                                         daikin.countTotal) // full cycle approaching or full cycle beyond
-                                 &&
-                                 (measured_temp >= max + (float)autoptemp / autoptemp_scale // temp out of desired range
-                                  || measured_temp <= min - (float)autoptemp / autoptemp_scale) &&
-                                 (!lockmode ||
-                                  countBeyond2Samples != count_total_2_samples)) // temp out of desired range
-                        { // Auto on (don't auto on if would reverse mode and lockmode)
+                            break;
+                        case AUTO_REVIEW_FAN_DOWN:
+                            jo_int(j, "set-fan", daikin.fan - step);
+                            daikin_set_v(fan, daikin.fan - step); // Reduce fan
+                            break;
+                        case AUTO_REVIEW_FAN_UP:
+                            jo_int(j, "set-fan", daikin.fan + step);
+                            daikin_set_v(fan, daikin.fan + step); // Increase fan
+                            break;
+                        case AUTO_REVIEW_OFF:
+                            jo_bool(j, "set-power", 0);
+                            daikin_set_v(power, 0);
+                            break;
+                        case AUTO_REVIEW_ON:
+                        case AUTO_REVIEW_ON_MODE:
                             jo_bool(j, "set-power", 1);
-                            daikin_set_v(power, 1); // Turn on as 100% out of band for last two period
-                            if (countBeyond2Samples == count_total_2_samples) {
+                            daikin_set_v(power, 1);
+                            if (action == AUTO_REVIEW_ON_MODE) {
                                 jo_string(j, "set-mode", hot ? "C" : "H");
                                 daikin_set_e(mode, hot ? "C" : "H"); // Swap mode
                             }
+                            break;
+                        default:
+                            break;
                         }
                     }
                     if (count_total_2_samples) // after a cycle, send automation data

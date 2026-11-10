@@ -88,6 +88,13 @@ clean:
 menuconfig:
 	idf.py menuconfig
 
+.PHONY: test
+test:	main/test/faikout_auto_test
+	./main/test/faikout_auto_test
+
+main/test/faikout_auto_test: main/test/faikout_auto_test.c main/faikout_auto.c main/faikout_auto.h
+	gcc -O -o $@ main/test/faikout_auto_test.c main/faikout_auto.c -g -Wall --std=gnu99 -lm
+
 pull:
 	git pull
 	git submodule update --recursive
