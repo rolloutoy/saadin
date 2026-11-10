@@ -108,6 +108,7 @@ These manuals come from upstream and still use the Faikout name:
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
 **2026-11-10**
+- `auto.smooth` now defaults to 0 (no room temperature smoothing) instead of 300 s. A sensor that reports in 0.01 °C steps barely flickers, so smoothing only added lag. A device that never changed `auto.smooth` switches to no smoothing on update; one with its own value keeps it.
 - The heating graph now keeps one sample every 30 seconds instead of one a minute, still for 3 days. Boards without PSRAM keep 3 hours instead of 6, so the log uses the same memory there.
 - During the hold after a defrost, the heating integral now keeps running. Demand (or the setpoint in cold-weather mode) still does not go up until the hold ends. Before, the integral was frozen during the hold too, so it learned slowly when defrosts were frequent.
 - `pid.ti` and `cold.ti` of 0 now turn the integral off (P only), so the proportional gain can be tuned on its own. Before, 0 meant an integral time of one second. The Home Assistant "Heating integral time" number now goes down to 0.

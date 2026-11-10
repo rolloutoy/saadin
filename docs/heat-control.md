@@ -71,7 +71,7 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 - **Target** = `auto.t` + offset from `auto.curve` at the smoothed outdoor temperature.
 - `auto.curve` is a string of `outdoor:offset` points, e.g. `"-25:1.0,-10:0.5,0:0"`. Linear between points, flat beyond the ends, empty = no offset. It's an offset, so setting the target from web / HA / MQTT keeps working.
 - **Outdoor** temperature is the unit's own reading, smoothed (e.g. 30 min EMA) and frozen during DEFROST (the unit's outdoor reading jumps about +4 °C during defrost).
-- **Room** temperature: BLE sensor (`auto.b`) if set and fresh, otherwise MQTT (`auto.topic`/`auto.payload`, or `env` in the `control` command). Smoothed over `auto.smooth` (default 300 s, 0 for none). The unit's own sensor is never used as the room reading for control (it reads 3–7 K high against the fixed setpoint); it's only used via NOSENSOR.
+- **Room** temperature: BLE sensor (`auto.b`) if set and fresh, otherwise MQTT (`auto.topic`/`auto.payload`, or `env` in the `control` command). Smoothed over `auto.smooth` (default 0, none: a sensor with 0.01 °C steps barely flickers, and smoothing only adds lag; set e.g. 300 s for a sensor with 0.1 °C steps). The unit's own sensor is never used as the room reading for control (it reads 3–7 K high against the fixed setpoint); it's only used via NOSENSOR.
 
 ## Demand table
 
