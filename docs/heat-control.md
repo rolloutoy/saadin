@@ -34,7 +34,7 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 - On exit the PI integral starts at the watts of the lowest level.
 
 ### DEMAND
-- Sends the fixed setpoint `demand.set` (default 31 °C).
+- Sends the fixed setpoint `demand.set` (default 30 °C, the highest heat setpoint many units accept).
 - PI loop on room temperature error. Output is **heat wanted in electrical watts**. No D term.
 - The demand table (below) maps watts to a demand level (a demand % with or without QO): the highest level whose watts ≤ wanted.
 - **Quiet outdoor (QO) is on for every level except plain 100%.** That includes the `100q` level, IDLE and the DEFROST sub-state; it calms defrosts and the ramp-up after them.

@@ -20,7 +20,7 @@ The heating control section has:
 - **Target**: the room temperature to keep, in 0.1 °C steps.
 - **A status line**: what the controller is doing, for example "Demand 60% QO · target 21.3 · heat 350 W".
 
-The controller works only when the unit is on in heat mode. It does not turn the unit on or off. While it runs, *Set*, *Demand* and *Quiet outdoor* in the main section are greyed out, because the controller sets them. *Set* shows 31 °C most of the time, which is expected.
+The controller works only when the unit is on in heat mode. It does not turn the unit on or off. While it runs, *Set*, *Demand* and *Quiet outdoor* in the main section are greyed out, because the controller sets them. *Set* shows 30 °C most of the time, which is expected.
 
 See [Heating control](Heating.md) for how it works and for its settings.
 

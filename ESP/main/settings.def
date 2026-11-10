@@ -89,7 +89,7 @@ u16	stop.temp	22		.live	.decimal=1 .unit="℃"		// Setpoint left on the unit whe
 s	auto.topic								// Topic to follow for room temperature
 s	auto.payload								// JSON field in payload of above topic for room temperature
 
-u16	demand.set	31		.live	.decimal=1 .unit="℃"		// Setpoint while heating on demand
+u16	demand.set	30		.live	.decimal=1 .unit="℃"		// Setpoint while heating on demand
 s	demand.table	"40:220,50:280,60:350,70:400,80:520,85:580,95:640,100q:1510,100:2470"	.live	// Demand table, demand:watts,... (100q is 100 with quiet outdoor)
 bit	demand.full	1		.live					// Heating on demand may use plain 100% (quiet outdoor off)
 u8	demand.start	60		.live	.unit="%"			// On start, the integral is the watts of this demand

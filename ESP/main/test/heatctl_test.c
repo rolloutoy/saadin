@@ -29,7 +29,7 @@ static heatctl_params_t params(void)
         .smooth = 300,
         .tmin = 16,
         .tmax = 32,
-        .demand_set = 31,
+        .demand_set = 30,
         .demand_full = 1,
         .demand_start = 60,
         .demand_rate = 600,
@@ -162,7 +162,7 @@ static void test_off_and_start(void)
     CHECK("start: DEMAND", x.out.state == HEATCTL_DEMAND && x.out.sub == HEATCTL_SUB_NONE && x.out.changed);
     CHECK("start: integral at demand.start level", NEAR(x.out.integral, 350));
     CHECK("start: demand 60 with QO", x.out.demand == 60 && x.out.quiet);
-    CHECK("start: setpoint demand.set", NEAR(x.out.setpoint, 31));
+    CHECK("start: setpoint demand.set", NEAR(x.out.setpoint, 30));
     CHECK("start: target", NEAR(x.out.target, 21));
     CHECK("start: heat wanted", NEAR(x.out.heatw, 350));
     CHECK("start: fan left alone", x.out.fan == HEATCTL_FAN_LEAVE);
@@ -217,7 +217,7 @@ static void test_demand_idle(void)
     t = run_until(&x, HEATCTL_DEMAND, -1, 4000);
     CHECK("IDLE -> DEMAND after idle.min", t == 1800);
     CHECK("after IDLE: integral at lowest level", NEAR(x.out.integral, 220));
-    CHECK("after IDLE: setpoint demand.set", NEAR(x.out.setpoint, 31));
+    CHECK("after IDLE: setpoint demand.set", NEAR(x.out.setpoint, 30));
 
     start(&x);
     x.in.room = 21.6;
@@ -327,7 +327,7 @@ static void test_defrost(void)
     run(&x, 1000);
     CHECK("defrost holds demand", x.out.demand == 60);
     CHECK("defrost QO on", x.out.quiet);
-    CHECK("defrost holds setpoint", NEAR(x.out.setpoint, 31));
+    CHECK("defrost holds setpoint", NEAR(x.out.setpoint, 30));
     CHECK("defrost freezes integral", x.out.integral == integral);
     x.in.liquid = 26;
     run(&x, 1);

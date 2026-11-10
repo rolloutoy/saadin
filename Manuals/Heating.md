@@ -31,7 +31,7 @@ The controller is always in one of these states. The web status line and the `ct
 |State|Web status line|What the unit gets|When|
 |-----|---------------|------------------|----|
 |`off`|*(empty, or "Not running")*|Nothing|`auto.e` off, `auto.t` not set, unit off, or not in heat mode|
-|`demand`|Demand 60% QO · target 21.3 · heat 350 W|Setpoint 31 °C, demand limited|Normal heating|
+|`demand`|Demand 60% QO · target 21.3 · heat 350 W|Setpoint 30 °C, demand limited|Normal heating|
 |`idle`|Heating off · target 21.3|Setpoint 16 °C, lowest demand|The room is more than 0.5 °C above the target|
 |`cold`|Cold · setpoint 24.5 · target 21.3|Demand 100%, the setpoint adjusted|Below −15 °C outside|
 |`nosensor`|No room reading · unit thermostat at 21.0|Setpoint = target, demand 100%|No room reading for 30 minutes|
@@ -40,9 +40,9 @@ QO is *quiet outdoor*. The controller turns it on at every demand level except p
 
 ### Demand
 
-The controller sends the unit a high setpoint (`demand.set`, 31 °C), so the unit always wants to heat. It then limits the unit's power with demand. A PI loop (proportional plus integral) works out how much heat the room needs, in watts. The demand table (`demand.table`) turns those watts into a demand level.
+The controller sends the unit a high setpoint (`demand.set`, 30 °C), so the unit always wants to heat. It then limits the unit's power with demand. A PI loop (proportional plus integral) works out how much heat the room needs, in watts. The demand table (`demand.table`) turns those watts into a demand level.
 
-So in this state the web page shows *Set* 31 °C. This is expected.
+So in this state the web page shows *Set* 30 °C. This is expected.
 
 Demand changes at most once every 10 minutes (`demand.rate`), but one change can skip several levels.
 
@@ -107,7 +107,7 @@ Set these on the *Advanced* settings page, or over MQTT. While the controller is
 
 |Setting|Default|Meaning|
 |-------|-------|-------|
-|`demand.set`|31 °C|Setpoint sent to the unit|
+|`demand.set`|30 °C|Setpoint sent to the unit. Many units cap the heat setpoint at 30 °C, so a higher value is resent every minute
 |`demand.table`|see below|Demand levels and their watts|
 |`demand.full`|on|Allow plain 100% (quiet outdoor off). Off: the highest level is 100% with quiet outdoor|
 |`demand.start`|60%|Demand level to start at|
