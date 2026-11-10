@@ -108,6 +108,7 @@ These manuals come from upstream and still use the Faikout name:
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
 **2026-11-10**
+- The defrost-loop watchdog (heating off for `defrost.rest` after more than `defrost.loops` defrosts in `defrost.window`) is now off by default. Turn it on with the new `defrost.watchdog` setting. With the old defaults it also fired on normal defrosts every 27 minutes around −2 °C, turning heating off for 15 minutes.
 - `auto.smooth` now defaults to 0 (no room temperature smoothing) instead of 300 s. A sensor that reports in 0.01 °C steps barely flickers, so smoothing only added lag. A device that never changed `auto.smooth` switches to no smoothing on update; one with its own value keeps it.
 - The heating graph now keeps one sample every 30 seconds instead of one a minute, still for 3 days. Boards without PSRAM keep 3 hours instead of 6, so the log uses the same memory there.
 - During the hold after a defrost, the heating integral now keeps running. Demand (or the setpoint in cold-weather mode) still does not go up until the hold ends. Before, the integral was frozen during the hold too, so it learned slowly when defrosts were frequent.
