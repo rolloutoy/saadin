@@ -330,7 +330,7 @@ const char *const hvac_action[] = {"off", "preheating", "heating", "cooling", "d
 // Heating control (heatctl), see docs/heat-control.md
 static heatctl_t heatctl;                          // Controller state, main loop only
 static heatctl_out_t ctl = {.state = HEATCTL_OFF}; // Last outputs, for status
-static heatlog_t heatlog;                          // One sample a minute for the graph page, under daikin.mutex
+static heatlog_t heatlog;                          // One sample every 30 s for the graph page, under daikin.mutex
 
 static void heatctl_status_json(jo_t j)
 { // Controller state, for the web status and the HA state
@@ -1801,7 +1801,7 @@ static esp_err_t web_graph(httpd_req_t *req)
         "<p id=msg>Loading…</p>"                                                                     //
         "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>" //
         "<div class=g><canvas id=unit></canvas></div>"                                               //
-        "<p>One sample a minute, kept until a restart. Click a legend entry to show or hide it. "    //
+        "<p>One sample every 30 s, kept until a restart. Click a legend entry to show or hide it. "  //
         "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "     //
         "green hold after a defrost (demand is not raised), red rest after a defrost loop. "         //
         "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint.</p>"  //
@@ -1812,7 +1812,7 @@ static esp_err_t web_graph(httpd_req_t *req)
         "function n(v){return v;}"                                                                   //
         "fetch('/graph.json').then(r=>r.json()).then(d=>{"                                           //
         "var m=document.getElementById('msg'),k=d.ago.length;"                                       //
-        "if(!k){m.textContent='No samples yet, the first comes after a minute.';return;}"            //
+        "if(!k){m.textContent='No samples yet, the first comes after 30 s.';return;}"                //
         "var now=Date.now(),x=d.ago.map(a=>now-a*1000);"                                             //
         "m.textContent='Last '+(d.ago[0]>=172800?Math.round(d.ago[0]/8640)/10+' days':Math.round(d.ago[0]/360)/10+' hours')+', to '+new Date(x[k-1]).toLocaleString();" //
         "function p(a,f){return a.map((v,i)=>({x:x[i],y:v==null?null:f(v)}));}" //
@@ -3659,8 +3659,8 @@ void app_main()
 #endif
     blemutex = xSemaphoreCreateMutex();
     daikin.mutex = xSemaphoreCreateMutex();
-    { // Heating log for the graph page: 3 days, or 6 hours without PSRAM
-        uint32_t n = (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) ? 72 : 6) * 3600 / HEATLOG_INTERVAL;
+    { // Heating log for the graph page: 3 days, or 3 hours without PSRAM
+        uint32_t n = (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) ? 72 : 3) * 3600 / HEATLOG_INTERVAL;
         heatlog_init(&heatlog, mallocspi(n * sizeof(heatlog_sample_t)), n);
     }
     b.startup = 1;
