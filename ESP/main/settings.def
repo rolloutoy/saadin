@@ -107,9 +107,9 @@ enum	idle.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet"	// Fan while heating i
 
 s8	cold.enter	-15		.live	.unit="℃"			// Full power below this outdoor temperature
 s8	cold.exit	-10		.live	.unit="℃"			// Back to demand above this outdoor temperature
-u8	cold.hold	15		.live	.unit="min"			// Outdoor temperature must stay past cold.enter or cold.exit this long
+u8	cold.hold	60		.live	.unit="min"			// Outdoor temperature must stay past cold.enter or cold.exit this long
 u16	cold.set	23		.live	.decimal=1 .unit="℃"		// Starting setpoint at full power
-u16	cold.rate	600		.live	.unit="s"			// Minimum time between 0.5℃ setpoint steps at full power
+u16	cold.rate	1800		.live	.unit="s"			// Minimum time between 0.5℃ setpoint steps at full power
 u8	cold.kp		2		.live	.decimal=1			// Setpoint change per degree below target at full power
 u16	cold.ti		120		.live	.unit="min"			// Integral time at full power
 enum	cold.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet"	// Fan at full power
