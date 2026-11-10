@@ -124,6 +124,10 @@ As required by GPL-3.0 §5(a), this section lists how Säädin differs from upst
 - Removed these files from the git history as well.
 - Rewrote this README.
 
+**2026-11-10**
+- Reformatted all C code to ESP-IDF style. Only whitespace changed.
+- Added clang-format and whitespace checks, run with prek.
+
 ## Security
 
 Report vulnerabilities privately through GitHub's [private vulnerability reporting](https://github.com/rolloutoy/saadin/security/advisories/new), not in public issues.

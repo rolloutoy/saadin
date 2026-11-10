@@ -11,7 +11,7 @@ Säädin is a fork of Faikout (by RevK / Andrews & Arnold). Firmware only.
 - Use ASCII `saadin` / `Saadin` in code, hostnames, binaries, and topics. Use "Säädin" only in display text.
 - Settings are generated, not hand-written. `revk_settings` builds `ESP/main/settings.h` and `settings.c` from `ESP/main/settings.def` (and the library's `settings.def`). Those generated files are git-ignored. Add or change settings in `settings.def`; new demand-control settings (`demand.set`, `pid.kp`, …) go there. Do not edit the generated `settings.h` / `settings.c`.
 - Do not commit binaries or build artifacts. Releases are published as GitHub Releases, not stored in the repo.
-- Match the existing C style by hand. There is no formatter config; the code uses RevK's GNU-indent style (3-space indent, braces as in `ESP/components/ESP32-RevK/revk.c`). Never reformat lines you did not change, so diffs stay reviewable.
+- Write C in ESP-IDF style: 4-space indent, K&R braces with function braces on their own line, 120 columns. `.clang-format` defines it, and prek runs clang-format and the whitespace checks from `.pre-commit-config.yaml`. Run `prek install` once per clone so the hooks run on every commit; `prek run --all-files` checks the whole tree.
 
 ## Git workflow
 
