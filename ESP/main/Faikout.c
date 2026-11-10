@@ -1908,7 +1908,7 @@ static esp_err_t web_control(httpd_req_t *req)
 #ifdef CONFIG_MDNS_MAX_INTERFACES
              *instance ? instance :
 #endif
-             hostname == revk_id ? revk_app
+             hostname == revk_id ? revk_app_title
                                  : hostname);
     revk_web_send(
         req,

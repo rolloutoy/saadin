@@ -278,6 +278,7 @@ settings
     /* Public */
     const char *revk_version = ""; /* Git version */
 const char *revk_app = "";         /* App name */
+const char *revk_app_title = "";   /* App name shown on web pages */
 #ifndef CONFIG_SOC_IEEE802154_SUPPORTED
 char revk_id[13] = ""; /* Chip ID as hex (from MAC) */
 #else
@@ -3254,6 +3255,7 @@ void revk_boot(app_callback_t *app_callback_cb)
     }
     revk_version = app->version;
     revk_app = app->project_name;
+    revk_app_title = *CONFIG_REVK_APP_TITLE ? CONFIG_REVK_APP_TITLE : revk_app;
     char *d = strstr(revk_version, "-dirty");
     if (d)
         asprintf((char **)&revk_version, "%.*s+", d - revk_version, app->version);
@@ -4114,7 +4116,7 @@ void revk_web_head(httpd_req_t *req, const char *title)
         " onLoad='handleLoad()'"
 #endif
         ">",
-        revk_web_safe(&qs, title ?: revk_app));
+        revk_web_safe(&qs, title ?: revk_app_title));
 #ifdef CONFIG_REVK_OTA_CONFIRM
     if (otac.pending) {
         char temp[20];
@@ -4153,7 +4155,7 @@ esp_err_t revk_web_foot(httpd_req_t *req, uint8_t home, uint8_t wifi, const char
                            "?_page=0"
 #endif
                            ">Settings</a> ");
-    revk_web_send(req, revk_app);
+    revk_web_send(req, revk_app_title);
     if (*revk_build_suffix)
         revk_web_send(req, "<small>%s</small>", revk_build_suffix);
     char temp[20];
@@ -4673,10 +4675,13 @@ esp_err_t revk_web_settings(httpd_req_t *req)
         else {
             void addpage(int8_t l, const char *v)
             {
+                int w = 0;
+                for (const char *p = v; *p; p++)
+                    w += ((*p & 0xC0) != 0x80); // Characters, not UTF-8 bytes
                 revk_web_send(
                     req,
                     "<label class=box style=\"width:%dem\"><input type=radio name='_page' value='%d' onchange=\"document.settings.submit();\"%s><span class=button>%s</span></label>",
-                    strlen(v), l, l == page ? " checked" : "", revk_web_safe(&qs, v));
+                    w, l, l == page ? " checked" : "", revk_web_safe(&qs, v));
             }
             addpage(-1, "Basic");
 #ifdef CONFIG_REVK_WEB_OTA
@@ -4684,7 +4689,7 @@ esp_err_t revk_web_settings(httpd_req_t *req)
                 addpage(-4, "Firmware");
 #endif
 #ifdef CONFIG_REVK_WEB_EXTRA
-            addpage(0, revk_app);
+            addpage(0, revk_app_title);
 #endif
 #ifndef CONFIG_REVK_OLD_SETTINGS
             for (revk_settings_t *s = revk_settings; s->len; s++)
