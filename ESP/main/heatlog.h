@@ -1,10 +1,10 @@
-// Saadin heating log (heatlog): one sample a minute for the graph page, see Manuals/Heating.md
+// Saadin heating log (heatlog): one sample every 30 s for the graph page, see Manuals/Heating.md
 // Pure logic, no ESP-IDF calls, so it also builds as a host unit test (see test/heatlog_test.c)
 #pragma once
 
 #include <stdint.h>
 
-#define HEATLOG_INTERVAL 60    // Seconds per sample
+#define HEATLOG_INTERVAL 30    // Seconds per sample
 #define HEATLOG_NONE INT16_MIN // Value not known
 
 typedef struct {     // Inputs, about once a second, NAN if not known

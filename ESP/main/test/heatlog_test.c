@@ -72,7 +72,7 @@ static void test_empty(void)
     heatlog_init(&l, buf, 4);
     CHECK("empty has no samples", heatlog_get(&l, out, 4) == 0);
     heatlog_in_t in = in_demand();
-    for (uint32_t now = 1; now <= 60; now++)
+    for (uint32_t now = 1; now <= 30; now++)
         heatlog_add(&l, &in, now);
     CHECK("no sample before a full interval", heatlog_get(&l, out, 4) == 0);
     heatlog_init(&l, NULL, 4);
@@ -87,19 +87,19 @@ static void test_one(void)
     heatlog_t l;
     heatlog_init(&l, buf, 4);
     heatlog_in_t in = in_demand();
-    for (uint32_t now = 1; now <= 60; now++) {
-        in.room = now <= 30 ? 20 : 22;
-        in.power = now <= 30 ? 400 : 500;
-        in.liquid = now <= 30 ? 30 : 4.5; // A defrost dip shows in the mean
-        in.comp = now <= 30 ? 40 : 61;
-        in.target = now <= 50 ? 21 : 21.5;
-        in.demand = now <= 50 ? 70 : 80;
+    for (uint32_t now = 1; now <= 30; now++) {
+        in.room = now <= 15 ? 20 : 22;
+        in.power = now <= 15 ? 400 : 500;
+        in.liquid = now <= 15 ? 30 : 4.5; // A defrost dip shows in the mean
+        in.comp = now <= 15 ? 40 : 61;
+        in.target = now <= 25 ? 21 : 21.5;
+        in.demand = now <= 25 ? 70 : 80;
         heatlog_add(&l, &in, now);
     }
     in.room = 99; // Starts the next sample, not in this one
-    heatlog_add(&l, &in, 61);
+    heatlog_add(&l, &in, 31);
     CHECK("one sample", heatlog_get(&l, out, 4) == 1);
-    CHECK("sample time is its end", out[0].t == 61);
+    CHECK("sample time is its end", out[0].t == 31);
     CHECK("room is the mean", out[0].room == 2100);
     CHECK("power is the mean", out[0].power == 450);
     CHECK("heatw is the mean", out[0].heatw == 400);
@@ -119,8 +119,8 @@ static void test_unknown(void)
     heatlog_t l;
     heatlog_init(&l, buf, 4);
     heatlog_in_t in = in_none();
-    for (uint32_t now = 1; now <= 61; now++) {
-        in.room = now <= 20 ? 20.5 : NAN; // Mean of the known readings only
+    for (uint32_t now = 1; now <= 31; now++) {
+        in.room = now <= 10 ? 20.5 : NAN; // Mean of the known readings only
         heatlog_add(&l, &in, now);
     }
     CHECK("unknown one sample", heatlog_get(&l, out, 4) == 1);
@@ -140,12 +140,12 @@ static void test_defrost(void)
     heatlog_t l;
     heatlog_init(&l, buf, 4);
     heatlog_in_t in = in_demand();
-    for (uint32_t now = 1; now <= 61; now++) {
-        in.sub = (now >= 10 && now < 20) ? HEATCTL_SUB_DEFROST : now >= 20 ? HEATCTL_SUB_HOLD : HEATCTL_SUB_NONE;
+    for (uint32_t now = 1; now <= 31; now++) {
+        in.sub = (now >= 5 && now < 10) ? HEATCTL_SUB_DEFROST : now >= 10 ? HEATCTL_SUB_HOLD : HEATCTL_SUB_NONE;
         heatlog_add(&l, &in, now);
     }
     in.sub = HEATCTL_SUB_HOLD;
-    for (uint32_t now = 62; now <= 121; now++)
+    for (uint32_t now = 32; now <= 61; now++)
         heatlog_add(&l, &in, now);
     CHECK("defrost two samples", heatlog_get(&l, out, 4) == 2);
     CHECK("a defrost in the sample wins", out[0].sub == HEATCTL_SUB_DEFROST);
@@ -160,9 +160,9 @@ static void test_tuning(void)
     heatlog_in_t in = in_demand();
     uint32_t now = 1;
     for (int i = 0; i < HEATLOG_INTERVAL; i++, now++) {
-        in.smoothed = i < 30 ? 21 : 21.2;
-        in.integral = i < 50 ? 300 : 360.4;
-        in.kp = i < 50 ? 300 : 400;
+        in.smoothed = i < 15 ? 21 : 21.2;
+        in.integral = i < 25 ? 300 : 360.4;
+        in.kp = i < 25 ? 300 : 400;
         heatlog_add(&l, &in, now);
     }
     in.state = HEATCTL_COLD; // The COLD loop: integral as setpoint (°C), kp in °C per °C
@@ -197,7 +197,7 @@ static void test_wrap(void)
     heatlog_add(&l, &in, now); // Ends sample 5
     CHECK("wrap keeps the ring size", heatlog_get(&l, out, 5) == 3);
     CHECK("wrap oldest first", out[0].demand == 43 && out[1].demand == 44 && out[2].demand == 45);
-    CHECK("wrap times", out[0].t + 60 == out[1].t && out[1].t + 60 == out[2].t && out[2].t == now);
+    CHECK("wrap times", out[0].t + 30 == out[1].t && out[1].t + 30 == out[2].t && out[2].t == now);
     CHECK("max gives the newest", heatlog_get(&l, out, 2) == 2 && out[0].demand == 44 && out[1].demand == 45);
 }
 
