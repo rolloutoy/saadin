@@ -1831,6 +1831,7 @@ static esp_err_t web_graph(httpd_req_t *req)
         "g.fillStyle=f;g.fillRect(x0,a.top,x1-x0+1,a.height);}g.restore();}};"                                 //
         "function cold(i){return d.states[d.state[i]]=='cold';}"                                               //
         "function only(a,c){return a.map((v,i)=>cold(i)==c?v:null);}"                                          //
+        "var pw=d.heatw.map((v,i)=>v==null||d.integral[i]==null||cold(i)?null:v-d.integral[i]);"               //
         "function tune(i){var v=d.kp[i];if(v==null)return '';"                                                 //
         "return 'kp '+(cold(i)?v/100+' ℃/℃':v+' W/℃')+(d.ti[i]?', ti '+d.ti[i]+' min':', no integral');}"      //
         "var mk=[],last=[];for(var i=0;i<k;i++){var t=tune(i),c=+cold(i);if(!t)continue;"                      //
@@ -1868,10 +1869,13 @@ static esp_err_t web_graph(httpd_req_t *req)
         "cs.push(new Chart(document.getElementById('power'),{type:'line',plugins:[band,mark],data:{datasets:[" //
         "ds('Heat wanted',d.heatw,n,'#f80'),"                                                                  //
         "ds('Integral',only(d.integral,false),n,'#fb6',{borderDash:[4,4]}),"                                   //
+        "ds('Proportional',pw,n,'#0aa',{yAxisID:'p'}),"                                                        //
         "ds('Power',d.power,n,'#c00'),"                                                                        //
         "ds('Demand',d.demand,n,'#06c',{stepped:true,yAxisID:'d'})]},"                                         //
         "options:opt({y:{title:{display:true,text:'W'}},"                                                      //
-        "d:{position:'right',min:0,max:100,title:{display:true,text:'%%'},grid:{drawOnChartArea:false}}})}));" //
+        "d:{position:'right',min:0,max:100,title:{display:true,text:'%%'},grid:{drawOnChartArea:false}},"      //
+        "p:{position:'right',display:'auto',title:{display:true,text:'P, W'},"                                 //
+        "grid:{drawOnChartArea:false}}})}));"                                                                  //
         "cs.push(new Chart(document.getElementById('unit'),{type:'line',plugins:[band,mark],data:{datasets:["  //
         "ds('Liquid',d.liquid,tc,'#a0a'),"                                                                     //
         "ds('Compressor',d.comp,n,'#555',{yAxisID:'h'})]},"                                                    //
