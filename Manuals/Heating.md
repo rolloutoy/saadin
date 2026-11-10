@@ -99,7 +99,7 @@ Set these on the *Advanced* settings page, or over MQTT. While the controller is
 |`auto.curve`|empty|Target offset by outdoor temperature, see [Target curve](#target-curve)|
 |`auto.b`|empty|BLE sensor to use for the room temperature|
 |`auto.stale`|1800 s|No room reading for this long hands over to the unit's thermostat|
-|`auto.smooth`|300 s|Room temperature smoothing. 0 for none|
+|`auto.smooth`|0 s|Room temperature smoothing. 0 for none. Try 300 s if your sensor reports in 0.1 °C steps and heat wanted jumps with each flicker|
 |`stop.temp`|22 °C|Setpoint left on the unit when the controller stops|
 |`t.control`|600 s|An MQTT room reading counts as lost after this long|
 
