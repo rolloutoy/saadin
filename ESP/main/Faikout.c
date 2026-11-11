@@ -1905,10 +1905,10 @@ static esp_err_t web_graph(httpd_req_t *req)
         "ds('Liquid',d.liquid,tc,'#a0a'),"                                                                     //
         "ds('Unit room',d.intake,tc,'#c60'),"                                                                  //
         "ds('Compressor',d.comp,n,'#555',{yAxisID:'h'}),"                                                      //
-        "ds('Fan',d.fan,n,'#0a0',{yAxisID:'r'})]},"                                                            //
+        "ds('Fan',d.fan,n,'#0a0',{yAxisID:'f'})]},"                                                            //
         "options:opt({y:{title:{display:true,text:U}},"                                                        //
         "h:{position:'right',min:0,title:{display:true,text:'Hz'},grid:{drawOnChartArea:false}},"              //
-        "r:{position:'right',min:0,title:{display:true,text:'rpm'},grid:{drawOnChartArea:false}}})}));"        //
+        "f:{position:'right',min:0,title:{display:true,text:'rpm'},grid:{drawOnChartArea:false}}})}));"        //
         "var cop=d.heatout.map((v,i)=>v==null||d.power[i]==null||d.power[i]<100||d.subs[d.sub[i]]=='defrost'?" //
         "null:Math.round(v/d.power[i]*100)/100);"                                                              //
         "var W=3600/d.interval,ph=[0],pp=[0],pn=[0];for(var i=0;i<k;i++){"                                     //
