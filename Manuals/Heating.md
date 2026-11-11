@@ -217,7 +217,20 @@ heat output (W) = 0.335 × air flow (m³/h) × (liquid temperature − unit's ro
 
 COP is the heat output divided by the power consumption the unit reports.
 
-`fan.flow` is a list of `rpm:m³/h` points, linear between points and flat beyond the ends. The default, `0:0,510:342,750:636,1500:1272`, is for a Perfera 40. A forum post gives its air flow as 342, 426, 534, 636, 828 and 1104 m³/h, taken here as quiet and fan 1 to 5. One unit ran at 510 rpm on quiet and 750 rpm on fan 3; above that the line carries on in proportion to the fan speed. Set `fan.flow` blank for no estimate.
+`fan.flow` is a list of up to 8 `rpm:m³/h` points, linear between points and flat beyond the ends. The estimate uses the fan speed the unit reports, not the fan setting, so a fan the unit has slowed for a cool coil, or any speed between two settings, gets the air flow between the nearest points. Set `fan.flow` blank for no estimate.
+
+The default, `0:0,510:342,570:426,660:534,750:636,940:828,1120:1104,1400:1380`, is for a Perfera 40:
+
+|Fan setting|Fan speed|Air flow|
+|-------|-------|-------|
+|Quiet|510 rpm|342 m³/h|
+|1|570 rpm|426 m³/h|
+|2|660 rpm|534 m³/h|
+|3|750 rpm|636 m³/h|
+|4|940 rpm|828 m³/h|
+|5|1120 rpm|1104 m³/h|
+
+The fan speeds were read from one unit at each setting. The air flows are from a forum post, taken here as quiet and fan 1 to 5. Below quiet the air flow falls in a line to nothing at a stopped fan, and the last point, 1400 rpm, carries the line on above fan 5.
 
 Other models move a different amount of air at the same fan speed. To set it for your unit, set each fan speed in turn while heating, read the fan speed (rpm) at each from the graph, where the tooltip shows the fan setting, and pair it with the air flow from the data sheet. Daikin's tables give 306, 360, 600 and 1020 m³/h in heating for silent, low, medium and high on a Perfera 40 (FTXTM40A and S), and 282, 336, 462 and 702 m³/h on a Perfera 30 (FTXTM30A).
 

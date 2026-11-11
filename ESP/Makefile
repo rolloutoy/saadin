@@ -95,9 +95,10 @@ test:	main/test/heatctl_test main/test/heatlog_test
 
 # The demand.table default from settings.def, so the test runs on the real default
 DEMAND_TABLE := $(shell sed -n 's/^s[[:space:]]*demand\.table[[:space:]]*\("[^"]*"\).*/\1/p' main/settings.def)
+FAN_FLOW := $(shell sed -n 's/^s[[:space:]]*fan\.flow[[:space:]]*\("[^"]*"\).*/\1/p' main/settings.def)
 
 main/test/heatctl_test: main/test/heatctl_test.c main/heatctl.c main/heatctl.h main/settings.def
-	gcc -O -o $@ main/test/heatctl_test.c main/heatctl.c -g -Wall -Wextra --std=gnu99 -lm -DDEMAND_TABLE='$(DEMAND_TABLE)'
+	gcc -O -o $@ main/test/heatctl_test.c main/heatctl.c -g -Wall -Wextra --std=gnu99 -lm -DDEMAND_TABLE='$(DEMAND_TABLE)' -DFAN_FLOW='$(FAN_FLOW)'
 
 main/test/heatlog_test: main/test/heatlog_test.c main/heatlog.c main/heatlog.h main/heatctl.h
 	gcc -O -o $@ main/test/heatlog_test.c main/heatlog.c -g -Wall -Wextra --std=gnu99 -lm
