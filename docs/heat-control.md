@@ -29,7 +29,7 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 
 ### IDLE ("heating off")
 - Sends setpoint `idle.temp` (default 16 °C) so the unit stops heating. Demand stays at the lowest level with QO on, so the restart is gentle.
-- Entered only from DEMAND, when room > target + `idle.over` (default 0.5 °C) **and** DEMAND has run at least `demand.minrun` (default 30 min; short runs stop defrosts working, Faikout #930).
+- Entered only from DEMAND at the lowest demand level, when room > target + `idle.over` (default 0.5 °C) **and** DEMAND has run at least `demand.minrun` (default 30 min; short runs stop defrosts working, Faikout #930). Above the lowest level an overshoot only steps demand down: IDLE restarts the integral at the lowest level, which in cold weather would take hours to recover from.
 - Exits to DEMAND when room < target − `idle.under` (default 0.0 °C) **and** IDLE has lasted at least `idle.min` (default 30 min).
 - On exit the PI integral starts at the watts of the lowest level.
 
