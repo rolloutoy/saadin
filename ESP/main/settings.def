@@ -82,7 +82,7 @@ s	auto.b				.live					// BLE sensor ID
 bit	auto.e				.live					// Heating control on (heat mode only)
 u16	auto.t				.live	.decimal=1 .unit="℃"		// Heating control target room temperature
 s	auto.curve			.live					// Target offset by outdoor temperature, outdoor:offset,... e.g. -25:1.0,-10:0.5,0:0
-s	fan.flow	"0:0,540:336,660:462,960:702"	.live				// Air flow by indoor fan speed for the heat output estimate, rpm:m3/h,... (blank for no estimate)
+s	fan.flow	"0:0,510:342,750:636,1500:1272"	.live				// Air flow by indoor fan speed for the heat output estimate, rpm:m3/h,... (blank for no estimate)
 u16	auto.stale	1800		.live	.unit="s"			// No room reading for this long falls back to the unit's own thermostat
 u16	auto.smooth	0		.live	.unit="s"			// Room temperature smoothing, 0 for none
 u16	stop.temp	22		.live	.decimal=1 .unit="℃"		// Setpoint left on the unit when heating control stops
