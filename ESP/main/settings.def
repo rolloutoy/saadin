@@ -106,7 +106,7 @@ u16	idle.temp	16		.live	.decimal=1 .unit="℃"		// Setpoint while heating is off
 u8	idle.over	0.5		.live	.decimal=1 .unit="℃"		// Heating off above target by more than this
 u8	idle.under	0		.live	.decimal=1 .unit="℃"		// Heating back on below target by more than this
 u8	idle.min	30		.live	.unit="min"			// Minimum time heating off
-enum	idle.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet,Outdoor"	// Fan while heating is off
+enum	idle.fan	1		.live	.enums="Leave,Auto,1,2,3,4,5,Quiet,Outdoor"	// Fan while heating is off
 s	idle.fanmap			.live					// Fan while heating is off by outdoor temperature (idle.fan Outdoor), outdoor:fan,... fan A, 1-5 or Q, e.g. -5:5,0:4,5:3
 
 s8	cold.enter	-15		.live	.unit="℃"			// Full power below this outdoor temperature

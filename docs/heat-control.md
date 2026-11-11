@@ -93,7 +93,7 @@ Each setting can also be "Outdoor": the fan then follows the outdoor temperature
 - No change during a defrost.
 - Empty or invalid map (logged), or outdoor temperature unknown → leave alone.
 
-Defaults: `demand.fan` is "Outdoor" with `demand.fanmap` `-20:4,-6:3,1:2,7:1`, so fan 4 below −6 °C, 3 from −6 °C, 2 from 1 °C and 1 from 7 °C. On a 3-speed unit fans 2 and 4 are left alone, so set another map there. `cold.fan` defaults to 4 (left alone on a 3-speed unit) and `idle.fan` to "leave alone".
+Defaults: `demand.fan` is "Outdoor" with `demand.fanmap` `-20:4,-6:3,1:2,7:1`, so fan 4 below −6 °C, 3 from −6 °C, 2 from 1 °C and 1 from 7 °C. On a 3-speed unit fans 2 and 4 are left alone, so set another map there. `cold.fan` defaults to 4 (left alone on a 3-speed unit) and `idle.fan` to auto (left alone on a unit with no auto fan).
 
 ## Outside changes
 
