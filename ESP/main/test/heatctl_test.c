@@ -844,6 +844,25 @@ static void test_no_integral(void)
     CHECK("cold.ti 0: setpoint is cold.set + cold.kp x error", NEAR(x.out.setpoint, 25));
 }
 
+// The fan.flow default: air flow (m3/h) at any fan speed the unit may report, not only at the fan settings
+static void test_fan_flow(void)
+{
+    heatctl_curve_t c;
+    CHECK("fan.flow default parses", !heatctl_parse_curve(&c, FAN_FLOW) && c.n);
+    const float at[][2] = {{510, 342}, {570, 426}, {660, 534}, {750, 636}, {940, 828}, {1120, 1104}};
+    for (unsigned i = 0; i < sizeof(at) / sizeof(*at); i++) {
+        char name[60];
+        snprintf(name, sizeof(name), "fan.flow at %.0f rpm", at[i][0]);
+        CHECK(name, NEAR(heatctl_curve_offset(&c, at[i][0]), at[i][1]));
+    }
+    float f = heatctl_curve_offset(&c, 700);
+    CHECK("fan.flow between two settings", f > 534 && f < 636);
+    f = heatctl_curve_offset(&c, 300); // Slowed for a cool coil, below the quiet setting
+    CHECK("fan.flow below the slowest setting", f > 150 && f < 342);
+    CHECK("fan.flow stopped", NEAR(heatctl_curve_offset(&c, 0), 0));
+    CHECK("fan.flow above the fastest setting", heatctl_curve_offset(&c, 1300) > 1104);
+}
+
 int main(void)
 {
     test_table();
@@ -881,6 +900,7 @@ int main(void)
     test_room_model(0, 0, 1);
     test_room_model(10, 0, 1);
     test_ble_env();
+    test_fan_flow();
     printf("%d passed, %d failed\n", passed, failed);
     return failed ? 1 : 0;
 }
