@@ -1836,7 +1836,8 @@ static esp_err_t web_graph(httpd_req_t *req)
         req,
         "<style>.g{background:white;max-width:1000px;padding:5px;margin-bottom:10px;}</style>"          //
         "<p id=msg>Loading…</p>"                                                                        //
-        "<p id=zb hidden>Show <button data-s=0>All</button> <button data-s=86400>1 day</button> "       //
+        "<p id=zb hidden>Show <button data-s=0>All</button> <button data-s=259200>3 days</button> "     //
+        "<button data-s=86400>1 day</button> "                                                          //
         "<button data-s=43200>12 h</button> <button data-s=10800>3 h</button></p>"                      //
         "<p>Refresh <select id=rf><option value=0>Off<option value=15>15 s<option value=30>30 s"        //
         "<option value=60>1 min<option value=300>5 min</select></p>"                                    //
@@ -3780,8 +3781,11 @@ void app_main()
 #endif
     blemutex = xSemaphoreCreateMutex();
     daikin.mutex = xSemaphoreCreateMutex();
-    { // Heating log for the graph page: 3 days, or 1.5 hours without PSRAM
-        uint32_t n = (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) ? 72 * 3600 : 5400) / HEATLOG_INTERVAL;
+    { // Heating log for the graph page: 5 days, or 1.5 hours without PSRAM
+        size_t spi = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
+        uint32_t n = (spi ? 120 * 3600 : 5400) / HEATLOG_INTERVAL;
+        if (spi && n > spi / 4 * 3 / sizeof(heatlog_sample_t))
+            n = spi / 4 * 3 / sizeof(heatlog_sample_t); // At most three quarters of the PSRAM
         heatlog_init(&heatlog, mallocspi(n * sizeof(heatlog_sample_t)), n);
     }
     b.startup = 1;
