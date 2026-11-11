@@ -108,6 +108,7 @@ These manuals come from upstream and still use the Faikout name:
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
 **2026-11-11**
+- Fixed the settings page failing to save with "Tag too long". The `defrost.watchdog` switch, added on 2026-11-10, has a name long enough to trip a length check in the settings form.
 - New setting `defrost.holdmax` (default 100%): the highest demand in the hold after a defrost. 100 means 100% with quiet outdoor, so a unit that was at 100% with quiet outdoor before a defrost now stays there afterwards. It used to drop to 95% for the hold. Plain 100% is still not used in the hold. Set `defrost.holdmax` to 95 for the old behaviour.
 
 **2026-11-10**
