@@ -1834,30 +1834,40 @@ static esp_err_t web_graph(httpd_req_t *req)
     web_head(req, "Heating graph");
     revk_web_send(
         req,
-        "<style>.g{background:white;max-width:1000px;padding:5px;margin-bottom:10px;}</style>"       //
-        "<p id=msg>Loading…</p>"                                                                     //
-        "<p id=zb hidden>Show <button data-s=0>All</button> <button data-s=86400>1 day</button> "    //
-        "<button data-s=43200>12 h</button> <button data-s=10800>3 h</button></p>"                   //
-        "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>" //
-        "<div class=g><canvas id=unit></canvas></div><div class=g><canvas id=cop></canvas></div>"    //
-        "<p>One sample every 15 s, kept until a restart. Click a legend entry to show or hide it. "  //
-        "Drag across a chart or ctrl+scroll to zoom in, shift+drag to pan. "                         //
-        "On a phone, pinch to zoom and drag to pan. "                                                //
-        "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "     //
-        "green hold after a defrost (demand is not raised), red rest after a defrost loop. "         //
-        "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint. "     //
-        "The tooltip also shows the fan setting and quiet outdoor. "                                 //
-        "Heat output and COP are estimates from the fan speed, the unit's own room reading and the " //
-        "liquid temperature. The 1 h mean COP counts the defrosts in.</p>"                           //
-        "<script src='/chart.js?%s'></script>"                                                       //
-        "<script>"                                                                                   //
-        "var F=%d,U=F?'℉':'℃';"                                                                      //
-        "function tc(v){return F?v*0.018+32:v/100;}"                                                 //
-        "function n(v){return v;}"                                                                   //
-        "fetch('/graph.json').then(r=>r.json()).then(d=>{"                                           //
-        "var m=document.getElementById('msg'),k=d.ago.length;"                                       //
-        "if(!k){m.textContent='No samples yet, the first comes after 15 s.';return;}"                //
-        "var now=Date.now(),x=d.ago.map(a=>now-a*1000);"                                             //
+        "<style>.g{background:white;max-width:1000px;padding:5px;margin-bottom:10px;}</style>"          //
+        "<p id=msg>Loading…</p>"                                                                        //
+        "<p id=zb hidden>Show <button data-s=0>All</button> <button data-s=86400>1 day</button> "       //
+        "<button data-s=43200>12 h</button> <button data-s=10800>3 h</button></p>"                      //
+        "<p>Refresh <select id=rf><option value=0>Off<option value=15>15 s<option value=30>30 s"        //
+        "<option value=60>1 min<option value=300>5 min</select></p>"                                    //
+        "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>"    //
+        "<div class=g><canvas id=unit></canvas></div><div class=g><canvas id=cop></canvas></div>"       //
+        "<p>One sample every 15 s, kept until a restart. Click a legend entry to show or hide it. "     //
+        "Drag across a chart or ctrl+scroll to zoom in, shift+drag to pan. "                            //
+        "On a phone, pinch to zoom and drag to pan. "                                                   //
+        "Refresh reloads the page at the chosen interval and keeps the range chosen with the buttons. " //
+        "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "        //
+        "green hold after a defrost (demand is not raised), red rest after a defrost loop. "            //
+        "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint. "        //
+        "The tooltip also shows the fan setting and quiet outdoor. "                                    //
+        "Heat output and COP are estimates from the fan speed, the unit's own room reading and the "    //
+        "liquid temperature. The 1 h mean COP counts the defrosts in.</p>"                              //
+        "<script src='/chart.js?%s'></script>"                                                          //
+        "<script>"                                                                                      //
+        "var F=%d,U=F?'℉':'℃';"                                                                         //
+        "function tc(v){return F?v*0.018+32:v/100;}"                                                    //
+        "function n(v){return v;}"                                                                      //
+        "var Q=new URLSearchParams(location.search),R=+Q.get('refresh')||0,SP=+Q.get('span')||0;"       //
+        "if(R<0)R=0;if(R&&R<5)R=5;"                                                                     //
+        "function go(){var q=(R?'refresh='+R:'')+(R&&SP?'&':'')+(SP?'span='+SP:'');q=q?'?'+q:'';"       //
+        "if(q==location.search)location.reload();else location.search=q;}"                              //
+        "var rf=document.getElementById('rf');"                                                         //
+        "if(R&&![...rf.options].some(o=>+o.value==R))rf.add(new Option(R+' s',R));"                     //
+        "rf.value=R;rf.onchange=()=>{R=+rf.value;go();};"                                               //
+        "fetch('/graph.json').then(r=>r.json()).then(d=>{"                                              //
+        "var m=document.getElementById('msg'),k=d.ago.length;"                                          //
+        "if(!k){m.textContent='No samples yet, the first comes after 15 s.';return;}"                   //
+        "var now=Date.now(),x=d.ago.map(a=>now-a*1000);"                                                //
         "m.textContent='Last '+(d.ago[0]>=172800?Math.round(d.ago[0]/8640)/10+' days':Math.round(d.ago[0]/360)/10+' hours')+', to '+new Date(x[k-1]).toLocaleString();" //
         "function p(a,f){return a.map((v,i)=>({x:x[i],y:v==null?null:f(v)}));}" //
         "function ds(l,a,f,c,o){return Object.assign({label:l,data:p(a,f),borderColor:c,backgroundColor:c,"
@@ -1886,15 +1896,15 @@ static esp_err_t web_graph(httpd_req_t *req)
         "g.beginPath();g.moveTo(v,a.top);g.lineTo(v,a.bottom);g.stroke();g.fillText(tune(i),v+3,a.top+11);});" //
         "g.restore();}};"                                                                                      //
         "function time(v){return new Date(v).toLocaleString([],Object.assign({hour:'2-digit',minute:'2-digit'},"
-        "x[k-1]-x[0]>864e5?{weekday:'short'}:{}));}"                                               //
-        "var cs=[];function sync(e){var s=e.chart.scales.x;"                                       //
-        "cs.forEach(c=>{if(c!=e.chart)c.zoomScale('x',{min:s.min,max:s.max},'none');});}"          //
-        "function span(s){cs.forEach(c=>s?c.zoomScale('x',{min:x[k-1]-s*1000,max:x[k-1]},'none'):" //
-        "c.resetZoom('none'));}"                                                                   //
-        "var zb=document.getElementById('zb');zb.hidden=false;"                                    //
-        "zb.querySelectorAll('button').forEach(b=>{var s=+b.dataset.s;b.onclick=()=>span(s);"      //
-        "b.hidden=s>0&&s*1000>=x[k-1]-x[0];});"                                                    //
-        "function opt(y){return{animation:false,interaction:{mode:'index',intersect:false},"       //
+        "x[k-1]-x[0]>864e5?{weekday:'short'}:{}));}"                                                  //
+        "var cs=[];function sync(e){var s=e.chart.scales.x;"                                          //
+        "cs.forEach(c=>{if(c!=e.chart)c.zoomScale('x',{min:s.min,max:s.max},'none');});}"             //
+        "function span(s){cs.forEach(c=>s?c.zoomScale('x',{min:x[k-1]-s*1000,max:x[k-1]},'none'):"    //
+        "c.resetZoom('none'));}"                                                                      //
+        "var zb=document.getElementById('zb');zb.hidden=false;"                                       //
+        "zb.querySelectorAll('button').forEach(b=>{var s=+b.dataset.s;b.onclick=()=>{SP=s;span(s);};" //
+        "b.hidden=s>0&&s*1000>=x[k-1]-x[0];});"                                                       //
+        "function opt(y){return{animation:false,interaction:{mode:'index',intersect:false},"          //
         "plugins:{tooltip:{callbacks:{title:t=>time(t[0].parsed.x),footer:t=>[tune(t[0].dataIndex),unit(t[0].dataIndex)]}}," //
         "zoom:{limits:{x:{min:'original',max:'original',minRange:6e5}},"                                       //
         "pan:{enabled:true,mode:'x',modifierKey:'shift',onPanComplete:sync},"                                  //
@@ -1944,7 +1954,9 @@ static esp_err_t web_graph(httpd_req_t *req)
         "ds('COP, 1 h mean',cm,n,'#06c',{yAxisID:'c'})]},"                                                     //
         "options:opt({y:{title:{display:true,text:'W'}},"                                                      //
         "c:{position:'right',min:0,max:10,title:{display:true,text:'COP'},grid:{drawOnChartArea:false}}})}));" //
-        "}).catch(e=>{document.getElementById('msg').textContent='Could not load the log: '+e;});"             //
+        "if(SP&&SP*1000<x[k-1]-x[0])span(SP);"                                                                 //
+        "}).catch(e=>{document.getElementById('msg').textContent='Could not load the log: '+e;})"              //
+        ".finally(()=>{if(R)setTimeout(go,R*1000);});"                                                         //
         "</script>",
         revk_version, fahrenheit);
     return revk_web_foot(req, 1, websettings, NULL);
