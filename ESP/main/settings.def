@@ -83,6 +83,7 @@ bit	auto.e				.live					// Heating control on (heat mode only)
 u16	auto.t				.live	.decimal=1 .unit="℃"		// Heating control target room temperature
 s	auto.curve			.live					// Target offset by outdoor temperature, outdoor:offset,... e.g. -25:1.0,-10:0.5,0:0
 s	fan.flow	"0:0,510:342,570:426,660:534,750:636,940:828,1120:1104,1400:1380"	.live				// Air flow by indoor fan speed for the heat output estimate, rpm:m3/h,... (blank for no estimate)
+u8	fan.hold	30		.live	.unit="min"			// A fan set by outdoor temperature is kept for this long at least
 u16	auto.stale	1800		.live	.unit="s"			// No room reading for this long falls back to the unit's own thermostat
 u16	auto.smooth	0		.live	.unit="s"			// Room temperature smoothing, 0 for none
 u16	stop.temp	22		.live	.decimal=1 .unit="℃"		// Setpoint left on the unit when heating control stops
@@ -96,7 +97,8 @@ bit	demand.full	1		.live					// Heating on demand may use plain 100% (quiet outd
 u8	demand.start	60		.live	.unit="%"			// On start, the integral is the watts of this demand
 u16	demand.rate	600		.live	.unit="s"			// Minimum time between demand changes
 u8	demand.minrun	30		.live	.unit="min"			// Minimum heating before heating off
-enum	demand.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet"	// Fan while heating on demand
+enum	demand.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet,Outdoor"	// Fan while heating on demand
+s	demand.fanmap			.live					// Fan while heating on demand by outdoor temperature (demand.fan Outdoor), outdoor:fan,... fan A, 1-5 or Q, e.g. -5:5,0:4,5:3
 u16	pid.kp		300		.live	.unit="W/℃"			// Heat wanted per degree below target
 u16	pid.ti		90		.live	.unit="min"			// Integral time, 0 for none (P only)
 
@@ -104,7 +106,8 @@ u16	idle.temp	16		.live	.decimal=1 .unit="℃"		// Setpoint while heating is off
 u8	idle.over	0.5		.live	.decimal=1 .unit="℃"		// Heating off above target by more than this
 u8	idle.under	0		.live	.decimal=1 .unit="℃"		// Heating back on below target by more than this
 u8	idle.min	30		.live	.unit="min"			// Minimum time heating off
-enum	idle.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet"	// Fan while heating is off
+enum	idle.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet,Outdoor"	// Fan while heating is off
+s	idle.fanmap			.live					// Fan while heating is off by outdoor temperature (idle.fan Outdoor), outdoor:fan,... fan A, 1-5 or Q, e.g. -5:5,0:4,5:3
 
 s8	cold.enter	-15		.live	.unit="℃"			// Full power below this outdoor temperature
 s8	cold.exit	-10		.live	.unit="℃"			// Back to demand above this outdoor temperature
@@ -113,7 +116,8 @@ u16	cold.set	23		.live	.decimal=1 .unit="℃"		// Starting setpoint at full powe
 u16	cold.rate	1800		.live	.unit="s"			// Minimum time between 0.5℃ setpoint steps at full power
 u8	cold.kp		2		.live	.decimal=1			// Setpoint change per degree below target at full power
 u16	cold.ti		120		.live	.unit="min"			// Integral time at full power, 0 for none
-enum	cold.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet"	// Fan at full power
+enum	cold.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet,Outdoor"	// Fan at full power
+s	cold.fanmap			.live					// Fan at full power by outdoor temperature (cold.fan Outdoor), outdoor:fan,... fan A, 1-5 or Q, e.g. -5:5,0:4,5:3
 
 u8	defrost.enter	5		.live	.unit="℃"			// Defrost when liquid drops below this
 u8	defrost.exit	25		.live	.unit="℃"			// Defrost over when liquid is back to this

@@ -773,6 +773,102 @@ static void test_rate_and_levels(void)
     CHECK("COLD fan", x.out.fan == 0);
 }
 
+static void test_fanmap(void)
+{
+    heatctl_fanmap_t m;
+    CHECK("fanmap ok", !heatctl_parse_fanmap(&m, "-5:5, 0:4 ,5:3,10:Q,15:a") && m.n == 5);
+    CHECK("fanmap below the first point", heatctl_fanmap_fan(&m, -20) == 5);
+    CHECK("fanmap at a point", heatctl_fanmap_fan(&m, 0) == 4);
+    CHECK("fanmap between points", heatctl_fanmap_fan(&m, 4.9) == 4);
+    CHECK("fanmap quiet", heatctl_fanmap_fan(&m, 12) == 6);
+    CHECK("fanmap auto, above the last point", heatctl_fanmap_fan(&m, 30) == 0);
+    CHECK("fanmap unknown outdoor", heatctl_fanmap_fan(&m, NAN) == HEATCTL_FAN_LEAVE);
+    CHECK("fanmap empty", !heatctl_parse_fanmap(&m, "") && m.n == 0 && heatctl_fanmap_fan(&m, 0) == HEATCTL_FAN_LEAVE);
+    const char *bad[] = {"x",
+                         "0:7",
+                         "0:0",
+                         "0:x",
+                         "0:3,-5:4",
+                         "0:3,0:4",
+                         "0:",
+                         "0:3,",
+                         "0 3",
+                         "0:3;5:2",
+                         "1:1,2:1,3:1,4:1,5:1,6:1,7:1,8:1,9:1"};
+    for (unsigned i = 0; i < sizeof(bad) / sizeof(*bad); i++) {
+        char name[80];
+        snprintf(name, sizeof(name), "fanmap bad \"%s\"", bad[i]);
+        CHECK(name, heatctl_parse_fanmap(&m, bad[i]) && m.n == 0);
+    }
+}
+
+// Fan by outdoor temperature, each fan kept for fan.hold at least
+static void test_fan_by_outdoor(void)
+{
+    sim_t x;
+    start(&x);
+    x.p.demand_fan = HEATCTL_FAN_MAP;
+    x.p.idle_fan = 6;
+    x.p.fan_hold = 1800;
+    heatctl_parse_fanmap(&x.p.demand_fanmap, "-5:5,0:4,5:3");
+    run(&x, 1);
+    CHECK("fan by outdoor: set at once", x.out.fan == 3);
+    x.in.outdoor = 2;
+    run(&x, 1798);
+    CHECK("fan by outdoor: held", x.out.fan == 3 && x.out.outdoor < 5);
+    run(&x, 2);
+    CHECK("fan by outdoor: changes once the hold is over", x.out.fan == 4);
+    x.in.outdoor = 8;
+    run(&x, 1700);
+    CHECK("fan by outdoor: held again, no flapping", x.out.fan == 4 && x.out.outdoor > 5);
+    run(&x, 200);
+    CHECK("fan by outdoor: and back", x.out.fan == 3);
+
+    x.in.liquid = 0; // A defrost is no time for a fan change
+    x.in.outdoor = 2;
+    run(&x, 1);
+    CHECK("fan by outdoor: defrost", x.out.sub == HEATCTL_SUB_DEFROST);
+    x.s.outdoor = 2;
+    run(&x, 1750);
+    CHECK("fan by outdoor: no change in a defrost", x.out.sub == HEATCTL_SUB_DEFROST && x.out.fan == 3);
+    x.in.liquid = 35;
+    run(&x, 1);
+    CHECK("fan by outdoor: changes after the defrost", x.out.fan == 4 && x.out.resend_fan);
+
+    x.in.room = 22; // Another state has its own fan, and the hold starts afresh on the way back
+    x.in.outdoor = -10;
+    CHECK("fan by outdoor: IDLE", run_until(&x, HEATCTL_IDLE, -1, 3 * 3600) > 0 && x.out.fan == 6);
+    run(&x, 3 * 3600);
+    x.in.room = 20;
+    CHECK("fan by outdoor: at once on entering the state",
+          run_until(&x, HEATCTL_DEMAND, -1, 900) > 0 && x.out.fan == 5);
+
+    x.p.demand_fan = 2; // A change of setting applies at once
+    run(&x, 1);
+    CHECK("fan by outdoor: to fixed", x.out.fan == 2);
+    x.p.demand_fan = HEATCTL_FAN_MAP;
+    run(&x, 1);
+    CHECK("fan by outdoor: and back to the map", x.out.fan == 5);
+
+    start(&x); // No outdoor temperature: left alone until there is one
+    x.p.demand_fan = HEATCTL_FAN_MAP;
+    x.p.fan_hold = 1800;
+    heatctl_parse_fanmap(&x.p.demand_fanmap, "-5:5,0:4,5:3");
+    memset(&x.s, 0, sizeof(x.s));
+    x.in.outdoor = NAN;
+    run(&x, 10);
+    CHECK("fan by outdoor: unknown outdoor leaves the fan", x.out.fan == HEATCTL_FAN_LEAVE);
+    x.in.outdoor = 1;
+    run(&x, 1);
+    CHECK("fan by outdoor: set once outdoor is known", x.out.fan == 4);
+
+    x.p.demand_fanmap.n = 0; // No map: left alone
+    start(&x);
+    x.p.demand_fan = HEATCTL_FAN_MAP;
+    run(&x, 1);
+    CHECK("fan by outdoor: no map leaves the fan", x.out.fan == HEATCTL_FAN_LEAVE);
+}
+
 // Electrical watts the unit draws for the controller's outputs
 static float model_watts(const sim_t *x)
 {
@@ -928,6 +1024,8 @@ int main(void)
     test_room_model(10, 0, 1);
     test_ble_env();
     test_fan_flow();
+    test_fanmap();
+    test_fan_by_outdoor();
     printf("%d passed, %d failed\n", passed, failed);
     return failed ? 1 : 0;
 }
