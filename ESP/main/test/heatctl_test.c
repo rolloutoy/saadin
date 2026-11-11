@@ -202,6 +202,30 @@ static void test_off_and_start(void)
     CHECK("restart: fresh integral", NEAR(x.out.integral, 400));
 }
 
+// IDLE is for when even the lowest level is too much: an overshoot at a higher level steps demand down, not off
+static void test_idle_only_from_lowest(void)
+{
+    sim_t x;
+    start(&x);
+    x.p.demand_full = 0;
+    x.in.room = 18;
+    run(&x, 5 * 3600);
+    CHECK("idle from lowest: cold room at 100q", x.out.demand == 100 && x.out.quiet);
+    x.in.room = 21.6; // A burst of warm air, over target + idle.over, long after demand.minrun
+    run(&x, 1800);
+    CHECK("overshoot above the lowest level stays DEMAND", x.out.state == HEATCTL_DEMAND && x.out.demand > 40);
+    x.in.room = 26; // Far over: the PI takes demand to the lowest level, then heating goes off
+    int t = run_until(&x, HEATCTL_IDLE, -1, 3600);
+    CHECK("far over: IDLE once at the lowest level", t > 0 && t <= 1200);
+    CHECK("far over: IDLE reason", strstr(x.out.reason, "room") != NULL);
+    start(&x); // Mild: already at the lowest level
+    x.in.room = 21.6;
+    run(&x, 1799);
+    CHECK("mild: at the lowest level before IDLE", x.out.state == HEATCTL_DEMAND && x.out.demand == 40);
+    run(&x, 1);
+    CHECK("mild: IDLE from the lowest level", x.out.state == HEATCTL_IDLE);
+}
+
 static void test_demand_idle(void)
 {
     sim_t x;
@@ -385,6 +409,8 @@ static void test_defrost(void)
     run(&x, 1799);
     CHECK("no IDLE during defrost", x.out.state == HEATCTL_DEMAND && x.out.sub == HEATCTL_SUB_DEFROST);
     x.in.liquid = 30;
+    run(&x, 1);
+    CHECK("defrost over: demand to the lowest level first", x.out.state == HEATCTL_DEMAND && x.out.demand == 40);
     run(&x, 1);
     CHECK("IDLE once defrost ends", x.out.state == HEATCTL_IDLE && x.out.sub == HEATCTL_SUB_NONE);
 
@@ -869,6 +895,7 @@ int main(void)
     test_curve();
     test_off_and_start();
     test_demand_idle();
+    test_idle_only_from_lowest();
     test_cold();
     test_defrost();
     test_defrost_rearm();

@@ -48,7 +48,7 @@ Demand changes at most once every 10 minutes (`demand.rate`), but one change can
 
 ### Heating off (idle)
 
-When the room is more than `idle.over` (0.5 °C) above the target, and heating has run for at least `demand.minrun` (30 minutes), the controller sets the setpoint to `idle.temp` (16 °C). The unit stops heating.
+When the room is more than `idle.over` (0.5 °C) above the target, demand is already at its lowest level, and heating has run for at least `demand.minrun` (30 minutes), the controller sets the setpoint to `idle.temp` (16 °C). The unit stops heating. At a higher demand level a room that is too warm only brings demand down, so heating goes off when even the lowest level is too much, not on a short overshoot in cold weather.
 
 Heating starts again when the room falls below the target, after at least `idle.min` (30 minutes) off. It restarts at the lowest demand level.
 

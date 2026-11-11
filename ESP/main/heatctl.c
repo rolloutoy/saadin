@@ -374,7 +374,8 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
     } else if (!stale && s->sub != HEATCTL_SUB_DEFROST) { // No transitions on a stale reading or during defrost
         switch (s->state) {
         case HEATCTL_DEMAND:
-            if (room > target + p->idle_over && now - s->since >= p->demand_minrun) {
+            if (room > target + p->idle_over && now - s->since >= p->demand_minrun && s->level == 0) {
+                // Only from the lowest level: above it, an overshoot just steps demand down
                 enter(s, &out, now, HEATCTL_IDLE, HEATCTL_SUB_NONE);
                 reason(&out, "room %.2f > target %.2f+%.1f", room, target, p->idle_over);
             } else if (s->is_cold && now - s->cold_since >= p->cold_hold) {
