@@ -330,7 +330,7 @@ const char *const hvac_action[] = {"off", "preheating", "heating", "cooling", "d
 // Heating control (heatctl), see docs/heat-control.md
 static heatctl_t heatctl;                          // Controller state, main loop only
 static heatctl_out_t ctl = {.state = HEATCTL_OFF}; // Last outputs, for status
-static heatlog_t heatlog;                          // One sample every 30 s for the graph page, under daikin.mutex
+static heatlog_t heatlog;                          // One sample every 15 s for the graph page, under daikin.mutex
 static heatctl_curve_t heatflow;                   // Air flow (m3/h) by fan speed (rpm), fan.flow, main loop only
 
 static void heatctl_status_json(jo_t j)
@@ -1716,19 +1716,36 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     if (!web_auth_check(req))
         return ESP_OK;
 #endif
-    heatlog_sample_t *s = heatlog.n ? mallocspi(heatlog.n * sizeof(*s)) : NULL;
+    // The log is read a part at a time, by sample number, so there is no copy of all of it and the columns still
+    // line up while samples are added. A full log overwrites its oldest samples meanwhile, so those are left out.
+    const uint32_t part = 256, spare = 300 / HEATLOG_INTERVAL;
+    heatlog_sample_t *s = mallocspi(part * sizeof(*s));
     const size_t size = 4096; // Reply buffer, PSRAM if there is any
     char *buf = mallocspi(size);
-    if (!buf) {
+    if (!buf || !s) {
+        free(buf);
         free(s);
         httpd_resp_send_500(req);
         return ESP_OK;
     }
     xSemaphoreTake(daikin.mutex, portMAX_DELAY);
-    uint32_t n = s ? heatlog_get(&heatlog, s, heatlog.n) : 0;
+    uint32_t begin = heatlog_begin(&heatlog), end = heatlog_end(&heatlog);
     xSemaphoreGive(daikin.mutex);
+    if (end - begin > spare && end - begin == heatlog.n)
+        begin += spare;
+    uint32_t n = end - begin, at = n, got = 0; // s holds got samples from sample at of the n
     uint32_t now = uptime();
     size_t len = 0;
+    const heatlog_sample_t *get(uint32_t i)
+    { // Sample i of the n, NULL if it has been overwritten after all
+        if (i < at || i >= at + part) {
+            at = i;
+            xSemaphoreTake(daikin.mutex, portMAX_DELAY);
+            got = heatlog_read(&heatlog, begin + i, s, n - i < part ? n - i : part);
+            xSemaphoreGive(daikin.mutex);
+        }
+        return i - at < got ? &s[i - at] : NULL;
+    }
     void out(const char *f, ...)
     { // Each item is short, send when the buffer is nearly full
         if (len > size - 64) {
@@ -1744,7 +1761,8 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     {
         out("],\"%s\":[", tag);
         for (uint32_t i = 0; i < n; i++) {
-            int16_t v = *(int16_t *)((char *)&s[i] + offset);
+            const heatlog_sample_t *p = get(i);
+            int16_t v = p ? *(int16_t *)((char *)p + offset) : HEATLOG_NONE;
             if (v == HEATLOG_NONE)
                 out("%snull", i ? "," : "");
             else
@@ -1753,8 +1771,11 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     }
     httpd_resp_set_type(req, "application/json");
     out("{\"interval\":%d,\"ago\":[", HEATLOG_INTERVAL);
-    for (uint32_t i = 0; i < n; i++)
-        out("%s%lu", i ? "," : "", (unsigned long)(now - s[i].t));
+    for (uint32_t i = 0, ago = 0; i < n; i++) {
+        const heatlog_sample_t *p = get(i);
+        ago = p ? now - p->t : ago > HEATLOG_INTERVAL ? ago - HEATLOG_INTERVAL : 0;
+        out("%s%lu", i ? "," : "", (unsigned long)ago);
+    }
     col("room", offsetof(heatlog_sample_t, room));
     col("outdoor", offsetof(heatlog_sample_t, outdoor));
     col("heatw", offsetof(heatlog_sample_t, heatw));
@@ -1774,22 +1795,22 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     col("heatout", offsetof(heatlog_sample_t, heatout));
     out("],\"state\":[");
     for (uint32_t i = 0; i < n; i++)
-        out("%s%u", i ? "," : "", s[i].state);
+        out("%s%u", i ? "," : "", get(i) ? get(i)->state : HEATCTL_OFF);
     out("],\"sub\":[");
     for (uint32_t i = 0; i < n; i++)
-        out("%s%u", i ? "," : "", s[i].sub);
+        out("%s%u", i ? "," : "", get(i) ? get(i)->sub : HEATCTL_SUB_NONE);
     out("],\"fanset\":[");
     for (uint32_t i = 0; i < n; i++)
-        if (s[i].fanset == HEATLOG_NONE8)
+        if (!get(i) || get(i)->fanset == HEATLOG_NONE8)
             out("%snull", i ? "," : "");
         else
-            out("%s%u", i ? "," : "", s[i].fanset);
+            out("%s%u", i ? "," : "", get(i)->fanset);
     out("],\"quiet\":[");
     for (uint32_t i = 0; i < n; i++)
-        if (s[i].quiet == HEATLOG_NONE8)
+        if (!get(i) || get(i)->quiet == HEATLOG_NONE8)
             out("%snull", i ? "," : "");
         else
-            out("%s%u", i ? "," : "", s[i].quiet);
+            out("%s%u", i ? "," : "", get(i)->quiet);
     out("],\"states\":[");
     for (int i = 0; i <= HEATCTL_NOSENSOR; i++)
         out("%s\"%s\"", i ? "," : "", heatctl_state_name(i));
@@ -1819,7 +1840,7 @@ static esp_err_t web_graph(httpd_req_t *req)
         "<button data-s=43200>12 h</button> <button data-s=10800>3 h</button></p>"                   //
         "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>" //
         "<div class=g><canvas id=unit></canvas></div><div class=g><canvas id=cop></canvas></div>"    //
-        "<p>One sample every 30 s, kept until a restart. Click a legend entry to show or hide it. "  //
+        "<p>One sample every 15 s, kept until a restart. Click a legend entry to show or hide it. "  //
         "Drag across a chart or ctrl+scroll to zoom in, shift+drag to pan. "                         //
         "On a phone, pinch to zoom and drag to pan. "                                                //
         "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "     //
@@ -1835,7 +1856,7 @@ static esp_err_t web_graph(httpd_req_t *req)
         "function n(v){return v;}"                                                                   //
         "fetch('/graph.json').then(r=>r.json()).then(d=>{"                                           //
         "var m=document.getElementById('msg'),k=d.ago.length;"                                       //
-        "if(!k){m.textContent='No samples yet, the first comes after 30 s.';return;}"                //
+        "if(!k){m.textContent='No samples yet, the first comes after 15 s.';return;}"                //
         "var now=Date.now(),x=d.ago.map(a=>now-a*1000);"                                             //
         "m.textContent='Last '+(d.ago[0]>=172800?Math.round(d.ago[0]/8640)/10+' days':Math.round(d.ago[0]/360)/10+' hours')+', to '+new Date(x[k-1]).toLocaleString();" //
         "function p(a,f){return a.map((v,i)=>({x:x[i],y:v==null?null:f(v)}));}" //
@@ -3747,8 +3768,8 @@ void app_main()
 #endif
     blemutex = xSemaphoreCreateMutex();
     daikin.mutex = xSemaphoreCreateMutex();
-    { // Heating log for the graph page: 3 days, or 3 hours without PSRAM
-        uint32_t n = (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) ? 72 : 3) * 3600 / HEATLOG_INTERVAL;
+    { // Heating log for the graph page: 3 days, or 1.5 hours without PSRAM
+        uint32_t n = (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) ? 72 * 3600 : 5400) / HEATLOG_INTERVAL;
         heatlog_init(&heatlog, mallocspi(n * sizeof(heatlog_sample_t)), n);
     }
     b.startup = 1;

@@ -58,6 +58,7 @@ static void keep(heatlog_t *l, uint32_t now)
     l->next = (l->next + 1) % l->n;
     if (l->count < l->n)
         l->count++;
+    l->total++;
 }
 
 void heatlog_init(heatlog_t *l, heatlog_sample_t *buf, uint32_t n)
@@ -87,6 +88,29 @@ void heatlog_add(heatlog_t *l, const heatlog_in_t *in, uint32_t now)
     if (in->sub == HEATCTL_SUB_DEFROST)
         l->defrost = 1;
     l->last = *in;
+}
+
+uint32_t heatlog_begin(const heatlog_t *l)
+{
+    return l->total - l->count;
+}
+
+uint32_t heatlog_end(const heatlog_t *l)
+{
+    return l->total;
+}
+
+uint32_t heatlog_read(const heatlog_t *l, uint32_t seq, heatlog_sample_t *out, uint32_t max)
+{
+    if (seq < heatlog_begin(l) || seq >= l->total)
+        return 0;
+    uint32_t c = l->total - seq; // Samples from seq to the newest
+    uint32_t first = (l->next + l->n - c) % l->n;
+    if (c > max)
+        c = max;
+    for (uint32_t i = 0; i < c; i++)
+        out[i] = l->sample[(first + i) % l->n];
+    return c;
 }
 
 float heatlog_heatout(float flow, float out, float intake)

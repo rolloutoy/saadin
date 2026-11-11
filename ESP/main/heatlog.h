@@ -1,10 +1,10 @@
-// Saadin heating log (heatlog): one sample every 30 s for the graph page, see Manuals/Heating.md
+// Saadin heating log (heatlog): one sample every 15 s for the graph page, see Manuals/Heating.md
 // Pure logic, no ESP-IDF calls, so it also builds as a host unit test (see test/heatlog_test.c)
 #pragma once
 
 #include <stdint.h>
 
-#define HEATLOG_INTERVAL 30    // Seconds per sample
+#define HEATLOG_INTERVAL 15    // Seconds per sample
 #define HEATLOG_NONE INT16_MIN // Value not known
 #define HEATLOG_NONE8 255      // fanset or quiet not known
 
@@ -63,6 +63,7 @@ typedef struct {
     heatlog_sample_t *sample; // Ring of n samples
     uint32_t n;               // Size of the ring
     uint32_t count;           // Samples held
+    uint32_t total;           // Samples kept since the start
     uint32_t next;            // Where the next sample goes
     uint32_t start;           // When the sample being built started, 0 for none yet
     float sum[HEATLOG_MEANS]; // Sample being built
@@ -77,6 +78,14 @@ void heatlog_init(heatlog_t *l, heatlog_sample_t *buf, uint32_t n);
 // Add the inputs at now (s, must not go backwards, not 0). Call it about once a second. A sample is kept every
 // HEATLOG_INTERVAL seconds.
 void heatlog_add(heatlog_t *l, const heatlog_in_t *in, uint32_t now);
+
+// Samples are numbered from 0 as they are kept. These read by number, so a reader can take the log a part at a time
+// while samples are still added: begin is the oldest sample still held, end the next to be kept.
+uint32_t heatlog_begin(const heatlog_t *l);
+uint32_t heatlog_end(const heatlog_t *l);
+
+// Copy up to max samples from number seq on. Returns the number copied, 0 if seq is no longer held or not yet kept.
+uint32_t heatlog_read(const heatlog_t *l, uint32_t seq, heatlog_sample_t *out, uint32_t max);
 
 // Estimated heat output (W): the air flow (m3/h) times the temperature rise from intake to out (°C) times the heat
 // capacity of air. NAN if any is not known.
