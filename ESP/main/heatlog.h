@@ -15,6 +15,9 @@ typedef struct {     // Inputs, about once a second, NAN if not known
     float smoothed;  // Room temperature as the controller sees it, smoothed (°C), mean
     float liquid;    // Liquid temperature (°C), mean
     float comp;      // Compressor frequency (Hz), mean
+    float fan;       // Indoor fan speed as the unit reports it (rpm), mean
+    float intake;    // Unit's own room (intake air) temperature (°C), mean
+    float heatout;   // Estimated heat output (W), mean, see heatlog_heatout
     float target;    // Target, auto.t (°C), last in the sample
     float effective; // Effective target, with the curve (°C), last
     float setpoint;  // Unit setpoint (°C), last
@@ -35,6 +38,9 @@ typedef struct { // One sample, temperatures in 0.01 °C, HEATLOG_NONE if not kn
     int16_t smoothed;
     int16_t liquid;
     int16_t comp; // Hz
+    int16_t fan;  // rpm
+    int16_t intake;
+    int16_t heatout; // W
     int16_t target;
     int16_t effective;
     int16_t setpoint;
@@ -46,7 +52,7 @@ typedef struct { // One sample, temperatures in 0.01 °C, HEATLOG_NONE if not kn
     uint8_t sub;
 } heatlog_sample_t;
 
-#define HEATLOG_MEANS 7 // room, outdoor, heatw, power, smoothed, liquid, comp
+#define HEATLOG_MEANS 10 // room, outdoor, heatw, power, smoothed, liquid, comp, fan, intake, heatout
 
 typedef struct {
     heatlog_sample_t *sample; // Ring of n samples
@@ -66,6 +72,10 @@ void heatlog_init(heatlog_t *l, heatlog_sample_t *buf, uint32_t n);
 // Add the inputs at now (s, must not go backwards, not 0). Call it about once a second. A sample is kept every
 // HEATLOG_INTERVAL seconds.
 void heatlog_add(heatlog_t *l, const heatlog_in_t *in, uint32_t now);
+
+// Estimated heat output (W): the air flow (m3/h) times the temperature rise from intake to out (°C) times the heat
+// capacity of air. NAN if any is not known.
+float heatlog_heatout(float flow, float out, float intake);
 
 // Copy up to max samples, oldest first, the newest if there are more. Returns the number copied.
 uint32_t heatlog_get(const heatlog_t *l, heatlog_sample_t *out, uint32_t max);

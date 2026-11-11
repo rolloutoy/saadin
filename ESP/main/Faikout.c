@@ -331,6 +331,7 @@ const char *const hvac_action[] = {"off", "preheating", "heating", "cooling", "d
 static heatctl_t heatctl;                          // Controller state, main loop only
 static heatctl_out_t ctl = {.state = HEATCTL_OFF}; // Last outputs, for status
 static heatlog_t heatlog;                          // One sample every 30 s for the graph page, under daikin.mutex
+static heatctl_curve_t heatflow;                   // Air flow (m3/h) by fan speed (rpm), fan.flow, main loop only
 
 static void heatctl_status_json(jo_t j)
 { // Controller state, for the web status and the HA state
@@ -1768,6 +1769,9 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     col("ti", offsetof(heatlog_sample_t, ti));
     col("liquid", offsetof(heatlog_sample_t, liquid));
     col("comp", offsetof(heatlog_sample_t, comp));
+    col("fan", offsetof(heatlog_sample_t, fan));
+    col("intake", offsetof(heatlog_sample_t, intake));
+    col("heatout", offsetof(heatlog_sample_t, heatout));
     out("],\"state\":[");
     for (uint32_t i = 0; i < n; i++)
         out("%s%u", i ? "," : "", s[i].state);
@@ -1802,13 +1806,15 @@ static esp_err_t web_graph(httpd_req_t *req)
         "<p id=zb hidden>Show <button data-s=0>All</button> <button data-s=86400>1 day</button> "    //
         "<button data-s=43200>12 h</button> <button data-s=10800>3 h</button></p>"                   //
         "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>" //
-        "<div class=g><canvas id=unit></canvas></div>"                                               //
+        "<div class=g><canvas id=unit></canvas></div><div class=g><canvas id=cop></canvas></div>"    //
         "<p>One sample every 30 s, kept until a restart. Click a legend entry to show or hide it. "  //
         "Drag across a chart or ctrl+scroll to zoom in, shift+drag to pan. "                         //
         "On a phone, pinch to zoom and drag to pan. "                                                //
         "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "     //
         "green hold after a defrost (demand is not raised), red rest after a defrost loop. "         //
-        "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint.</p>"  //
+        "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint. "     //
+        "Heat output and COP are estimates from the fan speed, the unit's own room reading and the " //
+        "liquid temperature. The 1 h mean COP counts the defrosts in.</p>"                           //
         "<script src='/chart.js?%s'></script>"                                                       //
         "<script>"                                                                                   //
         "var F=%d,U=F?'℉':'℃';"                                                                      //
@@ -1882,9 +1888,26 @@ static esp_err_t web_graph(httpd_req_t *req)
         "grid:{drawOnChartArea:false}}})}));"                                                                  //
         "cs.push(new Chart(document.getElementById('unit'),{type:'line',plugins:[band,mark],data:{datasets:["  //
         "ds('Liquid',d.liquid,tc,'#a0a'),"                                                                     //
-        "ds('Compressor',d.comp,n,'#555',{yAxisID:'h'})]},"                                                    //
+        "ds('Unit room',d.intake,tc,'#c60'),"                                                                  //
+        "ds('Compressor',d.comp,n,'#555',{yAxisID:'h'}),"                                                      //
+        "ds('Fan',d.fan,n,'#0a0',{yAxisID:'r'})]},"                                                            //
         "options:opt({y:{title:{display:true,text:U}},"                                                        //
-        "h:{position:'right',min:0,title:{display:true,text:'Hz'},grid:{drawOnChartArea:false}}})}));"         //
+        "h:{position:'right',min:0,title:{display:true,text:'Hz'},grid:{drawOnChartArea:false}},"              //
+        "r:{position:'right',min:0,title:{display:true,text:'rpm'},grid:{drawOnChartArea:false}}})}));"        //
+        "var cop=d.heatout.map((v,i)=>v==null||d.power[i]==null||d.power[i]<100||d.subs[d.sub[i]]=='defrost'?" //
+        "null:Math.round(v/d.power[i]*100)/100);"                                                              //
+        "var W=3600/d.interval,ph=[0],pp=[0],pn=[0];for(var i=0;i<k;i++){"                                     //
+        "var o=d.heatout[i]!=null&&d.power[i]!=null;ph.push(ph[i]+(o?d.heatout[i]:0));"                        //
+        "pp.push(pp[i]+(o?d.power[i]:0));pn.push(pn[i]+(o?1:0));}"                                             //
+        "var cm=d.ago.map((a,i)=>{var j=Math.max(0,i+1-W),e=pp[i+1]-pp[j];"                                    //
+        "return pn[i+1]-pn[j]<W/2||e<=0?null:Math.round((ph[i+1]-ph[j])/e*100)/100;});"                        //
+        "cs.push(new Chart(document.getElementById('cop'),{type:'line',plugins:[band,mark],data:{datasets:["   //
+        "ds('Heat output, estimated',d.heatout,n,'#080'),"                                                     //
+        "ds('Power',d.power,n,'#c00'),"                                                                        //
+        "ds('COP',cop,n,'#8bf',{yAxisID:'c',borderWidth:1}),"                                                  //
+        "ds('COP, 1 h mean',cm,n,'#06c',{yAxisID:'c'})]},"                                                     //
+        "options:opt({y:{title:{display:true,text:'W'}},"                                                      //
+        "c:{position:'right',min:0,max:10,title:{display:true,text:'COP'},grid:{drawOnChartArea:false}}})}));" //
         "}).catch(e=>{document.getElementById('msg').textContent='Could not load the log: '+e;});"             //
         "</script>",
         revk_version, fahrenheit);
@@ -3408,6 +3431,7 @@ void revk_web_extra(httpd_req_t *req, int page)
     if (autoe) {
         revk_web_setting(req, "Target curve", "autocurve");
         revk_web_setting(req, "Demand table", "demandtable");
+        revk_web_setting(req, "Air flow by fan speed", "fanflow");
         revk_web_setting(req, "Fan, heating on demand", "demandfan");
         revk_web_setting(req, "Fan, heating off", "idlefan");
         revk_web_setting(req, "Fan, full power (cold)", "coldfan");
@@ -3431,7 +3455,7 @@ static int8_t heatctl_fan(uint8_t setting)
 
 static void heatctl_settings(heatctl_params_t *p)
 {
-    static char *table = NULL, *curve = NULL; // As last parsed
+    static char *table = NULL, *curve = NULL, *flow = NULL; // As last parsed
     if (!table || strcmp(table, demandtable ?: "")) {
         extern revk_settings_t *revk_settings_find(const char *name, int *index); // ESP32-RevK settings_lib.h
         revk_settings_t *s = revk_settings_find("demandtable", NULL);
@@ -3454,6 +3478,18 @@ static void heatctl_settings(heatctl_params_t *p)
             ESP_LOGE(TAG, "heatctl: auto.curve \"%s\": %s, using no offset", curve, e);
             jo_t j = jo_object_alloc();
             jo_string(j, "autocurve", curve);
+            jo_string(j, "error", e);
+            revk_error("heatctl", &j);
+        }
+    }
+    if (!flow || strcmp(flow, fanflow ?: "")) {
+        free(flow);
+        flow = strdup(fanflow ?: "");
+        const char *e = heatctl_parse_curve(&heatflow, flow); // Same format: rpm:flow,...
+        if (e) {
+            ESP_LOGE(TAG, "heatctl: fan.flow \"%s\": %s, no heat output estimate", flow, e);
+            jo_t j = jo_object_alloc();
+            jo_string(j, "fanflow", flow);
             jo_string(j, "error", e);
             revk_error("heatctl", &j);
         }
@@ -3551,6 +3587,15 @@ static void heatctl_tick(uint32_t now)
     heatctl_out_t o = heatctl_step(&heatctl, &p, &in, now);
     ctl = o;
     uint8_t cold = (o.state == HEATCTL_COLD), pi = (cold || o.state == HEATCTL_DEMAND); // A PI loop is running
+    // Estimated heat output: the air flow at the fan speed the unit reports, warmed from the unit's own room reading
+    // (its intake air) to the liquid temperature, which is close to the outlet air temperature
+    float fan = (daikin.status_known & CONTROL_fanrpm) ? daikin.fanrpm : NAN;
+    float intake = (daikin.status_known & CONTROL_home)    ? daikin.home
+                   : (daikin.status_known & CONTROL_inlet) ? daikin.inlet
+                                                           : NAN;
+    float flow = (!heatflow.n || isnan(fan) || !in.power || !in.heat) ? NAN
+                 : fan > 0                                            ? heatctl_curve_offset(&heatflow, fan)
+                                                                      : 0;
     heatlog_in_t l = {
         .room = in.room,
         .outdoor = in.outdoor,
@@ -3559,6 +3604,9 @@ static void heatctl_tick(uint32_t now)
         .smoothed = isnan(in.room) ? NAN : o.room, // o.room keeps the last reading once there is none
         .liquid = in.liquid,
         .comp = (daikin.status_known & CONTROL_comp) ? daikin.comp : NAN,
+        .fan = fan,
+        .intake = intake,
+        .heatout = heatlog_heatout(flow, in.liquid, intake),
         .integral = pi ? o.integral : NAN,
         .kp = pi ? (cold ? p.cold_kp : p.kp) : NAN,
         .ti = pi ? (cold ? p.cold_ti : p.ti) / 60.0 : NAN,

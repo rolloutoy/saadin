@@ -33,6 +33,9 @@ static heatlog_in_t in_none(void)
         .smoothed = NAN,
         .liquid = NAN,
         .comp = NAN,
+        .fan = NAN,
+        .intake = NAN,
+        .heatout = NAN,
         .integral = NAN,
         .kp = NAN,
         .ti = NAN,
@@ -56,6 +59,9 @@ static heatlog_in_t in_demand(void)
         .smoothed = 21.1,
         .liquid = 35,
         .comp = 40,
+        .fan = 750,
+        .intake = 23.5,
+        .heatout = 1700,
         .integral = 350,
         .kp = 300,
         .ti = 90,
@@ -92,6 +98,9 @@ static void test_one(void)
         in.power = now <= 15 ? 400 : 500;
         in.liquid = now <= 15 ? 30 : 4.5; // A defrost dip shows in the mean
         in.comp = now <= 15 ? 40 : 61;
+        in.fan = now <= 15 ? 750 : 0; // The fan stops in a defrost
+        in.intake = now <= 15 ? 23.5 : 22.5;
+        in.heatout = now <= 15 ? 1700 : -100;
         in.target = now <= 25 ? 21 : 21.5;
         in.demand = now <= 25 ? 70 : 80;
         heatlog_add(&l, &in, now);
@@ -105,6 +114,9 @@ static void test_one(void)
     CHECK("heatw is the mean", out[0].heatw == 400);
     CHECK("liquid is the mean", out[0].liquid == 1725);
     CHECK("comp is the mean", out[0].comp == 51);
+    CHECK("fan is the mean", out[0].fan == 375);
+    CHECK("intake is the mean", out[0].intake == 2300);
+    CHECK("heat output is the mean", out[0].heatout == 800);
     CHECK("outdoor negative", out[0].outdoor == -500);
     CHECK("target is the last", out[0].target == 2150);
     CHECK("demand is the last", out[0].demand == 80);
@@ -130,7 +142,8 @@ static void test_unknown(void)
               out[0].target == HEATLOG_NONE && out[0].effective == HEATLOG_NONE && out[0].setpoint == HEATLOG_NONE &&
               out[0].demand == HEATLOG_NONE && out[0].smoothed == HEATLOG_NONE && out[0].integral == HEATLOG_NONE &&
               out[0].kp == HEATLOG_NONE && out[0].ti == HEATLOG_NONE && out[0].liquid == HEATLOG_NONE &&
-              out[0].comp == HEATLOG_NONE);
+              out[0].comp == HEATLOG_NONE && out[0].fan == HEATLOG_NONE && out[0].intake == HEATLOG_NONE &&
+              out[0].heatout == HEATLOG_NONE);
     CHECK("off state", out[0].state == HEATCTL_OFF);
 }
 
@@ -216,8 +229,20 @@ static void test_gap_and_clamp(void)
     CHECK("clamp low is not unknown", out[0].heatw == INT16_MIN + 1);
 }
 
+static void test_heatout(void)
+{
+    // 518 m3/h warmed from 23.5 to 33.5 °C: 518 / 3600 m3/s x 1.2 kg/m3 x 1005 J/(kg K) x 10 K
+    CHECK("heat output from air flow and rise", fabsf(heatlog_heatout(518, 33.5, 23.5) - 1735) < 2);
+    CHECK("no air flow, no heat", heatlog_heatout(0, 33.5, 23.5) == 0);
+    CHECK("a cold coil takes heat", heatlog_heatout(300, 10, 22) < 0);
+    CHECK("unknown flow", isnan(heatlog_heatout(NAN, 33.5, 23.5)));
+    CHECK("unknown out", isnan(heatlog_heatout(518, NAN, 23.5)));
+    CHECK("unknown intake", isnan(heatlog_heatout(518, 33.5, NAN)));
+}
+
 int main(void)
 {
+    test_heatout();
     test_empty();
     test_one();
     test_unknown();
