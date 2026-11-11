@@ -108,7 +108,7 @@ These manuals come from upstream and still use the Faikout name:
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
 **2026-11-11**
-- Heating control can set the fan by outdoor temperature. `demand.fan`, `idle.fan` and `cold.fan` have a new choice *Outdoor*, which takes the fan from the new settings `demand.fanmap`, `idle.fanmap` and `cold.fanmap` (`outdoor:fan,...`, for example `-5:5,0:4,5:3`). Each fan is then kept for `fan.hold` (default 30 minutes) at least, so it does not flap.
+- Heating control can set the fan by outdoor temperature. `demand.fan`, `idle.fan` and `cold.fan` have a new choice *Outdoor*, which takes the fan from the new settings `demand.fanmap`, `idle.fanmap` and `cold.fanmap` (`outdoor:fan,...`, for example `-5:5,0:4,5:3`). Each fan is then kept for `fan.hold` (default 60 minutes) at least, so it does not flap.
 - The heating graph keeps 5 days instead of 3 on boards with PSRAM, which takes about 1.3 MB of it, and has a *3 days* range button.
 - Heating control now turns heating off (idle) only when demand is already at its lowest level. It used to do so from any level once the room was `idle.over` above the target, so a short overshoot at high demand in cold weather could switch heating off for `idle.min` and restart it from the lowest level.
 - The heating graph can refresh itself: choose 15 s, 30 s, 1 min or 5 min under Refresh (off by default), or give another interval in the address (`/graph?refresh=120`). A refresh keeps the range chosen with the All / 1 day / 12 h / 3 h buttons.
