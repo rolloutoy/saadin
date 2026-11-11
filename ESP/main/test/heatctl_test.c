@@ -55,6 +55,7 @@ static heatctl_params_t params(void)
         .defrost_exit = 25,
         .defrost_max = 30 * 60,
         .defrost_hold = 10 * 60,
+        .defrost_holdmax = 100,
         .defrost_watchdog = 0,
         .defrost_loops = 3,
         .defrost_window = 90 * 60,
@@ -556,11 +557,13 @@ static void test_no_smoothing(void)
     CHECK("no smoothing: integral stays a number", !isnan(x.out.integral) && x.out.integral > 350);
 }
 
-static void test_hold_cap(int full)
+// max is defrost.holdmax: 100 is 100q, never plain 100
+static void test_hold_cap(int full, int max)
 {
     sim_t x;
     start(&x);
     x.p.demand_full = full;
+    x.p.defrost_holdmax = max;
     x.in.room = 18;
     run(&x, 5 * 3600);
     if (full)
@@ -573,9 +576,10 @@ static void test_hold_cap(int full)
     CHECK("defrost at 100: QO on", x.out.sub == HEATCTL_SUB_DEFROST && x.out.demand == 100 && x.out.quiet);
     x.in.liquid = 30;
     run(&x, 1);
-    CHECK("hold caps demand at 95", x.out.sub == HEATCTL_SUB_HOLD && x.out.demand == 95 && x.out.quiet);
+    CHECK("hold caps demand at defrost.holdmax, QO on",
+          x.out.sub == HEATCTL_SUB_HOLD && x.out.demand == max && x.out.quiet);
     run(&x, 598);
-    CHECK("hold keeps cap", x.out.demand == 95);
+    CHECK("hold keeps cap", x.out.demand == max && x.out.quiet);
     run(&x, 2);
     run(&x, 600);
     CHECK("after hold back to top", x.out.demand == 100 && x.out.quiet == !full);
@@ -854,8 +858,11 @@ int main(void)
     test_no_hold();
     test_table_shrinks_in_defrost();
     test_no_smoothing();
-    test_hold_cap(1);
-    test_hold_cap(0);
+    test_hold_cap(1, 100);
+    test_hold_cap(1, 95);
+    test_hold_cap(0, 100);
+    test_hold_cap(0, 95);
+    test_hold_cap(0, 80);
     test_watchdog(3);
     test_watchdog(4);
     test_watchdog_off();
