@@ -39,6 +39,9 @@ static void keep(heatlog_t *l, uint32_t now)
         .smoothed = scaled(mean[4], 100),
         .liquid = scaled(mean[5], 100),
         .comp = scaled(mean[6], 1),
+        .fan = scaled(mean[7], 1),
+        .intake = scaled(mean[8], 100),
+        .heatout = scaled(mean[9], 1),
         .target = scaled(l->last.target, 100),
         .effective = scaled(l->last.effective, 100),
         .setpoint = scaled(l->last.setpoint, 100),
@@ -48,11 +51,14 @@ static void keep(heatlog_t *l, uint32_t now)
         .ti = scaled(l->last.ti, 1),
         .state = l->last.state,
         .sub = l->defrost ? HEATCTL_SUB_DEFROST : l->last.sub,
+        .fanset = l->last.fanset,
+        .quiet = l->last.quiet,
     };
     l->sample[l->next] = s;
     l->next = (l->next + 1) % l->n;
     if (l->count < l->n)
         l->count++;
+    l->total++;
 }
 
 void heatlog_init(heatlog_t *l, heatlog_sample_t *buf, uint32_t n)
@@ -72,7 +78,8 @@ void heatlog_add(heatlog_t *l, const heatlog_in_t *in, uint32_t now)
         keep(l, now);
         reset(l, now);
     }
-    const float v[HEATLOG_MEANS] = {in->room, in->outdoor, in->heatw, in->power, in->smoothed, in->liquid, in->comp};
+    const float v[HEATLOG_MEANS] = {in->room,   in->outdoor, in->heatw, in->power,  in->smoothed,
+                                    in->liquid, in->comp,    in->fan,   in->intake, in->heatout};
     for (int i = 0; i < HEATLOG_MEANS; i++)
         if (!isnan(v[i])) {
             l->sum[i] += v[i];
@@ -81,6 +88,34 @@ void heatlog_add(heatlog_t *l, const heatlog_in_t *in, uint32_t now)
     if (in->sub == HEATCTL_SUB_DEFROST)
         l->defrost = 1;
     l->last = *in;
+}
+
+uint32_t heatlog_begin(const heatlog_t *l)
+{
+    return l->total - l->count;
+}
+
+uint32_t heatlog_end(const heatlog_t *l)
+{
+    return l->total;
+}
+
+uint32_t heatlog_read(const heatlog_t *l, uint32_t seq, heatlog_sample_t *out, uint32_t max)
+{
+    if (seq < heatlog_begin(l) || seq >= l->total)
+        return 0;
+    uint32_t c = l->total - seq; // Samples from seq to the newest
+    uint32_t first = (l->next + l->n - c) % l->n;
+    if (c > max)
+        c = max;
+    for (uint32_t i = 0; i < c; i++)
+        out[i] = l->sample[(first + i) % l->n];
+    return c;
+}
+
+float heatlog_heatout(float flow, float out, float intake)
+{ // Air: 1.2 kg/m3 x 1005 J/(kg K), flow per hour
+    return flow * (out - intake) * 1.2f * 1005 / 3600;
 }
 
 uint32_t heatlog_get(const heatlog_t *l, heatlog_sample_t *out, uint32_t max)

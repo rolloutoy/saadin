@@ -330,7 +330,8 @@ const char *const hvac_action[] = {"off", "preheating", "heating", "cooling", "d
 // Heating control (heatctl), see docs/heat-control.md
 static heatctl_t heatctl;                          // Controller state, main loop only
 static heatctl_out_t ctl = {.state = HEATCTL_OFF}; // Last outputs, for status
-static heatlog_t heatlog;                          // One sample every 30 s for the graph page, under daikin.mutex
+static heatlog_t heatlog;                          // One sample every 15 s for the graph page, under daikin.mutex
+static heatctl_curve_t heatflow;                   // Air flow (m3/h) by fan speed (rpm), fan.flow, main loop only
 
 static void heatctl_status_json(jo_t j)
 { // Controller state, for the web status and the HA state
@@ -1715,19 +1716,36 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     if (!web_auth_check(req))
         return ESP_OK;
 #endif
-    heatlog_sample_t *s = heatlog.n ? mallocspi(heatlog.n * sizeof(*s)) : NULL;
+    // The log is read a part at a time, by sample number, so there is no copy of all of it and the columns still
+    // line up while samples are added. A full log overwrites its oldest samples meanwhile, so those are left out.
+    const uint32_t part = 256, spare = 300 / HEATLOG_INTERVAL;
+    heatlog_sample_t *s = mallocspi(part * sizeof(*s));
     const size_t size = 4096; // Reply buffer, PSRAM if there is any
     char *buf = mallocspi(size);
-    if (!buf) {
+    if (!buf || !s) {
+        free(buf);
         free(s);
         httpd_resp_send_500(req);
         return ESP_OK;
     }
     xSemaphoreTake(daikin.mutex, portMAX_DELAY);
-    uint32_t n = s ? heatlog_get(&heatlog, s, heatlog.n) : 0;
+    uint32_t begin = heatlog_begin(&heatlog), end = heatlog_end(&heatlog);
     xSemaphoreGive(daikin.mutex);
+    if (end - begin > spare && end - begin == heatlog.n)
+        begin += spare;
+    uint32_t n = end - begin, at = n, got = 0; // s holds got samples from sample at of the n
     uint32_t now = uptime();
     size_t len = 0;
+    const heatlog_sample_t *get(uint32_t i)
+    { // Sample i of the n, NULL if it has been overwritten after all
+        if (i < at || i >= at + part) {
+            at = i;
+            xSemaphoreTake(daikin.mutex, portMAX_DELAY);
+            got = heatlog_read(&heatlog, begin + i, s, n - i < part ? n - i : part);
+            xSemaphoreGive(daikin.mutex);
+        }
+        return i - at < got ? &s[i - at] : NULL;
+    }
     void out(const char *f, ...)
     { // Each item is short, send when the buffer is nearly full
         if (len > size - 64) {
@@ -1743,7 +1761,8 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     {
         out("],\"%s\":[", tag);
         for (uint32_t i = 0; i < n; i++) {
-            int16_t v = *(int16_t *)((char *)&s[i] + offset);
+            const heatlog_sample_t *p = get(i);
+            int16_t v = p ? *(int16_t *)((char *)p + offset) : HEATLOG_NONE;
             if (v == HEATLOG_NONE)
                 out("%snull", i ? "," : "");
             else
@@ -1752,8 +1771,11 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     }
     httpd_resp_set_type(req, "application/json");
     out("{\"interval\":%d,\"ago\":[", HEATLOG_INTERVAL);
-    for (uint32_t i = 0; i < n; i++)
-        out("%s%lu", i ? "," : "", (unsigned long)(now - s[i].t));
+    for (uint32_t i = 0, ago = 0; i < n; i++) {
+        const heatlog_sample_t *p = get(i);
+        ago = p ? now - p->t : ago > HEATLOG_INTERVAL ? ago - HEATLOG_INTERVAL : 0;
+        out("%s%lu", i ? "," : "", (unsigned long)ago);
+    }
     col("room", offsetof(heatlog_sample_t, room));
     col("outdoor", offsetof(heatlog_sample_t, outdoor));
     col("heatw", offsetof(heatlog_sample_t, heatw));
@@ -1768,12 +1790,27 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     col("ti", offsetof(heatlog_sample_t, ti));
     col("liquid", offsetof(heatlog_sample_t, liquid));
     col("comp", offsetof(heatlog_sample_t, comp));
+    col("fan", offsetof(heatlog_sample_t, fan));
+    col("intake", offsetof(heatlog_sample_t, intake));
+    col("heatout", offsetof(heatlog_sample_t, heatout));
     out("],\"state\":[");
     for (uint32_t i = 0; i < n; i++)
-        out("%s%u", i ? "," : "", s[i].state);
+        out("%s%u", i ? "," : "", get(i) ? get(i)->state : HEATCTL_OFF);
     out("],\"sub\":[");
     for (uint32_t i = 0; i < n; i++)
-        out("%s%u", i ? "," : "", s[i].sub);
+        out("%s%u", i ? "," : "", get(i) ? get(i)->sub : HEATCTL_SUB_NONE);
+    out("],\"fanset\":[");
+    for (uint32_t i = 0; i < n; i++)
+        if (!get(i) || get(i)->fanset == HEATLOG_NONE8)
+            out("%snull", i ? "," : "");
+        else
+            out("%s%u", i ? "," : "", get(i)->fanset);
+    out("],\"quiet\":[");
+    for (uint32_t i = 0; i < n; i++)
+        if (!get(i) || get(i)->quiet == HEATLOG_NONE8)
+            out("%snull", i ? "," : "");
+        else
+            out("%s%u", i ? "," : "", get(i)->quiet);
     out("],\"states\":[");
     for (int i = 0; i <= HEATCTL_NOSENSOR; i++)
         out("%s\"%s\"", i ? "," : "", heatctl_state_name(i));
@@ -1802,13 +1839,16 @@ static esp_err_t web_graph(httpd_req_t *req)
         "<p id=zb hidden>Show <button data-s=0>All</button> <button data-s=86400>1 day</button> "    //
         "<button data-s=43200>12 h</button> <button data-s=10800>3 h</button></p>"                   //
         "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>" //
-        "<div class=g><canvas id=unit></canvas></div>"                                               //
-        "<p>One sample every 30 s, kept until a restart. Click a legend entry to show or hide it. "  //
+        "<div class=g><canvas id=unit></canvas></div><div class=g><canvas id=cop></canvas></div>"    //
+        "<p>One sample every 15 s, kept until a restart. Click a legend entry to show or hide it. "  //
         "Drag across a chart or ctrl+scroll to zoom in, shift+drag to pan. "                         //
         "On a phone, pinch to zoom and drag to pan. "                                                //
         "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "     //
         "green hold after a defrost (demand is not raised), red rest after a defrost loop. "         //
-        "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint.</p>"  //
+        "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint. "     //
+        "The tooltip also shows the fan setting and quiet outdoor. "                                 //
+        "Heat output and COP are estimates from the fan speed, the unit's own room reading and the " //
+        "liquid temperature. The 1 h mean COP counts the defrosts in.</p>"                           //
         "<script src='/chart.js?%s'></script>"                                                       //
         "<script>"                                                                                   //
         "var F=%d,U=F?'℉':'℃';"                                                                      //
@@ -1816,7 +1856,7 @@ static esp_err_t web_graph(httpd_req_t *req)
         "function n(v){return v;}"                                                                   //
         "fetch('/graph.json').then(r=>r.json()).then(d=>{"                                           //
         "var m=document.getElementById('msg'),k=d.ago.length;"                                       //
-        "if(!k){m.textContent='No samples yet, the first comes after 30 s.';return;}"                //
+        "if(!k){m.textContent='No samples yet, the first comes after 15 s.';return;}"                //
         "var now=Date.now(),x=d.ago.map(a=>now-a*1000);"                                             //
         "m.textContent='Last '+(d.ago[0]>=172800?Math.round(d.ago[0]/8640)/10+' days':Math.round(d.ago[0]/360)/10+' hours')+', to '+new Date(x[k-1]).toLocaleString();" //
         "function p(a,f){return a.map((v,i)=>({x:x[i],y:v==null?null:f(v)}));}" //
@@ -1835,6 +1875,8 @@ static esp_err_t web_graph(httpd_req_t *req)
         "var pw=d.heatw.map((v,i)=>v==null||d.integral[i]==null||cold(i)?null:v-d.integral[i]);"               //
         "function tune(i){var v=d.kp[i];if(v==null)return '';"                                                 //
         "return 'kp '+(cold(i)?v/100+' ℃/℃':v+' W/℃')+(d.ti[i]?', ti '+d.ti[i]+' min':', no integral');}"      //
+        "function unit(i){var f=d.fanset[i],q=d.quiet[i];"                                                     //
+        "return (f==null?'':'fan '+['auto',1,2,3,4,5,'quiet'][f])+(q?(f==null?'':', ')+'quiet outdoor':'');}"  //
         "var mk=[],last=[];for(var i=0;i<k;i++){var t=tune(i),c=+cold(i);if(!t)continue;"                      //
         "if(last[c]&&last[c]!=t)mk.push(i);last[c]=t;}"                                                        //
         "var mark={id:'mark',afterDatasetsDraw(c){var a=c.chartArea,g=c.ctx,s=c.scales.x;g.save();"            //
@@ -1844,16 +1886,16 @@ static esp_err_t web_graph(httpd_req_t *req)
         "g.beginPath();g.moveTo(v,a.top);g.lineTo(v,a.bottom);g.stroke();g.fillText(tune(i),v+3,a.top+11);});" //
         "g.restore();}};"                                                                                      //
         "function time(v){return new Date(v).toLocaleString([],Object.assign({hour:'2-digit',minute:'2-digit'},"
-        "x[k-1]-x[0]>864e5?{weekday:'short'}:{}));}"                                                           //
-        "var cs=[];function sync(e){var s=e.chart.scales.x;"                                                   //
-        "cs.forEach(c=>{if(c!=e.chart)c.zoomScale('x',{min:s.min,max:s.max},'none');});}"                      //
-        "function span(s){cs.forEach(c=>s?c.zoomScale('x',{min:x[k-1]-s*1000,max:x[k-1]},'none'):"             //
-        "c.resetZoom('none'));}"                                                                               //
-        "var zb=document.getElementById('zb');zb.hidden=false;"                                                //
-        "zb.querySelectorAll('button').forEach(b=>{var s=+b.dataset.s;b.onclick=()=>span(s);"                  //
-        "b.hidden=s>0&&s*1000>=x[k-1]-x[0];});"                                                                //
-        "function opt(y){return{animation:false,interaction:{mode:'index',intersect:false},"                   //
-        "plugins:{tooltip:{callbacks:{title:t=>time(t[0].parsed.x),footer:t=>tune(t[0].dataIndex)}},"          //
+        "x[k-1]-x[0]>864e5?{weekday:'short'}:{}));}"                                               //
+        "var cs=[];function sync(e){var s=e.chart.scales.x;"                                       //
+        "cs.forEach(c=>{if(c!=e.chart)c.zoomScale('x',{min:s.min,max:s.max},'none');});}"          //
+        "function span(s){cs.forEach(c=>s?c.zoomScale('x',{min:x[k-1]-s*1000,max:x[k-1]},'none'):" //
+        "c.resetZoom('none'));}"                                                                   //
+        "var zb=document.getElementById('zb');zb.hidden=false;"                                    //
+        "zb.querySelectorAll('button').forEach(b=>{var s=+b.dataset.s;b.onclick=()=>span(s);"      //
+        "b.hidden=s>0&&s*1000>=x[k-1]-x[0];});"                                                    //
+        "function opt(y){return{animation:false,interaction:{mode:'index',intersect:false},"       //
+        "plugins:{tooltip:{callbacks:{title:t=>time(t[0].parsed.x),footer:t=>[tune(t[0].dataIndex),unit(t[0].dataIndex)]}}," //
         "zoom:{limits:{x:{min:'original',max:'original',minRange:6e5}},"                                       //
         "pan:{enabled:true,mode:'x',modifierKey:'shift',onPanComplete:sync},"                                  //
         "zoom:{wheel:{enabled:true,modifierKey:'ctrl'},pinch:{enabled:true},"                                  //
@@ -1882,9 +1924,26 @@ static esp_err_t web_graph(httpd_req_t *req)
         "grid:{drawOnChartArea:false}}})}));"                                                                  //
         "cs.push(new Chart(document.getElementById('unit'),{type:'line',plugins:[band,mark],data:{datasets:["  //
         "ds('Liquid',d.liquid,tc,'#a0a'),"                                                                     //
-        "ds('Compressor',d.comp,n,'#555',{yAxisID:'h'})]},"                                                    //
+        "ds('Unit room',d.intake,tc,'#c60'),"                                                                  //
+        "ds('Compressor',d.comp,n,'#555',{yAxisID:'h'}),"                                                      //
+        "ds('Fan',d.fan,n,'#0a0',{yAxisID:'f'})]},"                                                            //
         "options:opt({y:{title:{display:true,text:U}},"                                                        //
-        "h:{position:'right',min:0,title:{display:true,text:'Hz'},grid:{drawOnChartArea:false}}})}));"         //
+        "h:{position:'right',min:0,title:{display:true,text:'Hz'},grid:{drawOnChartArea:false}},"              //
+        "f:{position:'right',min:0,title:{display:true,text:'rpm'},grid:{drawOnChartArea:false}}})}));"        //
+        "var cop=d.heatout.map((v,i)=>v==null||d.power[i]==null||d.power[i]<100||d.subs[d.sub[i]]=='defrost'?" //
+        "null:Math.round(v/d.power[i]*100)/100);"                                                              //
+        "var W=3600/d.interval,ph=[0],pp=[0],pn=[0];for(var i=0;i<k;i++){"                                     //
+        "var o=d.heatout[i]!=null&&d.power[i]!=null;ph.push(ph[i]+(o?d.heatout[i]:0));"                        //
+        "pp.push(pp[i]+(o?d.power[i]:0));pn.push(pn[i]+(o?1:0));}"                                             //
+        "var cm=d.ago.map((a,i)=>{var j=Math.max(0,i+1-W),e=pp[i+1]-pp[j];"                                    //
+        "return pn[i+1]-pn[j]<W/2||e<=0?null:Math.round((ph[i+1]-ph[j])/e*100)/100;});"                        //
+        "cs.push(new Chart(document.getElementById('cop'),{type:'line',plugins:[band,mark],data:{datasets:["   //
+        "ds('Heat output, estimated',d.heatout,n,'#080'),"                                                     //
+        "ds('Power',d.power,n,'#c00'),"                                                                        //
+        "ds('COP',cop,n,'#8bf',{yAxisID:'c',borderWidth:1}),"                                                  //
+        "ds('COP, 1 h mean',cm,n,'#06c',{yAxisID:'c'})]},"                                                     //
+        "options:opt({y:{title:{display:true,text:'W'}},"                                                      //
+        "c:{position:'right',min:0,max:10,title:{display:true,text:'COP'},grid:{drawOnChartArea:false}}})}));" //
         "}).catch(e=>{document.getElementById('msg').textContent='Could not load the log: '+e;});"             //
         "</script>",
         revk_version, fahrenheit);
@@ -3408,6 +3467,7 @@ void revk_web_extra(httpd_req_t *req, int page)
     if (autoe) {
         revk_web_setting(req, "Target curve", "autocurve");
         revk_web_setting(req, "Demand table", "demandtable");
+        revk_web_setting(req, "Air flow by fan speed", "fanflow");
         revk_web_setting(req, "Fan, heating on demand", "demandfan");
         revk_web_setting(req, "Fan, heating off", "idlefan");
         revk_web_setting(req, "Fan, full power (cold)", "coldfan");
@@ -3431,7 +3491,7 @@ static int8_t heatctl_fan(uint8_t setting)
 
 static void heatctl_settings(heatctl_params_t *p)
 {
-    static char *table = NULL, *curve = NULL; // As last parsed
+    static char *table = NULL, *curve = NULL, *flow = NULL; // As last parsed
     if (!table || strcmp(table, demandtable ?: "")) {
         extern revk_settings_t *revk_settings_find(const char *name, int *index); // ESP32-RevK settings_lib.h
         revk_settings_t *s = revk_settings_find("demandtable", NULL);
@@ -3454,6 +3514,18 @@ static void heatctl_settings(heatctl_params_t *p)
             ESP_LOGE(TAG, "heatctl: auto.curve \"%s\": %s, using no offset", curve, e);
             jo_t j = jo_object_alloc();
             jo_string(j, "autocurve", curve);
+            jo_string(j, "error", e);
+            revk_error("heatctl", &j);
+        }
+    }
+    if (!flow || strcmp(flow, fanflow ?: "")) {
+        free(flow);
+        flow = strdup(fanflow ?: "");
+        const char *e = heatctl_parse_curve(&heatflow, flow); // Same format: rpm:flow,...
+        if (e) {
+            ESP_LOGE(TAG, "heatctl: fan.flow \"%s\": %s, no heat output estimate", flow, e);
+            jo_t j = jo_object_alloc();
+            jo_string(j, "fanflow", flow);
             jo_string(j, "error", e);
             revk_error("heatctl", &j);
         }
@@ -3551,6 +3623,15 @@ static void heatctl_tick(uint32_t now)
     heatctl_out_t o = heatctl_step(&heatctl, &p, &in, now);
     ctl = o;
     uint8_t cold = (o.state == HEATCTL_COLD), pi = (cold || o.state == HEATCTL_DEMAND); // A PI loop is running
+    // Estimated heat output: the air flow at the fan speed the unit reports, warmed from the unit's own room reading
+    // (its intake air) to the liquid temperature, which is close to the outlet air temperature
+    float fan = (daikin.status_known & CONTROL_fanrpm) ? daikin.fanrpm : NAN;
+    float intake = (daikin.status_known & CONTROL_home)    ? daikin.home
+                   : (daikin.status_known & CONTROL_inlet) ? daikin.inlet
+                                                           : NAN;
+    float flow = (!heatflow.n || isnan(fan) || !in.power || !in.heat) ? NAN
+                 : fan > 0                                            ? heatctl_curve_offset(&heatflow, fan)
+                                                                      : 0;
     heatlog_in_t l = {
         .room = in.room,
         .outdoor = in.outdoor,
@@ -3559,6 +3640,9 @@ static void heatctl_tick(uint32_t now)
         .smoothed = isnan(in.room) ? NAN : o.room, // o.room keeps the last reading once there is none
         .liquid = in.liquid,
         .comp = (daikin.status_known & CONTROL_comp) ? daikin.comp : NAN,
+        .fan = fan,
+        .intake = intake,
+        .heatout = heatlog_heatout(flow, in.liquid, intake),
         .integral = pi ? o.integral : NAN,
         .kp = pi ? (cold ? p.cold_kp : p.kp) : NAN,
         .ti = pi ? (cold ? p.cold_ti : p.ti) / 60.0 : NAN,
@@ -3568,6 +3652,8 @@ static void heatctl_tick(uint32_t now)
         .demand = (daikin.status_known & CONTROL_demand) ? daikin.demand : NAN,
         .state = o.state,
         .sub = o.sub,
+        .fanset = (daikin.status_known & CONTROL_fan) ? daikin.fan : HEATLOG_NONE8,
+        .quiet = (daikin.status_known & CONTROL_quiet) ? daikin.quiet : HEATLOG_NONE8,
     };
     heatlog_add(&heatlog, &l, now);
     xSemaphoreGive(daikin.mutex);
@@ -3682,8 +3768,8 @@ void app_main()
 #endif
     blemutex = xSemaphoreCreateMutex();
     daikin.mutex = xSemaphoreCreateMutex();
-    { // Heating log for the graph page: 3 days, or 3 hours without PSRAM
-        uint32_t n = (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) ? 72 : 3) * 3600 / HEATLOG_INTERVAL;
+    { // Heating log for the graph page: 3 days, or 1.5 hours without PSRAM
+        uint32_t n = (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) ? 72 * 3600 : 5400) / HEATLOG_INTERVAL;
         heatlog_init(&heatlog, mallocspi(n * sizeof(heatlog_sample_t)), n);
     }
     b.startup = 1;
