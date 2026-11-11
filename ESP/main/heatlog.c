@@ -51,6 +51,8 @@ static void keep(heatlog_t *l, uint32_t now)
         .ti = scaled(l->last.ti, 1),
         .state = l->last.state,
         .sub = l->defrost ? HEATCTL_SUB_DEFROST : l->last.sub,
+        .fanset = l->last.fanset,
+        .quiet = l->last.quiet,
     };
     l->sample[l->next] = s;
     l->next = (l->next + 1) % l->n;

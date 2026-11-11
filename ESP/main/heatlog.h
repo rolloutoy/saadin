@@ -6,6 +6,7 @@
 
 #define HEATLOG_INTERVAL 30    // Seconds per sample
 #define HEATLOG_NONE INT16_MIN // Value not known
+#define HEATLOG_NONE8 255      // fanset or quiet not known
 
 typedef struct {     // Inputs, about once a second, NAN if not known
     float room;      // Room temperature, raw sensor reading (°C), mean over the sample
@@ -27,6 +28,8 @@ typedef struct {     // Inputs, about once a second, NAN if not known
     float ti;        // PI integral time in use (min), last
     uint8_t state;   // heatctl_state_t, last
     uint8_t sub;     // heatctl_sub_t, last, but a defrost anywhere in the sample wins
+    uint8_t fanset;  // Fan setting, last: 0 auto, 1-5, 6 quiet (as daikin.fan), HEATLOG_NONE8 if not known
+    uint8_t quiet;   // Quiet outdoor, last: 0 or 1, HEATLOG_NONE8 if not known
 } heatlog_in_t;
 
 typedef struct { // One sample, temperatures in 0.01 °C, HEATLOG_NONE if not known
@@ -50,6 +53,8 @@ typedef struct { // One sample, temperatures in 0.01 °C, HEATLOG_NONE if not kn
     int16_t ti;       // min
     uint8_t state;
     uint8_t sub;
+    uint8_t fanset;
+    uint8_t quiet;
 } heatlog_sample_t;
 
 #define HEATLOG_MEANS 10 // room, outdoor, heatw, power, smoothed, liquid, comp, fan, intake, heatout

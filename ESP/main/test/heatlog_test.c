@@ -41,6 +41,8 @@ static heatlog_in_t in_none(void)
         .ti = NAN,
         .state = HEATCTL_OFF,
         .sub = HEATCTL_SUB_NONE,
+        .fanset = HEATLOG_NONE8,
+        .quiet = HEATLOG_NONE8,
     };
     return in;
 }
@@ -67,6 +69,8 @@ static heatlog_in_t in_demand(void)
         .ti = 90,
         .state = HEATCTL_DEMAND,
         .sub = HEATCTL_SUB_NONE,
+        .fanset = 3,
+        .quiet = 1,
     };
     return in;
 }
@@ -103,6 +107,8 @@ static void test_one(void)
         in.heatout = now <= 15 ? 1700 : -100;
         in.target = now <= 25 ? 21 : 21.5;
         in.demand = now <= 25 ? 70 : 80;
+        in.fanset = now <= 25 ? 3 : 5;
+        in.quiet = now <= 25;
         heatlog_add(&l, &in, now);
     }
     in.room = 99; // Starts the next sample, not in this one
@@ -120,6 +126,8 @@ static void test_one(void)
     CHECK("outdoor negative", out[0].outdoor == -500);
     CHECK("target is the last", out[0].target == 2150);
     CHECK("demand is the last", out[0].demand == 80);
+    CHECK("fan setting is the last", out[0].fanset == 5);
+    CHECK("quiet outdoor is the last", out[0].quiet == 0);
     CHECK("effective rounds", out[0].effective == 2130);
     CHECK("setpoint", out[0].setpoint == 3000);
     CHECK("state", out[0].state == HEATCTL_DEMAND && out[0].sub == HEATCTL_SUB_NONE);
@@ -144,6 +152,7 @@ static void test_unknown(void)
               out[0].kp == HEATLOG_NONE && out[0].ti == HEATLOG_NONE && out[0].liquid == HEATLOG_NONE &&
               out[0].comp == HEATLOG_NONE && out[0].fan == HEATLOG_NONE && out[0].intake == HEATLOG_NONE &&
               out[0].heatout == HEATLOG_NONE);
+    CHECK("unknown fan setting and quiet outdoor", out[0].fanset == HEATLOG_NONE8 && out[0].quiet == HEATLOG_NONE8);
     CHECK("off state", out[0].state == HEATCTL_OFF);
 }
 

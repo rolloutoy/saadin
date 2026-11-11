@@ -1778,6 +1778,18 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     out("],\"sub\":[");
     for (uint32_t i = 0; i < n; i++)
         out("%s%u", i ? "," : "", s[i].sub);
+    out("],\"fanset\":[");
+    for (uint32_t i = 0; i < n; i++)
+        if (s[i].fanset == HEATLOG_NONE8)
+            out("%snull", i ? "," : "");
+        else
+            out("%s%u", i ? "," : "", s[i].fanset);
+    out("],\"quiet\":[");
+    for (uint32_t i = 0; i < n; i++)
+        if (s[i].quiet == HEATLOG_NONE8)
+            out("%snull", i ? "," : "");
+        else
+            out("%s%u", i ? "," : "", s[i].quiet);
     out("],\"states\":[");
     for (int i = 0; i <= HEATCTL_NOSENSOR; i++)
         out("%s\"%s\"", i ? "," : "", heatctl_state_name(i));
@@ -1813,6 +1825,7 @@ static esp_err_t web_graph(httpd_req_t *req)
         "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "     //
         "green hold after a defrost (demand is not raised), red rest after a defrost loop. "         //
         "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint. "     //
+        "The tooltip also shows the fan setting and quiet outdoor. "                                 //
         "Heat output and COP are estimates from the fan speed, the unit's own room reading and the " //
         "liquid temperature. The 1 h mean COP counts the defrosts in.</p>"                           //
         "<script src='/chart.js?%s'></script>"                                                       //
@@ -1841,6 +1854,8 @@ static esp_err_t web_graph(httpd_req_t *req)
         "var pw=d.heatw.map((v,i)=>v==null||d.integral[i]==null||cold(i)?null:v-d.integral[i]);"               //
         "function tune(i){var v=d.kp[i];if(v==null)return '';"                                                 //
         "return 'kp '+(cold(i)?v/100+' ℃/℃':v+' W/℃')+(d.ti[i]?', ti '+d.ti[i]+' min':', no integral');}"      //
+        "function unit(i){var f=d.fanset[i],q=d.quiet[i];"                                                     //
+        "return (f==null?'':'fan '+['auto',1,2,3,4,5,'quiet'][f])+(q?(f==null?'':', ')+'quiet outdoor':'');}"  //
         "var mk=[],last=[];for(var i=0;i<k;i++){var t=tune(i),c=+cold(i);if(!t)continue;"                      //
         "if(last[c]&&last[c]!=t)mk.push(i);last[c]=t;}"                                                        //
         "var mark={id:'mark',afterDatasetsDraw(c){var a=c.chartArea,g=c.ctx,s=c.scales.x;g.save();"            //
@@ -1850,16 +1865,16 @@ static esp_err_t web_graph(httpd_req_t *req)
         "g.beginPath();g.moveTo(v,a.top);g.lineTo(v,a.bottom);g.stroke();g.fillText(tune(i),v+3,a.top+11);});" //
         "g.restore();}};"                                                                                      //
         "function time(v){return new Date(v).toLocaleString([],Object.assign({hour:'2-digit',minute:'2-digit'},"
-        "x[k-1]-x[0]>864e5?{weekday:'short'}:{}));}"                                                           //
-        "var cs=[];function sync(e){var s=e.chart.scales.x;"                                                   //
-        "cs.forEach(c=>{if(c!=e.chart)c.zoomScale('x',{min:s.min,max:s.max},'none');});}"                      //
-        "function span(s){cs.forEach(c=>s?c.zoomScale('x',{min:x[k-1]-s*1000,max:x[k-1]},'none'):"             //
-        "c.resetZoom('none'));}"                                                                               //
-        "var zb=document.getElementById('zb');zb.hidden=false;"                                                //
-        "zb.querySelectorAll('button').forEach(b=>{var s=+b.dataset.s;b.onclick=()=>span(s);"                  //
-        "b.hidden=s>0&&s*1000>=x[k-1]-x[0];});"                                                                //
-        "function opt(y){return{animation:false,interaction:{mode:'index',intersect:false},"                   //
-        "plugins:{tooltip:{callbacks:{title:t=>time(t[0].parsed.x),footer:t=>tune(t[0].dataIndex)}},"          //
+        "x[k-1]-x[0]>864e5?{weekday:'short'}:{}));}"                                               //
+        "var cs=[];function sync(e){var s=e.chart.scales.x;"                                       //
+        "cs.forEach(c=>{if(c!=e.chart)c.zoomScale('x',{min:s.min,max:s.max},'none');});}"          //
+        "function span(s){cs.forEach(c=>s?c.zoomScale('x',{min:x[k-1]-s*1000,max:x[k-1]},'none'):" //
+        "c.resetZoom('none'));}"                                                                   //
+        "var zb=document.getElementById('zb');zb.hidden=false;"                                    //
+        "zb.querySelectorAll('button').forEach(b=>{var s=+b.dataset.s;b.onclick=()=>span(s);"      //
+        "b.hidden=s>0&&s*1000>=x[k-1]-x[0];});"                                                    //
+        "function opt(y){return{animation:false,interaction:{mode:'index',intersect:false},"       //
+        "plugins:{tooltip:{callbacks:{title:t=>time(t[0].parsed.x),footer:t=>[tune(t[0].dataIndex),unit(t[0].dataIndex)]}}," //
         "zoom:{limits:{x:{min:'original',max:'original',minRange:6e5}},"                                       //
         "pan:{enabled:true,mode:'x',modifierKey:'shift',onPanComplete:sync},"                                  //
         "zoom:{wheel:{enabled:true,modifierKey:'ctrl'},pinch:{enabled:true},"                                  //
@@ -3616,6 +3631,8 @@ static void heatctl_tick(uint32_t now)
         .demand = (daikin.status_known & CONTROL_demand) ? daikin.demand : NAN,
         .state = o.state,
         .sub = o.sub,
+        .fanset = (daikin.status_known & CONTROL_fan) ? daikin.fan : HEATLOG_NONE8,
+        .quiet = (daikin.status_known & CONTROL_quiet) ? daikin.quiet : HEATLOG_NONE8,
     };
     heatlog_add(&heatlog, &l, now);
     xSemaphoreGive(daikin.mutex);
