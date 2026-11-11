@@ -802,6 +802,19 @@ static void test_fanmap(void)
     }
 }
 
+// The demand.fanmap default: fan 4 below -6, 3 up to 1, 2 up to 7, then 1
+static void test_fanmap_default(void)
+{
+    heatctl_fanmap_t m;
+    CHECK("demand.fanmap default parses", !heatctl_parse_fanmap(&m, DEMAND_FANMAP) && m.n);
+    const float at[][2] = {{-25, 4}, {-6.1, 4}, {-6, 3}, {0.9, 3}, {1, 2}, {6.9, 2}, {7, 1}, {15, 1}};
+    for (unsigned i = 0; i < sizeof(at) / sizeof(*at); i++) {
+        char name[80];
+        snprintf(name, sizeof(name), "demand.fanmap default at %.1f", at[i][0]);
+        CHECK(name, heatctl_fanmap_fan(&m, at[i][0]) == at[i][1]);
+    }
+}
+
 // Fan by outdoor temperature, each fan kept for fan.hold at least
 static void test_fan_by_outdoor(void)
 {
@@ -1052,6 +1065,7 @@ int main(void)
     test_ble_env();
     test_fan_flow();
     test_fanmap();
+    test_fanmap_default();
     test_fan_by_outdoor();
     printf("%d passed, %d failed\n", passed, failed);
     return failed ? 1 : 0;

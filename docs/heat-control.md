@@ -93,6 +93,8 @@ Each setting can also be "Outdoor": the fan then follows the outdoor temperature
 - No change during a defrost.
 - Empty or invalid map (logged), or outdoor temperature unknown → leave alone.
 
+Defaults: `demand.fan` is "Outdoor" with `demand.fanmap` `-20:4,-6:3,1:2,7:1`, so fan 4 below −6 °C, 3 from −6 °C, 2 from 1 °C and 1 from 7 °C. On a 3-speed unit fans 2 and 4 are left alone, so set another map there. `idle.fan` and `cold.fan` default to "leave alone", with no map.
+
 ## Outside changes
 
 If the unit reports a demand, setpoint, QO or fan that differs from what the controller wants (IR remote, Onecta, the unit silently reverting demand to 100), the controller resends its values, at most once a minute per value, and logs that it overrode an outside change. Econo is forced off while the controller runs (Econo and demand share `D7`).
