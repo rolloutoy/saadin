@@ -1366,8 +1366,16 @@ const char *revk_settings_store(jo_t j, const char **locationp, uint8_t flags)
         while (!err && (t = jo_here(j)) == JO_TAG) {
             location = jo_debug(j);
             int l = jo_strlen(j);
-            if (l + plen > sizeof(tag) - 1)
+            if (l + plen > sizeof(tag) - 1) {
+                char c[2] = "";
+                if (!plen)
+                    jo_strncpy(j, c, sizeof(c));
+                if (*c == '_') { // Unchanged checkbox with a long name (the web form prefixes _ and __)
+                    jo_skip(j);
+                    continue;
+                }
                 return "Tag too long";
+            }
             jo_strncpy(j, tag + plen, l + 1);
             revk_settings_t *s;
             for (s = revk_settings; s->len && (s->len != plen + l || (plen && s->dot != plen) || strcmp(s->name, tag));
