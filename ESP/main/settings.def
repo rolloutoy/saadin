@@ -116,7 +116,7 @@ u16	cold.set	23		.live	.decimal=1 .unit="℃"		// Starting setpoint at full powe
 u16	cold.rate	1800		.live	.unit="s"			// Minimum time between 0.5℃ setpoint steps at full power
 u8	cold.kp		2		.live	.decimal=1			// Setpoint change per degree below target at full power
 u16	cold.ti		120		.live	.unit="min"			// Integral time at full power, 0 for none
-enum	cold.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet,Outdoor"	// Fan at full power
+enum	cold.fan	5		.live	.enums="Leave,Auto,1,2,3,4,5,Quiet,Outdoor"	// Fan at full power
 s	cold.fanmap			.live					// Fan at full power by outdoor temperature (cold.fan Outdoor), outdoor:fan,... fan A, 1-5 or Q, e.g. -5:5,0:4,5:3
 
 u8	defrost.enter	5		.live	.unit="℃"			// Defrost when liquid drops below this
