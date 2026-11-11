@@ -850,6 +850,33 @@ static void test_fan_by_outdoor(void)
     run(&x, 1);
     CHECK("fan by outdoor: and back to the map", x.out.fan == 5);
 
+    start(&x); // The hold is within a state only: each state's fan is set at once on entering it
+    x.p.demand_fan = x.p.idle_fan = x.p.cold_fan = HEATCTL_FAN_MAP;
+    x.p.fan_hold = 24 * 3600;
+    heatctl_parse_fanmap(&x.p.demand_fanmap, "0:3");
+    heatctl_parse_fanmap(&x.p.idle_fanmap, "0:Q");
+    heatctl_parse_fanmap(&x.p.cold_fanmap, "0:5");
+    run(&x, 1);
+    CHECK("fan hold: DEMAND", x.out.fan == 3);
+    x.in.room = 22;
+    CHECK("fan hold: IDLE at once", run_until(&x, HEATCTL_IDLE, -1, 3600) > 0 && x.out.fan == 6);
+    x.in.room = 20;
+    CHECK("fan hold: DEMAND at once", run_until(&x, HEATCTL_DEMAND, -1, 3600) > 0 && x.out.fan == 3);
+    x.in.outdoor = -20;
+    CHECK("fan hold: COLD at once", run_until(&x, HEATCTL_COLD, -1, 3 * 3600) > 0 && x.out.fan == 5);
+    x.in.outdoor = 5;
+    CHECK("fan hold: DEMAND at once from COLD", run_until(&x, HEATCTL_DEMAND, -1, 3 * 3600) > 0 && x.out.fan == 3);
+
+    heatctl_parse_fanmap(&x.p.demand_fanmap, "-5:5,0:4,5:3"); // Also by way of a state with no fan of its own
+    run(&x, 1);
+    CHECK("fan hold: held in DEMAND", x.out.fan == 3);
+    x.in.room = NAN;
+    x.in.outdoor = -10;
+    CHECK("fan hold: NOSENSOR", run_until(&x, HEATCTL_NOSENSOR, -1, 3600) > 0 && x.out.fan == HEATCTL_FAN_LEAVE);
+    run(&x, 3 * 3600);
+    x.in.room = 21;
+    CHECK("fan hold: DEMAND at once from NOSENSOR", run_until(&x, HEATCTL_DEMAND, -1, 60) > 0 && x.out.fan == 5);
+
     start(&x); // No outdoor temperature: left alone until there is one
     x.p.demand_fan = HEATCTL_FAN_MAP;
     x.p.fan_hold = 1800;

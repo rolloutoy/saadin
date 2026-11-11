@@ -89,7 +89,7 @@ Per-state fan settings `idle.fan`, `demand.fan`, `cold.fan`: leave alone, auto, 
 
 Each setting can also be "Outdoor": the fan then follows the outdoor temperature (smoothed, as for the curve) through the state's map, `idle.fanmap`, `demand.fanmap` or `cold.fanmap`. A map is `outdoor:fan,...` with increasing temperatures, up to 8 points, the fan being `A` (auto), `1`–`5` or `Q` (quiet). The fan is that of the highest point at or below the outdoor temperature; below the first point it is the first point's. So `-5:5,0:4,5:3` is fan 5 below 0 °C, 4 from 0 °C and 3 from 5 °C.
 
-- The fan is set at once on entering the state, and after a change of the map. After that each fan is kept for `fan.hold` (default 30 min) at least, so it does not flap around a point.
+- The fan is set at once on entering the state, and after a change of the map. After that each fan is kept for `fan.hold` (default 30 min) at least, so it does not flap around a point. The hold counts within a state only: a change of state (to idle, demand or full power, also by way of no sensor) applies the new state's fan at once.
 - No change during a defrost.
 - Empty or invalid map (logged), or outdoor temperature unknown → leave alone.
 
