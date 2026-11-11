@@ -117,7 +117,8 @@ enum	cold.fan			.live	.enums="Leave,Auto,1,2,3,4,5,Quiet"	// Fan at full power
 u8	defrost.enter	5		.live	.unit="℃"			// Defrost when liquid drops below this
 u8	defrost.exit	25		.live	.unit="℃"			// Defrost over when liquid is back to this
 u8	defrost.max	30		.live	.unit="min"			// Defrost over after this long anyway
-u8	defrost.hold	10		.live	.unit="min"			// After a defrost, demand at most 95% for this long (0 for no hold)
+u8	defrost.hold	10		.live	.unit="min"			// After a defrost, hold demand down for this long (0 for no hold)
+u8	defrost.holdmax	100		.live	.unit="%"			// In the hold, demand at most this (100 is 100% with quiet outdoor)
 bit	defrost.watchdog	0		.live					// Defrost-loop watchdog: turn heating off for a while after a defrost loop
 u8	defrost.loops	3		.live					// More defrosts than this...
 u8	defrost.window	90		.live	.unit="min"			// ...within this long...

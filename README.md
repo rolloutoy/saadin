@@ -107,6 +107,9 @@ These manuals come from upstream and still use the Faikout name:
 
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
+**2026-11-11**
+- New setting `defrost.holdmax` (default 100%): the highest demand in the hold after a defrost. 100 means 100% with quiet outdoor, so a unit that was at 100% with quiet outdoor before a defrost now stays there afterwards. It used to drop to 95% for the hold. Plain 100% is still not used in the hold. Set `defrost.holdmax` to 95 for the old behaviour.
+
 **2026-11-10**
 - Fixed a memory leak (about 1–3 KB) each time the settings page's "Save settings" or "Upload settings" button is used.
 - The default `demand.table` is now `40:270,50:340,60:400,70:465,75:500,80:530,85:570,90:605,95:640,100q:1510,100:2470` (was `40:220,50:280,60:350,70:400,80:520,85:580,95:640,100q:1510,100:2470`). The lower levels match what the unit draws, and 75% and 90% make the steps more even, so the controller no longer sticks at 70% because 80% looks 120 W away. A device with its own `demand.table` keeps it.

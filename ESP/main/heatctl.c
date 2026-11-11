@@ -176,8 +176,8 @@ static int level_top(const heatctl_params_t *p, uint8_t hold)
     if (!p->demand_full) // No plain 100
         while (top > 0 && !p->table.level[top].quiet)
             top--;
-    if (hold) // Capped at 95, no 100q or plain 100
-        while (top > 0 && p->table.level[top].demand > 95)
+    if (hold) // Capped at defrost.holdmax, no plain 100
+        while (top > 0 && (p->table.level[top].demand > p->defrost_holdmax || !p->table.level[top].quiet))
             top--;
     return top;
 }
