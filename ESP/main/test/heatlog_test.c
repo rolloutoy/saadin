@@ -40,6 +40,7 @@ static heatlog_in_t in_none(void)
         .intake = NAN,
         .heatout = NAN,
         .integral = NAN,
+        .owed = NAN,
         .kp = NAN,
         .ti = NAN,
         .state = HEATCTL_OFF,
@@ -68,6 +69,7 @@ static heatlog_in_t in_demand(void)
         .intake = 23.5,
         .heatout = 1700,
         .integral = 350,
+        .owed = 120,
         .kp = 300,
         .ti = 90,
         .state = HEATCTL_DEMAND,
@@ -153,9 +155,9 @@ static void test_unknown(void)
           out[0].outdoor == HEATLOG_NONE && out[0].heatw == HEATLOG_NONE && out[0].power == HEATLOG_NONE &&
               out[0].target == HEATLOG_NONE && out[0].effective == HEATLOG_NONE && out[0].setpoint == HEATLOG_NONE &&
               out[0].demand == HEATLOG_NONE && out[0].smoothed == HEATLOG_NONE && out[0].integral == HEATLOG_NONE &&
-              out[0].kp == HEATLOG_NONE && out[0].ti == HEATLOG_NONE && out[0].liquid == HEATLOG_NONE &&
-              out[0].comp == HEATLOG_NONE && out[0].fan == HEATLOG_NONE && out[0].intake == HEATLOG_NONE &&
-              out[0].heatout == HEATLOG_NONE);
+              out[0].owed == HEATLOG_NONE && out[0].kp == HEATLOG_NONE && out[0].ti == HEATLOG_NONE &&
+              out[0].liquid == HEATLOG_NONE && out[0].comp == HEATLOG_NONE && out[0].fan == HEATLOG_NONE &&
+              out[0].intake == HEATLOG_NONE && out[0].heatout == HEATLOG_NONE);
     CHECK("unknown fan setting and quiet outdoor", out[0].fanset == HEATLOG_NONE8 && out[0].quiet == HEATLOG_NONE8);
     CHECK("off state", out[0].state == HEATCTL_OFF);
 }
@@ -188,6 +190,7 @@ static void test_tuning(void)
     for (int i = 0; i < HEATLOG_INTERVAL; i++, now++) {
         in.smoothed = i < I / 3 ? 21 : 21.3;
         in.integral = i < I - 5 ? 300 : 360.4;
+        in.owed = i < I - 5 ? 100 : -42.4;
         in.kp = i < I - 5 ? 300 : 400;
         heatlog_add(&l, &in, now);
     }
@@ -201,6 +204,7 @@ static void test_tuning(void)
     CHECK("tuning two samples", heatlog_get(&l, out, 4) == 2);
     CHECK("smoothed room is the mean", out[0].smoothed == 2120);
     CHECK("integral is the last, in W", out[0].integral == 360);
+    CHECK("heat owed is the last, in Wh", out[0].owed == -42);
     CHECK("kp is the last", out[0].kp == 400);
     CHECK("ti in minutes", out[0].ti == 90);
     CHECK("cold integral in 0.01 °C", out[1].state == HEATCTL_COLD && out[1].integral == 2425);

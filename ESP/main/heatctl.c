@@ -296,10 +296,17 @@ static heatctl_sub_t keep_hold(const heatctl_t *s)
     return s->sub == HEATCTL_SUB_HOLD ? HEATCTL_SUB_HOLD : HEATCTL_SUB_NONE;
 }
 
+// Heat per electrical watt of the table, roughly (demand.cop)
+static float table_cop(const heatctl_params_t *p)
+{
+    return p->cop > 0 ? p->cop : 1;
+}
+
 static void enter_demand(heatctl_t *s, const heatctl_params_t *p, heatctl_out_t *out, uint32_t now, int demand)
-{ // DEMAND with the integral at the watts of this demand's level
+{ // DEMAND with the integral at the heat of this demand's level, and nothing owed
     enter(s, out, now, HEATCTL_DEMAND, keep_hold(s));
-    s->integral = p->table.level[level_for(&p->table, demand)].watts;
+    s->integral = p->table.level[level_for(&p->table, demand)].watts * table_cop(p);
+    s->owed = s->debt = 0;
     s->level = -1; // Set at once
 }
 
@@ -416,6 +423,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
     out.room = s->room_ok ? s->room : NAN;
     out.outdoor = outdoor;
     out.heatw = NAN;
+    out.owed = NAN;
     out.fan = HEATCTL_FAN_LEAVE;
 
     if (!in->enabled || !in->power || !in->heat) {
@@ -500,33 +508,78 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
     switch (s->state) {
     case HEATCTL_DEMAND: {
         const heatctl_table_t *t = &p->table;
+        float cop = table_cop(p);
         int top = level_top(p, noraise);
         int clamp = level_top(p, 0); // The hold caps the level, not the integral
         int was = s->level;
-        if (!freeze) { // PI, the integral in W, with anti-windup at the top and bottom levels
+        // Heat of the levels: the table has the shape, and the heat the unit has given of late per watt of the table
+        // the scale, starting from demand.cop (and that alone where the heat output is not known)
+        if (!(s->scale > 0))
+            s->scale = cop;
+        if (!isnan(in->heatout) && s->level >= 0 && s->sub == HEATCTL_SUB_NONE && !stale)
+            s->scale += (in->heatout / t->level[s->level].watts - s->scale) * dt / (HEATCTL_SCALE_SMOOTH + dt);
+        s->scale = clampf(s->scale, cop / 2, cop * 2);
+        float scale = isnan(in->heatout) ? cop : s->scale;
+        if (!freeze) { // PI, the integral in W of heat, with anti-windup where the top or bottom level is not enough
             float di = p->ti > 0 ? p->kp * e * dt / p->ti : 0; // ti 0: no integral, P only
-            int r = level_wanted(t, clamp, p->kp * e + s->integral);
-            if (di > 0 && r >= clamp)
+            if (di > 0 && s->level >= clamp && t->level[clamp].watts * scale <= s->heatw)
                 di = 0;
-            if (di < 0 && r <= 0)
+            if (di < 0 && s->level <= 0 && t->level[0].watts * scale >= s->heatw)
                 di = 0;
-            s->integral = clampf(s->integral + di, t->level[0].watts, t->level[clamp].watts);
+            s->integral = clampf(s->integral + di, t->level[0].watts * cop, t->level[clamp].watts * cop);
         }
         if (!stale)
             s->heatw = p->kp * e + s->integral;
         else if (s->level < 0)
             s->heatw = s->integral; // Starting with no reading
-        int want = level_wanted(t, top, s->heatw);
-        if (s->level < 0) // Just entered
-            s->level = want;
+        // Heat to give now: the heat wanted, and what the last defrosts cost, which is asked for over the next hour
+        // or so, not at once
+        float want = s->heatw + s->debt * 3600 / HEATCTL_DEFROST_SPREAD;
+        float heat = s->level < 0 ? 0 : t->level[s->level].watts * scale; // What this level gives
+        // A step is due once the heat owed (or over) is half of what the next level would overpay in the shortest
+        // time demand may stay there: from then on the step leaves less owed or over than staying does
+        float pulse = p->demand_rate / 3600.0f / 2;
+        if (s->level >= 0 && !stale) {
+            // Heat account: the heat wanted less the heat the unit gave (the table's where that is not known)
+            float got = !isnan(in->heatout)             ? in->heatout
+                        : s->sub == HEATCTL_SUB_DEFROST ? 0
+                                                        : t->level[s->level].watts * cop;
+            float d = (s->heatw - got) * dt / 3600;
+            if (d > 0 && s->sub != HEATCTL_SUB_NONE)
+                s->debt += d; // Lost to a defrost or the hold after it
+            else
+                s->owed += d;
+            d = s->debt * dt / (HEATCTL_DEFROST_SPREAD + dt);
+            s->debt -= d;
+            s->owed += d;
+            if (s->level >= clamp && s->owed > fmaxf(heat - want, 0) * pulse)
+                s->owed = fmaxf(heat - want, 0) * pulse; // No level above to pay more with
+            if (s->level <= 0 && s->owed < -fmaxf(want - heat, 0) * pulse)
+                s->owed = -fmaxf(want - heat, 0) * pulse;
+        }
+        if (s->level < 0) // Just entered: by the table
+            s->level = level_wanted(t, top, s->heatw / cop);
         else if (s->level > top)
             s->level = top; // Cap at once, also in defrost (e.g. a shorter table)
         else if (s->sub == HEATCTL_SUB_DEFROST)
             ; // Hold
         else if (stale)
             ; // Hold
-        else if (want != s->level && now - s->level_at >= p->demand_rate && !(noraise && want > s->level))
-            s->level = want;
+        else if (now - s->level_at >= p->demand_rate) {
+            // Up only from a level that gives too little, and down only from one that gives too much, so that heat
+            // still on its way after a step does not bring on the next. The step goes on over levels that are still
+            // short of the heat to give, or still over it
+            if (s->level < top && !noraise && heat < want &&
+                s->owed >= fmaxf(t->level[s->level + 1].watts * scale - want, 0) * pulse)
+                do
+                    s->level++;
+                while (s->level < top && t->level[s->level + 1].watts * scale <= want);
+            else if (s->level > 0 && heat > want &&
+                     s->owed <= -fmaxf(want - t->level[s->level - 1].watts * scale, 0) * pulse)
+                do
+                    s->level--;
+                while (s->level > 0 && t->level[s->level - 1].watts * scale >= want);
+        }
         if (s->level != was)
             s->level_at = now;
         out.demand = t->level[s->level].demand;
@@ -535,6 +588,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         out.fan = state_fan(s, p, p->demand_fan, &p->demand_fanmap, outdoor, now);
         out.heatw = s->heatw;
         out.integral = s->integral;
+        out.owed = s->owed;
         break;
     }
     case HEATCTL_IDLE:
@@ -568,7 +622,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         out.integral = s->cold_integral;
         for (int i = p->table.n - 1; i >= 0; i--)
             if (!p->table.level[i].quiet) {
-                out.heatw = p->table.level[i].watts;
+                out.heatw = p->table.level[i].watts * table_cop(p);
                 break;
             }
         break;

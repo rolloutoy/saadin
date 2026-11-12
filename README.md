@@ -107,7 +107,7 @@ These manuals come from upstream and still use the Faikout name:
 
 Säädin is a modified version of Faikout. In short, it differs like this. [CHANGELOG.md](CHANGELOG.md) has every change in detail, with dates, as required by GPL-3.0 §5(a).
 
-- **Heating control.** A new heating controller replaces Faikout auto. It holds the room at a target by limiting demand, turns heating off when the room is warm, controls by setpoint in very cold weather, holds its outputs through defrosts, and can set the fan by outdoor temperature. See [Manuals/Heating.md](Manuals/Heating.md) and [docs/heat-control.md](docs/heat-control.md).
+- **Heating control.** A new heating controller replaces Faikout auto. It holds the room at a target by limiting demand, keeping the heat the unit gives even with the heat wanted, turns heating off when the room is warm, controls by setpoint in very cold weather, holds its outputs through defrosts, and can set the fan by outdoor temperature. See [Manuals/Heating.md](Manuals/Heating.md) and [docs/heat-control.md](docs/heat-control.md).
 - **Heating graph.** A new `/graph` page charts up to 5 days of temperatures, demand, power, estimated heat output and COP, to help tune the controller. The samples are also at `/graph.json`.
 - **Removed from Faikout auto.** Timed on/off, auto power on/off by temperature, heat/cool switching, auto fan and their settings are gone.
 - **BLE.** Only room temperature sensors are supported. The Faikout BLE remote is ignored.

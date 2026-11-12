@@ -24,6 +24,7 @@ typedef struct {     // Inputs, about once a second, NAN if not known
     float setpoint;  // Unit setpoint (°C), last
     float demand;    // Unit demand (%), last
     float integral;  // PI integral, last: W, or setpoint (°C) in COLD
+    float owed;      // Heat owed (Wh), last
     float kp;        // PI gain in use, last: W per °C, or °C per °C in COLD
     float ti;        // PI integral time in use (min), last
     uint8_t state;   // heatctl_state_t, last
@@ -49,6 +50,7 @@ typedef struct { // One sample, temperatures in 0.01 °C, HEATLOG_NONE if not kn
     int16_t setpoint;
     int16_t demand;   // %
     int16_t integral; // W, or 0.01 °C in COLD
+    int16_t owed;     // Wh
     int16_t kp;       // W per °C, or 0.01 °C per °C in COLD
     int16_t ti;       // min
     uint8_t state;

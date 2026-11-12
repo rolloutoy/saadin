@@ -47,6 +47,7 @@ static void keep(heatlog_t *l, uint32_t now)
         .setpoint = scaled(l->last.setpoint, 100),
         .demand = scaled(l->last.demand, 1),
         .integral = scaled(l->last.integral, pi),
+        .owed = scaled(l->last.owed, 1),
         .kp = scaled(l->last.kp, pi),
         .ti = scaled(l->last.ti, 1),
         .state = l->last.state,

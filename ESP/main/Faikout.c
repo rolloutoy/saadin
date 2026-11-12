@@ -1786,6 +1786,7 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     col("demand", offsetof(heatlog_sample_t, demand));
     col("smoothed", offsetof(heatlog_sample_t, smoothed));
     col("integral", offsetof(heatlog_sample_t, integral));
+    col("owed", offsetof(heatlog_sample_t, owed));
     col("kp", offsetof(heatlog_sample_t, kp));
     col("ti", offsetof(heatlog_sample_t, ti));
     col("liquid", offsetof(heatlog_sample_t, liquid));
@@ -1850,6 +1851,8 @@ static esp_err_t web_graph(httpd_req_t *req)
         "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "        //
         "green hold after a defrost (demand is not raised), red rest after a defrost loop. "            //
         "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint. "        //
+        "Heat wanted and its integral are watts of heat, to compare with the heat output. "             //
+        "Heat owed is the heat wanted less the heat given so far: demand steps up to pay it. "          //
         "The tooltip also shows the fan setting and quiet outdoor. "                                    //
         "Heat output and COP are estimates from the fan speed, the unit's own room reading and the "    //
         "liquid temperature. The 6 h mean COP counts the defrosts in.</p>"                              //
@@ -1927,11 +1930,14 @@ static esp_err_t web_graph(httpd_req_t *req)
         "ds('Heat wanted',d.heatw,n,'#f80'),"                                                                  //
         "ds('Integral',only(d.integral,false),n,'#fb6',{borderDash:[4,4]}),"                                   //
         "ds('Proportional',pw,n,'#0aa',{yAxisID:'p'}),"                                                        //
-        "ds('Power',d.power,n,'#c00'),"                                                                        //
+        "ds('Heat output, estimated',d.heatout,n,'#080'),"                                                     //
+        "ds('Heat owed',d.owed,n,'#a0a',{yAxisID:'o'}),"                                                       //
         "ds('Demand',d.demand,n,'#06c',{stepped:true,yAxisID:'d'})]},"                                         //
         "options:opt({y:{title:{display:true,text:'W'}},"                                                      //
         "d:{position:'right',min:0,max:100,title:{display:true,text:'%%'},grid:{drawOnChartArea:false}},"      //
         "p:{position:'right',display:'auto',title:{display:true,text:'P, W'},"                                 //
+        "grid:{drawOnChartArea:false}},"                                                                       //
+        "o:{position:'right',display:'auto',title:{display:true,text:'Owed, Wh'},"                             //
         "grid:{drawOnChartArea:false}}})}));"                                                                  //
         "cs.push(new Chart(document.getElementById('unit'),{type:'line',plugins:[band,mark],data:{datasets:["  //
         "ds('Liquid',d.liquid,tc,'#a0a'),"                                                                     //
@@ -3480,6 +3486,7 @@ void revk_web_extra(httpd_req_t *req, int page)
     if (autoe) {
         revk_web_setting(req, "Target curve", "autocurve");
         revk_web_setting(req, "Demand table", "demandtable");
+        revk_web_setting(req, "Heat per watt of the demand table", "demandcop");
         revk_web_setting(req, "Air flow by fan speed", "fanflow");
         revk_web_setting(req, "Fan, heating on demand", "demandfan");
         if (demandfan == REVK_SETTINGS_DEMANDFAN_OUTDOOR)
@@ -3582,6 +3589,7 @@ static void heatctl_settings(heatctl_params_t *p)
     p->demand_start = demandstart;
     p->demand_rate = demandrate;
     p->demand_minrun = demandminrun * 60;
+    p->cop = (float)demandcop / demandcop_scale;
     p->kp = pidkp;
     p->ti = pidti * 60;
     p->idle_temp = (float)idletemp / idletemp_scale;
@@ -3664,12 +3672,6 @@ static void heatctl_tick(uint32_t now)
         .outdoor = (daikin.status_known & CONTROL_outside) ? daikin.outside : NAN,
         .liquid = (daikin.status_known & CONTROL_liquid) ? daikin.liquid : NAN,
     };
-    heatctl_state_t was = ctl.state;
-    heatctl_sub_t wassub = ctl.sub;
-    float wasset = ctl.setpoint;
-    heatctl_out_t o = heatctl_step(&heatctl, &p, &in, now);
-    ctl = o;
-    uint8_t cold = (o.state == HEATCTL_COLD), pi = (cold || o.state == HEATCTL_DEMAND); // A PI loop is running
     // Estimated heat output: the air flow at the fan speed the unit reports, warmed from the unit's own room reading
     // (its intake air) to the liquid temperature, which is close to the outlet air temperature
     float fan = (daikin.status_known & CONTROL_fanrpm) ? daikin.fanrpm : NAN;
@@ -3679,6 +3681,13 @@ static void heatctl_tick(uint32_t now)
     float flow = (!heatflow.n || isnan(fan) || !in.power || !in.heat) ? NAN
                  : fan > 0                                            ? heatctl_curve_offset(&heatflow, fan)
                                                                       : 0;
+    in.heatout = heatlog_heatout(flow, in.liquid, intake);
+    heatctl_state_t was = ctl.state;
+    heatctl_sub_t wassub = ctl.sub;
+    float wasset = ctl.setpoint;
+    heatctl_out_t o = heatctl_step(&heatctl, &p, &in, now);
+    ctl = o;
+    uint8_t cold = (o.state == HEATCTL_COLD), pi = (cold || o.state == HEATCTL_DEMAND); // A PI loop is running
     heatlog_in_t l = {
         .room = in.room,
         .outdoor = in.outdoor,
@@ -3689,8 +3698,9 @@ static void heatctl_tick(uint32_t now)
         .comp = (daikin.status_known & CONTROL_comp) ? daikin.comp : NAN,
         .fan = fan,
         .intake = intake,
-        .heatout = heatlog_heatout(flow, in.liquid, intake),
+        .heatout = in.heatout,
         .integral = pi ? o.integral : NAN,
+        .owed = o.owed,
         .kp = pi ? (cold ? p.cold_kp : p.kp) : NAN,
         .ti = pi ? (cold ? p.cold_ti : p.ti) / 60.0 : NAN,
         .target = autot ? (float)autot / autot_scale : NAN,
@@ -3731,6 +3741,8 @@ static void heatctl_tick(uint32_t now)
             if (!isnan(o.heatw))
                 jo_int(j, "heatw", lroundf(o.heatw));
             jo_litf(j, "integral", "%.1f", o.integral);
+            if (!isnan(o.owed))
+                jo_int(j, "owed", lroundf(o.owed));
         }
         if (!isnan(in.liquid))
             jo_litf(j, "liquid", "%.1f", in.liquid);
@@ -3751,9 +3763,11 @@ static void heatctl_tick(uint32_t now)
             logged = now;
             char label[24];
             heatctl_label(label, sizeof(label), o.state, o.sub);
-            ESP_LOGI(TAG, "heatctl: %s demand %d%s setpoint %.1f target %.2f room %.2f outdoor %.1f heat %.0f W I %.1f",
+            ESP_LOGI(TAG,
+                     "heatctl: %s demand %d%s setpoint %.1f target %.2f room %.2f outdoor %.1f heat %.0f W I %.1f "
+                     "owed %.0f Wh",
                      label, o.demand, o.quiet ? " QO" : "", o.setpoint, o.target, o.room, o.outdoor, o.heatw,
-                     o.integral);
+                     o.integral, o.owed);
         }
         if ((daikin.status_known & CONTROL_demand) && !nodemand &&
             heatctl_send(HEATCTL_SEND_DEMAND, "demand", daikin.demand, o.demand, o.changed, now))
