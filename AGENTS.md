@@ -17,7 +17,8 @@ Säädin is a fork of Faikout (by RevK / Andrews & Arnold). Firmware only.
 
 - Work on a branch and open a PR. Do not commit directly to `main`.
 - Never merge PR's without explicit human approval.
-- Keep the "Changes from Faikout" section in `README.md` current. Every user-visible change is logged there.
+- Log every user-visible change in `CHANGELOG.md`, under a heading for today's date (newest first).
+- The "Changes from Faikout" section in `README.md` is a short, undated summary of how Säädin differs from Faikout. Update it only when a change alters that summary; do not add an entry per change.
 
 ## Building and verifying
 
