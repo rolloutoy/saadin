@@ -414,7 +414,7 @@ static void test_defrost(void)
     run(&x, 1);
     CHECK("IDLE once defrost ends", x.out.state == HEATCTL_IDLE && x.out.sub == HEATCTL_SUB_NONE);
 
-    // No COLD during defrost, and outdoor frozen during defrost
+    // No COLD during defrost, and outdoor frozen during defrost and the hold after it
     start(&x);
     run(&x, 1);
     x.in.liquid = -20;
@@ -423,6 +423,11 @@ static void test_defrost(void)
     run(&x, 1700);
     CHECK("outdoor frozen during defrost", x.out.outdoor == outdoor);
     CHECK("no COLD during defrost", x.out.state == HEATCTL_DEMAND);
+    x.in.liquid = 35; // And for a while after it
+    run(&x, 599);
+    CHECK("outdoor frozen in the hold after a defrost", x.out.sub == HEATCTL_SUB_HOLD && x.out.outdoor == outdoor);
+    run(&x, 60);
+    CHECK("outdoor follows again after the hold", x.out.sub == HEATCTL_SUB_NONE && x.out.outdoor < outdoor);
 
     // COLD defrost: demand 100 QO off held
     memset(&x.s, 0, sizeof(x.s));
@@ -846,7 +851,11 @@ static void test_fan_by_outdoor(void)
     CHECK("fan by outdoor: no change in a defrost", x.out.sub == HEATCTL_SUB_DEFROST && x.out.fan == 3);
     x.in.liquid = 35;
     run(&x, 1);
-    CHECK("fan by outdoor: changes after the defrost", x.out.fan == 4 && x.out.resend_fan);
+    CHECK("fan by outdoor: resent after the defrost", x.out.sub == HEATCTL_SUB_HOLD && x.out.resend_fan);
+    run(&x, 598);
+    CHECK("fan by outdoor: no change in the hold after a defrost", x.out.sub == HEATCTL_SUB_HOLD && x.out.fan == 3);
+    run(&x, 2);
+    CHECK("fan by outdoor: changes after the hold", x.out.sub == HEATCTL_SUB_NONE && x.out.fan == 4);
 
     x.in.room = 22; // Another state has its own fan, and the hold starts afresh on the way back
     x.in.outdoor = -10;

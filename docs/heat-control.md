@@ -70,7 +70,7 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 
 - **Target** = `auto.t` + offset from `auto.curve` at the smoothed outdoor temperature.
 - `auto.curve` is a string of `outdoor:offset` points, e.g. `"-25:1.0,-10:0.5,0:0"`. Linear between points, flat beyond the ends, empty = no offset. It's an offset, so setting the target from web / HA / MQTT keeps working.
-- **Outdoor** temperature is the unit's own reading, smoothed (e.g. 30 min EMA) and frozen during DEFROST (the unit's outdoor reading jumps about +4 °C during defrost).
+- **Outdoor** temperature is the unit's own reading, smoothed (e.g. 30 min EMA) and frozen during DEFROST and the post-defrost hold (the unit's outdoor reading jumps about +4 °C during defrost, and spikes again right after it).
 - **Room** temperature: BLE sensor (`auto.b`) if set and fresh, otherwise MQTT (`auto.topic`/`auto.payload`, or `env` in the `control` command). Smoothed over `auto.smooth` (default 0, none: a sensor with 0.01 °C steps barely flickers, and smoothing only adds lag; set e.g. 300 s for a sensor with 0.1 °C steps). The unit's own sensor is never used as the room reading for control (it reads 3–7 K high against the fixed setpoint); it's only used via NOSENSOR.
 
 ## Demand table
@@ -90,7 +90,7 @@ Per-state fan settings `idle.fan`, `demand.fan`, `cold.fan`: leave alone, auto, 
 Each setting can also be "Outdoor": the fan then follows the outdoor temperature (smoothed, as for the curve) through the state's map, `idle.fanmap`, `demand.fanmap` or `cold.fanmap`. A map is `outdoor:fan,...` with increasing temperatures, up to 8 points, the fan being `A` (auto), `1`–`5` or `Q` (quiet). The fan is that of the highest point at or below the outdoor temperature; below the first point it is the first point's. So `-5:5,0:4,5:3` is fan 5 below 0 °C, 4 from 0 °C and 3 from 5 °C.
 
 - The fan is set at once on entering the state, and after a change of the map. After that each fan is kept for `fan.hold` (default 60 min) at least, so it does not flap around a point. The hold counts within a state only: a change of state (to idle, demand or full power, also by way of no sensor) applies the new state's fan at once.
-- No change during a defrost.
+- No change during a defrost or the hold after it.
 - Empty or invalid map (logged), or outdoor temperature unknown → leave alone.
 
 Defaults: `demand.fan` is "Outdoor" with `demand.fanmap` `-20:4,-6:3,1:2,7:1`, so fan 4 below −6 °C, 3 from −6 °C, 2 from 1 °C and 1 from 7 °C. On a 3-speed unit fans 2 and 4 are left alone, so set another map there. `cold.fan` defaults to 4 (left alone on a 3-speed unit) and `idle.fan` to auto (left alone on a unit with no auto fan).
