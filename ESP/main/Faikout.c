@@ -1852,7 +1852,7 @@ static esp_err_t web_graph(httpd_req_t *req)
         "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint. "        //
         "The tooltip also shows the fan setting and quiet outdoor. "                                    //
         "Heat output and COP are estimates from the fan speed, the unit's own room reading and the "    //
-        "liquid temperature. The 1 h mean COP counts the defrosts in.</p>"                              //
+        "liquid temperature. The 6 h mean COP counts the defrosts in.</p>"                              //
         "<script src='/chart.js?%s'></script>"                                                          //
         "<script>"                                                                                      //
         "var F=%d,U=F?'℉':'℃';"                                                                         //
@@ -1943,16 +1943,16 @@ static esp_err_t web_graph(httpd_req_t *req)
         "f:{position:'right',min:0,title:{display:true,text:'rpm'},grid:{drawOnChartArea:false}}})}));"        //
         "var cop=d.heatout.map((v,i)=>v==null||d.power[i]==null||d.power[i]<100||d.subs[d.sub[i]]=='defrost'?" //
         "null:Math.round(v/d.power[i]*100)/100);"                                                              //
-        "var W=3600/d.interval,ph=[0],pp=[0],pn=[0];for(var i=0;i<k;i++){"                                     //
+        "var W=21600/d.interval,M=1800/d.interval,ph=[0],pp=[0],pn=[0];for(var i=0;i<k;i++){"                  //
         "var o=d.heatout[i]!=null&&d.power[i]!=null;ph.push(ph[i]+(o?d.heatout[i]:0));"                        //
         "pp.push(pp[i]+(o?d.power[i]:0));pn.push(pn[i]+(o?1:0));}"                                             //
         "var cm=d.ago.map((a,i)=>{var j=Math.max(0,i+1-W),e=pp[i+1]-pp[j];"                                    //
-        "return pn[i+1]-pn[j]<W/2||e<=0?null:Math.round((ph[i+1]-ph[j])/e*100)/100;});"                        //
+        "return pn[i+1]-pn[j]<M||e<=0?null:Math.round((ph[i+1]-ph[j])/e*100)/100;});"                          //
         "cs.push(new Chart(document.getElementById('cop'),{type:'line',plugins:[band,mark],data:{datasets:["   //
         "ds('Heat output, estimated',d.heatout,n,'#080'),"                                                     //
         "ds('Power',d.power,n,'#c00'),"                                                                        //
         "ds('COP',cop,n,'#8bf',{yAxisID:'c',borderWidth:1}),"                                                  //
-        "ds('COP, 1 h mean',cm,n,'#06c',{yAxisID:'c'})]},"                                                     //
+        "ds('COP, 6 h mean',cm,n,'#06c',{yAxisID:'c'})]},"                                                     //
         "options:opt({y:{title:{display:true,text:'W'}},"                                                      //
         "c:{position:'right',min:0,max:10,title:{display:true,text:'COP'},grid:{drawOnChartArea:false}}})}));" //
         "if(SP&&SP*1000<x[k-1]-x[0])span(SP);"                                                                 //

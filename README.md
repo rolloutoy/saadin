@@ -107,6 +107,9 @@ These manuals come from upstream and still use the Faikout name:
 
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
+**2026-11-12**
+- The mean COP on the heating graph is now over the last 6 hours instead of the last hour. It still shows once there is half an hour of samples.
+
 **2026-11-11**
 - The heating graph keeps 5 days instead of 3 on boards with PSRAM, which takes about 1.3 MB of it, and has a *3 days* range button.
 - Heating control now turns heating off (idle) only when demand is already at its lowest level. It used to do so from any level once the room was `idle.over` above the target, so a short overshoot at high demand in cold weather could switch heating off for `idle.min` and restart it from the lowest level.
