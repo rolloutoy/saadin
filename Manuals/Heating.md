@@ -84,7 +84,26 @@ The Home Assistant climate target and the MQTT `temp` command set `auto.t` while
 
 ### After a restart
 
-The controller keeps no state over a restart. It starts again in demand control at `demand.start` (60%).
+The controller keeps what it has learnt over a restart of the device, so the room does not cool while it learns it all again. When heating starts for the first time after the restart, it carries on where it was:
+
+- In demand control, at the same demand level, with the same integral, the same heat per watt learnt from the heat output, and the same heat deficit, including heat a defrost cost that is still to be made up.
+- In cold-weather mode, at the same setpoint, and it stays in cold-weather mode.
+- With heating off, it stays off. Heating starts again after `idle.min` (30 minutes) at the earliest, counted from the restart.
+- In the rest after a defrost loop, the rest starts again and lasts `defrost.rest` (15 minutes).
+
+Minimum times and holds start again, as if the controller had just changed to that state. A defrost in progress at the restart is not remembered.
+
+The log and the `info/<host>/heatctl` MQTT message show a resume as the reason for the change, for example `OFF -> DEMAND (resumed after restart, demand 70 QO, integral 1450 W)`. The status line on the web page says "resumed after restart" for 10 minutes.
+
+The controller starts afresh, in demand control at `demand.start` (60%), when:
+
+- The power was cut, or something else powered the chip down, such as the reset button. Flashing firmware over USB may count as this too, depending on how the board is reset afterwards; an upgrade over the network does not.
+- The restart was more than 30 minutes ago by the time the unit is on in heat mode again.
+- Heating control was switched off, or the unit was off or not in heat mode, before the restart. It also does not resume when heating control is switched off just after the restart.
+- The controller had no room reading (the unit's own thermostat was in charge).
+- New firmware keeps it somewhere else or in another form, or a setting has changed so that it no longer fits, for example a demand table without the demand level in use. The reason in the log then says why, for example `start, not resumed: level not in demand.table`.
+
+Nothing is written to flash for this.
 
 ## Settings
 

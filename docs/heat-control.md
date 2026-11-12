@@ -25,7 +25,18 @@ Controller disabled (`auto.e` off or `auto.t` 0), unit off, or unit not in heat 
 
 On the way into OFF, for whichever reason, the controller leaves nothing behind: demand goes back to 100% and QO off, and the setpoint goes to `stop.temp` (default 22 °C), clamped to `t.min`…`t.max`. The setpoint is only replaced if it is still the one the controller sent, so a setpoint set by hand at the same time (e.g. with a switch to cool) is kept.
 
-When the controller starts (enabled, unit on in heat) it starts **fresh** in DEMAND with the integral at the heat of the `demand.start` level (default 60%). No NVS persistence.
+When the controller starts (enabled, unit on in heat) it starts **fresh** in DEMAND with the integral at the heat of the `demand.start` level (default 60%), except for the first start after a restart, which may resume (below).
+
+### After a restart
+
+After each step the controller writes a small block to RTC memory (`RTC_NOINIT_ATTR` in `Faikout.c`): plain RAM that keeps its contents over a software restart, a panic or a watchdog reset, but not a power cut. No flash or NVS is written. The first start after a boot resumes from it instead of starting fresh.
+
+- **Kept:** the state (DEMAND, COLD or IDLE, and the defrost-loop rest of IDLE with the state to resume after it); in DEMAND the integral, the demand level in use (as demand % and QO, not a table index, so a changed table cannot misplace it), the heat deficit and the defrost debt; in COLD the setpoint and its integral; and the learnt heat per watt (`scale`).
+- **Not kept:** every timer (`demand.rate`, `demand.minrun`, `idle.min`, `cold.hold` tracking, the post-defrost hold, defrost history, `fan.hold`) and every sub-state but the rest. After a resume they start as on entering the state: a resumed IDLE waits `idle.min` again, a resumed rest lasts `defrost.rest` again, and COLD needs `cold.hold` above `cold.exit` before it leaves.
+- **Not written:** OFF and NOSENSOR leave nothing kept, so a restart after the controller was switched off, or the unit turned off or out of heat, starts fresh, as does a restart in NOSENSOR (leaving NOSENSOR starts fresh anyway).
+- **Pending:** after a boot the controller is OFF until the unit's state is known. Until the kept block has been tried (at the first start) it is not written over, so a second restart in those seconds keeps it. It is given up, and written over from then on, if the controller is switched off (`auto.e` off) or the block passes 30 minutes old first.
+- **Checked:** a magic number, a version (`HEATCTL_KEEP_VERSION`, bumped whenever a field changes) and a CRC-32 over the block; all values finite; the integral, the setpoint and the scale within the limits the controller clamps them to now; the level in the current `demand.table`; and an age of at most 30 minutes (`HEATCTL_KEEP_AGE`), on the RTC timer (`esp_rtc_get_time_us()`), which runs on over a restart and needs no clock set from the network. If any check fails the start is fresh, and its reason says why, e.g. `start, not resumed: too old`.
+- A resume is logged and sent on `info/<host>/heatctl` like any change of state, e.g. `OFF -> DEMAND (resumed after restart, demand 70 QO, integral 1450 W)`. The web status line says "resumed after restart" for 10 minutes.
 
 ### IDLE ("heating off")
 - Sends setpoint `idle.temp` (default 16 °C) so the unit stops heating. Demand stays at the lowest level with QO on, so the restart is gentle.
@@ -118,18 +129,18 @@ If the unit reports a demand, setpoint, QO or fan that differs from what the con
 ## Visibility
 
 - **Log:** every state or sub-state change with its reason, e.g. `heatctl: DEMAND -> IDLE (room 21.6 > target 21.0+0.5)`; a status line every 10 min.
-- **MQTT:** `info/<host>/heatctl` on every transition (state, sub-state, reason, inputs). Status JSON gains `ctl` (state), `ctl_sub`, `ctl_target`, `ctl_curve`, `ctl_heatw`, `ctl_i`.
+- **MQTT:** `info/<host>/heatctl` on every transition (state, sub-state, reason, inputs). Status JSON gains `ctl` (state), `ctl_sub`, `ctl_target`, `ctl_curve`, `ctl_heatw`, `ctl_i`, and `ctl_resumed` for 10 minutes after a resume.
 - **Web:** the old auto section is replaced by an enable switch, a target slider and a status line such as "Demand 65% · target 21.3 (curve +0.30) · heat 410 W" or "Cold · setpoint 24.5 · ❄ defrost". Manual temperature, demand and QO controls are greyed out while the controller runs.
 - **Home Assistant:** an enum sensor "Control state"; `hvac_action` reports `defrosting` / `idle` / `heating`; the climate target sets `auto.t`. Tuning entities: number entities for `auto.t`, `pid.kp`, `pid.ti`; sensors for the heat request (W), integral and effective target.
 
 ## Code layout
 
-- `ESP/main/heatctl.c` / `heatctl.h`: plain C, `float`, no ESP-IDF includes. `heatctl_step(&state, &params, &in, now)` → outputs (state, sub-state, demand, QO, setpoint, fan, effective target, heat request W, heat target W, heat deficit Wh, integral, transition reason). Also parses the table and the curve. Runs as a host unit test.
+- `ESP/main/heatctl.c` / `heatctl.h`: plain C, `float`, no ESP-IDF includes. `heatctl_step(&state, &params, &in, now)` → outputs (state, sub-state, demand, QO, setpoint, fan, effective target, heat request W, heat target W, heat deficit Wh, integral, transition reason). Also parses the table and the curve. `heatctl_keep` writes the block kept over a restart and `heatctl_resume` hands it back after a boot. Runs as a host unit test.
 - `ESP/main/Faikout.c`: the old local auto block is removed. Each control tick gathers inputs, calls `heatctl_step`, applies outputs with the existing `daikin_set_*` setters (resend works because the S21 reports overwrite `daikin.*` when the unit disagrees). No S21 protocol logic changes.
 - Settings in `ESP/main/settings.def` only.
 
 ## Tests
 
-- `ESP/main/test/heatctl_test.c`, run by `make -C ESP test`: every transition with hysteresis and minimum times; defrost enter / exit / cap; post-defrost hold; watchdog; stale sensor and NOSENSOR; integral start values after each transition; anti-windup; rate limits; QO per level and `demand.full`; table and curve parsing including bad input. The heat deficit: the mean heat given is the heat request between two levels, with and without a heat output estimate, with a wrong `demand.cop`, and through defrosts at two cadences; jumps over several levels; no wind-up at the top level; and a house with hourly defrosts does not hunt.
+- `ESP/main/test/heatctl_test.c`, run by `make -C ESP test`: every transition with hysteresis and minimum times; defrost enter / exit / cap; post-defrost hold; watchdog; stale sensor and NOSENSOR; integral start values after each transition; anti-windup; rate limits; QO per level and `demand.full`; table and curve parsing including bad input. The heat deficit: the mean heat given is the heat request between two levels, with and without a heat output estimate, with a wrong `demand.cop`, and through defrosts at two cadences; jumps over several levels; no wind-up at the top level; and a house with hourly defrosts does not hunt. The block kept over a restart: resumes in DEMAND, COLD, IDLE and the rest; nothing kept when off or in NOSENSOR; kept while the unit's state is unknown after a boot, over a second restart too; and every reject (checksum, magic, version, age, non-finite or out-of-range values, a level gone from the table) starts fresh.
 - A small first-order room model inside the test to check the loop settles without hunting between DEMAND and IDLE.
 - Firmware builds clean with `make s3` and `make pico`. Hardware testing is done by a human.

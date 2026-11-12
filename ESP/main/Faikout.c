@@ -7,6 +7,8 @@ static const char TAG[] = "Saadin";
 #include "revk.h"
 #include "esp_sleep.h"
 #include "esp_task_wdt.h"
+#include "esp_attr.h"
+#include "esp_rtc_time.h"
 #include <driver/gpio.h>
 #include <driver/uart.h>
 #include "esp_http_server.h"
@@ -329,6 +331,7 @@ const char *const hvac_action[] = {"off", "preheating", "heating", "cooling", "d
 
 // Heating control (heatctl), see docs/heat-control.md
 static heatctl_t heatctl;                          // Controller state, main loop only
+static RTC_NOINIT_ATTR heatctl_keep_t heatkeep;    // Controller state kept over a restart, main loop only
 static heatctl_out_t ctl = {.state = HEATCTL_OFF}; // Last outputs, for status
 static heatlog_t heatlog;                          // One sample every 15 s for the graph page, under daikin.mutex
 static heatctl_curve_t heatflow;                   // Air flow (m3/h) by fan speed (rpm), fan.flow, main loop only
@@ -344,6 +347,8 @@ static void heatctl_status_json(jo_t j)
         if (!isnan(ctl.heatw))
             jo_int(j, "ctl_heatw", lroundf(ctl.heatw));
         jo_litf(j, "ctl_i", "%.1f", ctl.integral);
+        if (ctl.resumed)
+            jo_bool(j, "ctl_resumed", 1);
     }
 }
 
@@ -2112,6 +2117,7 @@ static esp_err_t web_control(httpd_req_t *req)
         "if(o.ctl_sub=='defrost')r+=' · ❄ defrost';"                                                        //
         "else if(o.ctl_sub=='hold')r+=' · after defrost';"                                                  //
         "else if(o.ctl_sub=='rest')r+=' · rest after defrost loop';"                                        //
+        "if(o.ctl_resumed)r+=' · resumed after restart';"                                                   //
         "return r;}"                                                                                        //
         "function c(){"                                                                                     //
         "ws=new WebSocket((location.protocol=='https:'?'wss:':'ws:')+'//'+window.location.host+'/status');" //
@@ -3565,7 +3571,16 @@ static void heatctl_tick(uint32_t now)
     heatctl_state_t was = ctl.state;
     heatctl_sub_t wassub = ctl.sub;
     float wasset = ctl.setpoint;
+    uint8_t wasresumed = ctl.resumed;
+    // The RTC timer runs on over a restart (not a power cut), and needs no clock set from the network
+    uint32_t rtctime = esp_rtc_get_time_us() / 1000000;
+    static uint8_t booted = 0;
+    if (!booted) { // The state kept from before the restart, resumed at the first start if it is sound
+        booted = 1;
+        heatctl_resume(&heatctl, &heatkeep, rtctime, now);
+    }
     heatctl_out_t o = heatctl_step(&heatctl, &p, &in, now);
+    heatctl_keep(&heatctl, &p, &heatkeep, rtctime);
     ctl = o;
     uint8_t cold = (o.state == HEATCTL_COLD), pi = (cold || o.state == HEATCTL_DEMAND); // A PI loop is running
     heatlog_in_t l = {
@@ -3596,6 +3611,8 @@ static void heatctl_tick(uint32_t now)
     };
     heatlog_add(&heatlog, &l, now);
     xSemaphoreGive(daikin.mutex);
+    if (o.resumed != wasresumed)
+        daikin.status_changed = 1; // For the web status line
     if (o.changed) {
         char from[24], to[24];
         heatctl_label(from, sizeof(from), was, wassub);

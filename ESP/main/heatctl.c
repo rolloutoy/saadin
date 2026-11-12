@@ -288,6 +288,7 @@ static void reason(heatctl_out_t *out, const char *fmt, ...)
 
 static void enter(heatctl_t *s, heatctl_out_t *out, uint32_t now, heatctl_state_t state, heatctl_sub_t sub)
 {
+    s->resumed = 0;
     if (state != s->state)
         s->fan_state = HEATCTL_OFF; // The new state's fan map applies at once
     s->state = state;
@@ -358,6 +359,133 @@ static int8_t state_fan(heatctl_t *s, const heatctl_params_t *p, int8_t fan, con
         s->fan_state = s->state;
     }
     return s->fan;
+}
+
+// CRC-32 (as zlib's) of the kept block, all but the CRC itself
+static uint32_t keep_crc(const heatctl_keep_t *k)
+{
+    const uint8_t *b = (const uint8_t *)k;
+    uint32_t c = 0xFFFFFFFF;
+    for (size_t n = offsetof(heatctl_keep_t, crc); n--;) {
+        c ^= *b++;
+        for (int i = 0; i < 8; i++)
+            c = (c >> 1) ^ (0xEDB88320 & -(c & 1));
+    }
+    return ~c;
+}
+
+// Age of the kept block now (s), UINT32_MAX if past counting
+static uint32_t keep_age(const heatctl_t *s, uint32_t now)
+{
+    uint32_t a = s->keep_age + (now - s->keep_at);
+    return a < s->keep_age ? UINT32_MAX : a;
+}
+
+void heatctl_resume(heatctl_t *s, const heatctl_keep_t *k, uint32_t clock, uint32_t now)
+{
+    s->kept = *k;
+    s->keep_pending = 1;
+    s->keep_age = clock >= k->at ? clock - k->at : UINT32_MAX; // A clock gone back has restarted
+    s->keep_at = now;
+}
+
+void heatctl_keep(const heatctl_t *s, const heatctl_params_t *p, heatctl_keep_t *k, uint32_t clock)
+{
+    if (s->keep_pending) // Still to be tried: leave it, over another restart too
+        return;
+    memset(k, 0, sizeof(*k)); // Nothing kept
+    if (!(s->state == HEATCTL_DEMAND && s->level >= 0 && s->level < p->table.n) && s->state != HEATCTL_COLD &&
+        s->state != HEATCTL_IDLE)
+        return;
+    k->magic = HEATCTL_KEEP_MAGIC;
+    k->version = HEATCTL_KEEP_VERSION;
+    k->at = clock;
+    k->state = s->state;
+    if (s->state == HEATCTL_IDLE && s->sub == HEATCTL_SUB_REST)
+        k->rest = s->resume;
+    if (s->state == HEATCTL_DEMAND) {
+        k->demand = p->table.level[s->level].demand; // Not the index, which a changed table would misplace
+        k->quiet = p->table.level[s->level].quiet;
+    }
+    k->integral = s->integral;
+    k->scale = s->scale;
+    k->deficit = s->deficit;
+    k->debt = s->debt;
+    k->setpoint = s->setpoint;
+    k->cold_integral = s->cold_integral;
+    k->crc = keep_crc(k);
+}
+
+// Why the kept block may not be resumed now, "" if there is none, NULL if it may. *level is the level for DEMAND.
+static const char *keep_check(const heatctl_t *s, const heatctl_params_t *p, uint32_t now, int *level)
+{
+    const heatctl_keep_t *k = &s->kept;
+    if (!s->keep_pending || k->magic != HEATCTL_KEEP_MAGIC)
+        return "";
+    if (k->version != HEATCTL_KEEP_VERSION)
+        return "other version";
+    if (k->crc != keep_crc(k))
+        return "bad checksum";
+    if (keep_age(s, now) > HEATCTL_KEEP_AGE)
+        return "too old";
+    if (!isfinite(k->integral) || !isfinite(k->scale) || !isfinite(k->deficit) || !isfinite(k->debt) ||
+        !isfinite(k->setpoint) || !isfinite(k->cold_integral))
+        return "bad value";
+    float cop = table_cop(p);
+    if (k->scale && (k->scale < cop / 2 || k->scale > cop * 2)) // As the DEMAND step clamps it, 0 if not learnt yet
+        return "bad value";
+    switch (k->state) {
+    case HEATCTL_DEMAND: {
+        const heatctl_table_t *t = &p->table;
+        *level = -1;
+        for (int i = 0; i < t->n; i++)
+            if (t->level[i].demand == k->demand && t->level[i].quiet == k->quiet)
+                *level = i;
+        if (*level < 0)
+            return "level not in demand.table";
+        if (k->integral < t->level[0].watts * cop || k->integral > t->level[level_top(p, 0)].watts * cop)
+            return "bad value";
+        return NULL;
+    }
+    case HEATCTL_COLD:
+        if (k->setpoint < p->tmin || k->setpoint > p->tmax || k->cold_integral < p->tmin || k->cold_integral > p->tmax)
+            return "bad value";
+        return NULL;
+    case HEATCTL_IDLE:
+        if (k->rest && k->rest != HEATCTL_DEMAND && k->rest != HEATCTL_COLD)
+            return "bad state";
+        return NULL;
+    default:
+        return "bad state";
+    }
+}
+
+// Resume the kept block, which keep_check has passed. Its timers start as on entering the state.
+static void keep_resume(heatctl_t *s, heatctl_out_t *out, uint32_t now, int level)
+{
+    const heatctl_keep_t *k = &s->kept;
+    s->scale = k->scale;
+    if (k->state == HEATCTL_DEMAND) {
+        enter(s, out, now, HEATCTL_DEMAND, HEATCTL_SUB_NONE);
+        s->integral = s->heatw = k->integral;
+        s->deficit = k->deficit;
+        s->debt = k->debt;
+        s->level = level;
+        s->level_at = now;
+        reason(out, "resumed after restart, demand %u%s, integral %.0f W", k->demand, k->quiet ? " QO" : "",
+               k->integral);
+    } else if (k->state == HEATCTL_COLD) {
+        enter(s, out, now, HEATCTL_COLD, HEATCTL_SUB_NONE);
+        s->cold_integral = k->cold_integral;
+        s->setpoint = k->setpoint;
+        s->setpoint_at = now;
+        reason(out, "resumed after restart, setpoint %.1f, integral %.1f", k->setpoint, k->cold_integral);
+    } else {
+        enter(s, out, now, HEATCTL_IDLE, k->rest ? HEATCTL_SUB_REST : HEATCTL_SUB_NONE);
+        s->resume = k->rest;
+        reason(out, "resumed after restart%s", k->rest ? ", rest after defrost loop" : "");
+    }
+    s->resumed = 1;
 }
 
 heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatctl_in_t *in, uint32_t now)
@@ -441,6 +569,10 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
     out.fan = HEATCTL_FAN_LEAVE;
 
     if (!in->enabled || !in->power || !in->heat) {
+        // Not tried while the unit's state is not known yet after a boot, but switched off, or too old by now, it is
+        // not resumed, and is written over from now on
+        if (!in->enabled || keep_age(s, now) > HEATCTL_KEEP_AGE)
+            s->keep_pending = 0;
         if (s->state != HEATCTL_OFF) {
             enter(s, &out, now, HEATCTL_OFF, HEATCTL_SUB_NONE);
             reason(&out, "%s", !in->enabled ? "disabled" : !in->power ? "unit off" : "unit not heating");
@@ -450,14 +582,21 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         return out;
     }
 
-    if (s->state == HEATCTL_OFF) { // Fresh start
+    if (s->state == HEATCTL_OFF) { // Fresh start, or the first after a boot resumes the state kept over the restart
         s->sub = HEATCTL_SUB_NONE;
         s->armed = (!isnan(in->liquid) && in->liquid >= p->defrost_exit);
         s->defrosts = 0;
         if (!s->room_fresh)
             s->room_at = now; // Stale counts from the start
-        enter_demand(s, p, &out, now, p->demand_start);
-        reason(&out, "start");
+        int level = -1;
+        const char *why = keep_check(s, p, now, &level);
+        s->keep_pending = 0; // Tried once only
+        if (!why)
+            keep_resume(s, &out, now, level);
+        else {
+            enter_demand(s, p, &out, now, p->demand_start);
+            reason(&out, "start%s%s", *why ? ", not resumed: " : "", why);
+        }
     }
 
     if (defrost_rest) { // Defrost-loop watchdog
@@ -653,6 +792,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         break;
     }
     out.setpoint = clampf(out.setpoint, p->tmin, p->tmax);
+    out.resumed = s->resumed && now - s->since < HEATCTL_RESUMED_SHOW;
     out.state = s->state;
     out.sub = s->sub;
     return out;
