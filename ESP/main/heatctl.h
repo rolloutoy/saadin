@@ -10,6 +10,7 @@
 #define HEATCTL_OUTDOOR_SMOOTH 1800 // Outdoor temperature smoothing (s)
 #define HEATCTL_DT_MAX 60           // Longest step integrated (s)
 #define HEATCTL_FAN_LEAVE (-1)      // Fan: leave alone
+#define HEATCTL_FAN_MAP (-2)        // Fan: by outdoor temperature, from the state's fan map
 
 typedef struct {    // A demand level, one entry of demand.table
     uint8_t demand; // Demand (%)
@@ -27,6 +28,12 @@ typedef struct {
     float outdoor[HEATCTL_CURVE_MAX]; // Increasing
     float offset[HEATCTL_CURVE_MAX];
 } heatctl_curve_t;
+
+typedef struct {
+    int n;
+    float outdoor[HEATCTL_CURVE_MAX]; // Increasing
+    int8_t fan[HEATCTL_CURVE_MAX];    // 0 auto, 1-5, 6 quiet (as daikin.fan)
+} heatctl_fanmap_t;
 
 typedef enum {
     HEATCTL_OFF,      // Disabled, unit off, or not heating: nothing is sent
@@ -81,8 +88,10 @@ typedef struct {
     uint8_t defrost_loops;    // More defrosts than this within defrost_window...
     uint32_t defrost_window;  // ...(s)...
     uint32_t defrost_rest;    // ...rest in IDLE for this long (s)
-    // Fan per state: HEATCTL_FAN_LEAVE, or 0 auto, 1-5, 6 quiet (as daikin.fan)
+    // Fan per state: HEATCTL_FAN_LEAVE, HEATCTL_FAN_MAP, or 0 auto, 1-5, 6 quiet (as daikin.fan)
     int8_t idle_fan, demand_fan, cold_fan;
+    heatctl_fanmap_t idle_fanmap, demand_fanmap, cold_fanmap; // Fan by outdoor temperature (HEATCTL_FAN_MAP)
+    uint32_t fan_hold;                                        // A fan from a map is kept this long at least (s)
 } heatctl_params_t;
 
 typedef struct {
@@ -131,14 +140,17 @@ typedef struct {
     float outdoor;          // Smoothed outdoor
     uint32_t cold_since;
     uint32_t warm_since;
-    float integral;       // DEMAND integral (W)
-    float cold_integral;  // COLD integral (°C)
-    float heatw;          // Last heat wanted (W)
-    int level;            // Current level (DEMAND)
-    uint32_t level_at;    // Time of the last demand change
-    float setpoint;       // Current setpoint (COLD)
-    uint32_t setpoint_at; // Time of the last setpoint change (COLD)
-    uint8_t defrosts;     // Entries in defrost_at
+    float integral;            // DEMAND integral (W)
+    float cold_integral;       // COLD integral (°C)
+    float heatw;               // Last heat wanted (W)
+    int level;                 // Current level (DEMAND)
+    uint32_t level_at;         // Time of the last demand change
+    float setpoint;            // Current setpoint (COLD)
+    uint32_t setpoint_at;      // Time of the last setpoint change (COLD)
+    heatctl_state_t fan_state; // State the fan from a map was set in, HEATCTL_OFF if none
+    int8_t fan;                // Fan from a map
+    uint32_t fan_at;           // Time it was set
+    uint8_t defrosts;          // Entries in defrost_at
     uint32_t defrost_at[HEATCTL_DEFROSTS_MAX];
 } heatctl_t;
 
@@ -152,6 +164,14 @@ const char *heatctl_parse_curve(heatctl_curve_t *c, const char *s);
 
 // Target offset at this outdoor temperature: linear between points, flat beyond the ends, 0 if empty or unknown.
 float heatctl_curve_offset(const heatctl_curve_t *c, float outdoor);
+
+// Parse a fan map "outdoor:fan,...", fan being A (auto), 1 to 5 or Q (quiet). Returns NULL if OK, else an error, and
+// the map is then empty.
+const char *heatctl_parse_fanmap(heatctl_fanmap_t *m, const char *s);
+
+// Fan at this outdoor temperature: that of the highest point at or below it, or of the first point below them all.
+// HEATCTL_FAN_LEAVE if empty or unknown.
+int8_t heatctl_fanmap_fan(const heatctl_fanmap_t *m, float outdoor);
 
 // One control step. now is in seconds and must not go backwards. Call it about once a second.
 heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatctl_in_t *in, uint32_t now);

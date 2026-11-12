@@ -87,6 +87,14 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 
 Per-state fan settings `idle.fan`, `demand.fan`, `cold.fan`: leave alone, auto, 1–5, or quiet. Applied on entering the state and resent after each defrost. "Leave alone" never touches the fan. A fan the unit doesn't have (2 or 4 on a 3-speed unit, auto or quiet on a unit with neither) counts as "leave alone".
 
+Each setting can also be "Outdoor": the fan then follows the outdoor temperature (smoothed, as for the curve) through the state's map, `idle.fanmap`, `demand.fanmap` or `cold.fanmap`. A map is `outdoor:fan,...` with increasing temperatures, up to 8 points, the fan being `A` (auto), `1`–`5` or `Q` (quiet). The fan is that of the highest point at or below the outdoor temperature; below the first point it is the first point's. So `-5:5,0:4,5:3` is fan 5 below 0 °C, 4 from 0 °C and 3 from 5 °C.
+
+- The fan is set at once on entering the state, and after a change of the map. After that each fan is kept for `fan.hold` (default 60 min) at least, so it does not flap around a point. The hold counts within a state only: a change of state (to idle, demand or full power, also by way of no sensor) applies the new state's fan at once.
+- No change during a defrost.
+- Empty or invalid map (logged), or outdoor temperature unknown → leave alone.
+
+Defaults: `demand.fan` is "Outdoor" with `demand.fanmap` `-20:4,-6:3,1:2,7:1`, so fan 4 below −6 °C, 3 from −6 °C, 2 from 1 °C and 1 from 7 °C. On a 3-speed unit fans 2 and 4 are left alone, so set another map there. `cold.fan` defaults to 4 (left alone on a 3-speed unit) and `idle.fan` to auto (left alone on a unit with no auto fan).
+
 ## Outside changes
 
 If the unit reports a demand, setpoint, QO or fan that differs from what the controller wants (IR remote, Onecta, the unit silently reverting demand to 100), the controller resends its values, at most once a minute per value, and logs that it overrode an outside change. Econo is forced off while the controller runs (Econo and demand share `D7`).

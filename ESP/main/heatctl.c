@@ -134,6 +134,67 @@ float heatctl_curve_offset(const heatctl_curve_t *c, float outdoor)
     return c->offset[c->n - 1];
 }
 
+const char *heatctl_parse_fanmap(heatctl_fanmap_t *m, const char *s)
+{
+    m->n = 0;
+    if (!s)
+        return NULL;
+    s = skipspace(s);
+    const char *err = NULL;
+    while (*s && !err) {
+        if (m->n >= HEATCTL_CURVE_MAX) {
+            err = "Too many points";
+            break;
+        }
+        char *e;
+        float o = strtof(s, &e);
+        if (e == s) {
+            err = "Bad outdoor temperature";
+            break;
+        }
+        s = skipspace(e);
+        if (*s++ != ':') {
+            err = "Expected outdoor:fan";
+            break;
+        }
+        s = skipspace(s);
+        int c = toupper((unsigned char)*s);
+        int8_t f = c == 'A' ? 0 : c == 'Q' ? 6 : c >= '1' && c <= '5' ? c - '0' : -1;
+        if (f < 0) {
+            err = "Fan not A, 1 to 5 or Q";
+            break;
+        }
+        s = skipspace(s + 1);
+        if (m->n && o <= m->outdoor[m->n - 1]) {
+            err = "Outdoor temperatures not increasing";
+            break;
+        }
+        m->outdoor[m->n] = o;
+        m->fan[m->n] = f;
+        m->n++;
+        if (*s == ',') {
+            s = skipspace(s + 1);
+            if (!*s)
+                err = "Trailing ,";
+        } else if (*s)
+            err = "Expected ,";
+    }
+    if (err)
+        m->n = 0;
+    return err;
+}
+
+int8_t heatctl_fanmap_fan(const heatctl_fanmap_t *m, float outdoor)
+{
+    if (!m->n || isnan(outdoor))
+        return HEATCTL_FAN_LEAVE;
+    int r = 0;
+    for (int i = 1; i < m->n; i++)
+        if (outdoor >= m->outdoor[i])
+            r = i;
+    return m->fan[r];
+}
+
 const char *heatctl_state_name(heatctl_state_t state)
 {
     static const char *const names[] = {"off", "idle", "demand", "cold", "nosensor"};
@@ -213,6 +274,8 @@ static void reason(heatctl_out_t *out, const char *fmt, ...)
 
 static void enter(heatctl_t *s, heatctl_out_t *out, uint32_t now, heatctl_state_t state, heatctl_sub_t sub)
 {
+    if (state != s->state)
+        s->fan_state = HEATCTL_OFF; // The new state's fan map applies at once
     s->state = state;
     s->since = now;
     if (sub != s->sub)
@@ -254,6 +317,26 @@ static void held(uint8_t cond, uint8_t *is, uint32_t *since, uint32_t now)
     if (cond && !*is)
         *since = now;
     *is = cond;
+}
+
+// Fan for the state: its fixed setting, or from its map, a fan from the map then kept for fan_hold at least
+static int8_t state_fan(heatctl_t *s, const heatctl_params_t *p, int8_t fan, const heatctl_fanmap_t *map, float outdoor,
+                        uint32_t now)
+{
+    if (fan != HEATCTL_FAN_MAP) {
+        s->fan_state = HEATCTL_OFF;
+        return fan;
+    }
+    int8_t want = heatctl_fanmap_fan(map, outdoor);
+    if (want == HEATCTL_FAN_LEAVE) // No map, or outdoor unknown: keep what there is
+        return s->fan_state == s->state ? s->fan : HEATCTL_FAN_LEAVE;
+    if (s->fan_state != s->state ||
+        (want != s->fan && now - s->fan_at >= p->fan_hold && s->sub != HEATCTL_SUB_DEFROST)) {
+        s->fan = want;
+        s->fan_at = now;
+        s->fan_state = s->state;
+    }
+    return s->fan;
 }
 
 heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatctl_in_t *in, uint32_t now)
@@ -449,7 +532,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         out.demand = t->level[s->level].demand;
         out.quiet = t->level[s->level].quiet || s->sub == HEATCTL_SUB_DEFROST;
         out.setpoint = p->demand_set;
-        out.fan = p->demand_fan;
+        out.fan = state_fan(s, p, p->demand_fan, &p->demand_fanmap, outdoor, now);
         out.heatw = s->heatw;
         out.integral = s->integral;
         break;
@@ -458,7 +541,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         out.demand = p->table.level[0].demand;
         out.quiet = 1;
         out.setpoint = p->idle_temp;
-        out.fan = p->idle_fan;
+        out.fan = state_fan(s, p, p->idle_fan, &p->idle_fanmap, outdoor, now);
         out.integral = s->integral;
         break;
     case HEATCTL_COLD:
@@ -478,7 +561,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         out.demand = 100;
         out.quiet = 0;
         out.setpoint = s->setpoint;
-        out.fan = p->cold_fan;
+        out.fan = state_fan(s, p, p->cold_fan, &p->cold_fanmap, outdoor, now);
         out.integral = s->cold_integral;
         for (int i = p->table.n - 1; i >= 0; i--)
             if (!p->table.level[i].quiet) {

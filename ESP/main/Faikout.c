@@ -3482,8 +3482,17 @@ void revk_web_extra(httpd_req_t *req, int page)
         revk_web_setting(req, "Demand table", "demandtable");
         revk_web_setting(req, "Air flow by fan speed", "fanflow");
         revk_web_setting(req, "Fan, heating on demand", "demandfan");
+        if (demandfan == REVK_SETTINGS_DEMANDFAN_OUTDOOR)
+            revk_web_setting(req, "Fan by outdoor, heating on demand", "demandfanmap");
         revk_web_setting(req, "Fan, heating off", "idlefan");
+        if (idlefan == REVK_SETTINGS_IDLEFAN_OUTDOOR)
+            revk_web_setting(req, "Fan by outdoor, heating off", "idlefanmap");
         revk_web_setting(req, "Fan, full power (cold)", "coldfan");
+        if (coldfan == REVK_SETTINGS_COLDFAN_OUTDOOR)
+            revk_web_setting(req, "Fan by outdoor, full power (cold)", "coldfanmap");
+        if (demandfan == REVK_SETTINGS_DEMANDFAN_OUTDOOR || idlefan == REVK_SETTINGS_IDLEFAN_OUTDOOR ||
+            coldfan == REVK_SETTINGS_COLDFAN_OUTDOOR)
+            revk_web_setting(req, "Fan by outdoor, kept for", "fanhold");
     }
 }
 
@@ -3491,15 +3500,35 @@ void revk_web_extra(httpd_req_t *req, int page)
 // Heating control (heatctl), see docs/heat-control.md
 
 static int8_t heatctl_fan(uint8_t setting)
-{ // Fan setting (Leave, Auto, 1-5, Quiet) as daikin.fan, or HEATCTL_FAN_LEAVE (also if the unit has no such fan)
+{ // Fan setting (Leave, Auto, 1-5, Quiet, Outdoor) as daikin.fan, HEATCTL_FAN_MAP, or HEATCTL_FAN_LEAVE (also if the
+    // unit has no such fan)
     if (!setting)
         return HEATCTL_FAN_LEAVE;
+    if (setting == REVK_SETTINGS_DEMANDFAN_OUTDOOR)
+        return HEATCTL_FAN_MAP;
     int8_t fan = setting - 1;
     if ((fan == 2 || fan == 4) && !fan_5_auto())
         return HEATCTL_FAN_LEAVE; // Only 3 speeds
     if ((fan == 0 || fan == 6) && !fan_5_auto() && !fan_3_auto())
         return HEATCTL_FAN_LEAVE; // No auto or quiet
     return fan;
+}
+
+static void heatctl_fanmap(char **last, const char *value, heatctl_fanmap_t *m, const char *name)
+{ // Parse a fan map setting if it has changed
+    if (*last && !strcmp(*last, value ?: ""))
+        return;
+    free(*last);
+    *last = strdup(value ?: "");
+    const char *e = heatctl_parse_fanmap(m, *last);
+    if (e) {
+        ESP_LOGE(TAG, "heatctl: %s \"%s\": %s, fan left alone", name, *last, e);
+        jo_t j = jo_object_alloc();
+        jo_string(j, name, *last);
+        jo_string(j, "error", e);
+        revk_error("heatctl", &j);
+    }
+    heatctl.fan_state = HEATCTL_OFF; // The new map applies at once
 }
 
 static void heatctl_settings(heatctl_params_t *p)
@@ -3578,6 +3607,11 @@ static void heatctl_settings(heatctl_params_t *p)
     p->idle_fan = heatctl_fan(idlefan);
     p->demand_fan = heatctl_fan(demandfan);
     p->cold_fan = heatctl_fan(coldfan);
+    static char *idlemap = NULL, *demandmap = NULL, *coldmap = NULL; // As last parsed
+    heatctl_fanmap(&idlemap, idlefanmap, &p->idle_fanmap, "idlefanmap");
+    heatctl_fanmap(&demandmap, demandfanmap, &p->demand_fanmap, "demandfanmap");
+    heatctl_fanmap(&coldmap, coldfanmap, &p->cold_fanmap, "coldfanmap");
+    p->fan_hold = fanhold * 60;
 }
 
 enum {
@@ -3732,11 +3766,12 @@ static void heatctl_tick(uint32_t now)
             heatctl_send(HEATCTL_SEND_TEMP, "temp", isnan(daikin.temp) ? -1 : lroundf(daikin.temp * 10),
                          lroundf(t * 10), o.changed, now))
             daikin_set_t(temp, t);
-        if (o.fan != HEATCTL_FAN_LEAVE && (daikin.status_known & CONTROL_fan)) {
+        int8_t fan = o.fan < 0 ? HEATCTL_FAN_LEAVE : heatctl_fan(o.fan + 1); // A fan from a map may be one it lacks
+        if (fan != HEATCTL_FAN_LEAVE && (daikin.status_known & CONTROL_fan)) {
             if (o.resend_fan) // After a defrost, as the unit doesn't restore a forced fan speed
-                daikin_force_v(fan, o.fan);
-            else if (heatctl_send(HEATCTL_SEND_FAN, "fan", daikin.fan, o.fan, o.changed, now))
-                daikin_set_v(fan, o.fan);
+                daikin_force_v(fan, fan);
+            else if (heatctl_send(HEATCTL_SEND_FAN, "fan", daikin.fan, fan, o.changed, now))
+                daikin_set_v(fan, fan);
         }
         if ((daikin.status_known & CONTROL_econo) && !noecono && // Econo and demand share D7
             heatctl_send(HEATCTL_SEND_ECONO, "econo", daikin.econo, 0, o.changed, now))
