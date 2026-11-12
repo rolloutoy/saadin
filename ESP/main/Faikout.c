@@ -1786,8 +1786,8 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     col("demand", offsetof(heatlog_sample_t, demand));
     col("smoothed", offsetof(heatlog_sample_t, smoothed));
     col("integral", offsetof(heatlog_sample_t, integral));
-    col("owed", offsetof(heatlog_sample_t, owed));
-    col("give", offsetof(heatlog_sample_t, give));
+    col("deficit", offsetof(heatlog_sample_t, deficit));
+    col("heattarget", offsetof(heatlog_sample_t, heattarget));
     col("scale", offsetof(heatlog_sample_t, scale));
     col("kp", offsetof(heatlog_sample_t, kp));
     col("ti", offsetof(heatlog_sample_t, ti));
@@ -1853,10 +1853,10 @@ static esp_err_t web_graph(httpd_req_t *req)
         "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "        //
         "green hold after a defrost (demand is not raised), red rest after a defrost loop. "            //
         "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint. "        //
-        "Heat wanted and its integral are watts of heat. The 2 h mean of the heat output, with the "    //
-        "defrosts counted in, should follow the heat wanted. "                                          //
-        "Heat to give is the heat wanted and the making up, over some hours, for what defrosts cost. "  //
-        "Heat owed is the heat to give less the heat given so far: demand steps up to pay it. "         //
+        "Heat request and its integral are watts of heat. The 2 h mean of the heat output, with the "   //
+        "defrosts counted in, should follow the heat request. "                                         //
+        "Heat target is the heat request and the making up, over some hours, for what defrosts cost. "  //
+        "Heat deficit is the heat target less the heat given so far: demand steps up to make it up. "   //
         "Heat per watt of the demand table is what the controller takes each level to give. "           //
         "The tooltip also shows the fan setting and quiet outdoor. "                                    //
         "Heat output and COP are estimates from the fan speed, the unit's own room reading and the "    //
@@ -1936,16 +1936,16 @@ static esp_err_t web_graph(httpd_req_t *req)
         "var hm=d.ago.map((a,i)=>{var j=Math.max(0,i+1-7200/d.interval),c=hn[i+1]-hn[j];"                      //
         "return c<1800/d.interval?null:Math.round((hs[i+1]-hs[j])/c);});"                                      //
         "cs.push(new Chart(document.getElementById('power'),{type:'line',plugins:[band,mark],data:{datasets:[" //
-        "ds('Heat wanted',d.heatw,n,'#f80'),"                                                                  //
-        "ds('Heat to give',d.give,n,'#c50',{borderWidth:1}),"                                                  //
+        "ds('Heat request',d.heatw,n,'#f80'),"                                                                 //
+        "ds('Heat target',d.heattarget,n,'#c50',{borderWidth:1}),"                                             //
         "ds('Integral',only(d.integral,false),n,'#fb6',{borderDash:[4,4]}),"                                   //
         "ds('Proportional',pw,n,'#0aa',{borderWidth:1}),"                                                      //
         "ds('Heat output, 2 h mean',hm,n,'#080'),"                                                             //
-        "ds('Heat owed',d.owed,n,'#a0a',{yAxisID:'o',borderWidth:1}),"                                         //
+        "ds('Heat deficit',d.deficit,n,'#a0a',{yAxisID:'o',borderWidth:1}),"                                   //
         "ds('Demand',d.demand,n,'#06c',{stepped:true,yAxisID:'d'})]},"                                         //
         "options:opt({y:{title:{display:true,text:'W'}},"                                                      //
         "d:{position:'right',min:0,max:100,title:{display:true,text:'%%'},grid:{drawOnChartArea:false}},"      //
-        "o:{position:'right',display:'auto',title:{display:true,text:'Owed, Wh'},"                             //
+        "o:{position:'right',display:'auto',title:{display:true,text:'Deficit, Wh'},"                          //
         "grid:{drawOnChartArea:false}}})}));"                                                                  //
         "cs.push(new Chart(document.getElementById('unit'),{type:'line',plugins:[band,mark],data:{datasets:["  //
         "ds('Liquid',d.liquid,tc,'#a0a'),"                                                                     //
@@ -3279,7 +3279,7 @@ static void send_ha_config(void)
     ha_config_sensor("uptime", .name = "Uptime", .field = "uptime", .unit = "s", .type = "duration",
                      .stateclass = "measurement", .diag = 1, .fallback = 1, .delete = !hauptime);
     ha_config_binary("online", .name = "Online", .field = "online");
-    ha_config_sensor("ctl_heatw", .name = "Heat wanted", .field = "ctl_heatw", .unit = "W", .type = "power",
+    ha_config_sensor("ctl_heatw", .name = "Heat request", .field = "ctl_heatw", .unit = "W", .type = "power",
                      .stateclass = "measurement", .fallback = 1, .delete = nofaikoutauto);
     ha_config_sensor("ctl_i", .name = "Heating integral", .field = "ctl_i", .stateclass = "measurement", .diag = 1,
                      .fallback = 1, .delete = nofaikoutauto);
@@ -3709,8 +3709,8 @@ static void heatctl_tick(uint32_t now)
         .intake = intake,
         .heatout = in.heatout,
         .integral = pi ? o.integral : NAN,
-        .owed = o.owed,
-        .give = o.give,
+        .deficit = o.deficit,
+        .heattarget = o.heattarget,
         .scale = o.scale,
         .kp = pi ? (cold ? p.cold_kp : p.kp) : NAN,
         .ti = pi ? (cold ? p.cold_ti : p.ti) / 60.0 : NAN,
@@ -3752,8 +3752,8 @@ static void heatctl_tick(uint32_t now)
             if (!isnan(o.heatw))
                 jo_int(j, "heatw", lroundf(o.heatw));
             jo_litf(j, "integral", "%.1f", o.integral);
-            if (!isnan(o.owed))
-                jo_int(j, "owed", lroundf(o.owed));
+            if (!isnan(o.deficit))
+                jo_int(j, "deficit", lroundf(o.deficit));
         }
         if (!isnan(in.liquid))
             jo_litf(j, "liquid", "%.1f", in.liquid);
@@ -3776,9 +3776,9 @@ static void heatctl_tick(uint32_t now)
             heatctl_label(label, sizeof(label), o.state, o.sub);
             ESP_LOGI(TAG,
                      "heatctl: %s demand %d%s setpoint %.1f target %.2f room %.2f outdoor %.1f heat %.0f W I %.1f "
-                     "owed %.0f Wh",
+                     "deficit %.0f Wh",
                      label, o.demand, o.quiet ? " QO" : "", o.setpoint, o.target, o.room, o.outdoor, o.heatw,
-                     o.integral, o.owed);
+                     o.integral, o.deficit);
         }
         if ((daikin.status_known & CONTROL_demand) && !nodemand &&
             heatctl_send(HEATCTL_SEND_DEMAND, "demand", daikin.demand, o.demand, o.changed, now))

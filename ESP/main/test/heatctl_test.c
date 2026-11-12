@@ -174,7 +174,7 @@ static void test_off_and_start(void)
     CHECK("start: demand 60 with QO", x.out.demand == 60 && x.out.quiet);
     CHECK("start: setpoint demand.set", NEAR(x.out.setpoint, 30));
     CHECK("start: target", NEAR(x.out.target, 21));
-    CHECK("start: heat wanted", NEAR(x.out.heatw, 1200));
+    CHECK("start: heat request", NEAR(x.out.heatw, 1200));
     CHECK("start: fan left alone", x.out.fan == HEATCTL_FAN_LEAVE);
 
     x.in.heat = 0;
@@ -682,7 +682,7 @@ static void test_stale(void)
     sim_t x;
     start(&x);
     run(&x, 100);
-    x.in.room = 19; // Heat wanted would rise
+    x.in.room = 19; // Heat request would rise
     run(&x, 50);
     x.in.room = NAN;
     run(&x, 1);
@@ -1001,11 +1001,11 @@ static float model_heat(const sim_t *x)
 }
 
 typedef struct {
-    float got, wanted; // Mean heat given and wanted (W)
-    int changes;       // Demand changes
-    uint32_t shortest; // Shortest time between two of them (s)
-    uint32_t full;     // Time at plain 100 (s)
-    uint8_t lo, hi;    // Lowest and highest demand
+    float got, request; // Mean heat given and requested (W)
+    int changes;        // Demand changes
+    uint32_t shortest;  // Shortest time between two of them (s)
+    uint32_t full;      // Time at plain 100 (s)
+    uint8_t lo, hi;     // Lowest and highest demand
 } account_t;
 
 // Run for secs. The heat the unit gives is fed back (known), or it is not and the unit gives the table's watts times
@@ -1013,7 +1013,7 @@ typedef struct {
 static account_t run_heat(sim_t *x, uint32_t secs, int known, uint32_t cadence, uint32_t outage)
 {
     account_t a = {.lo = 255, .shortest = UINT32_MAX};
-    double got = 0, wanted = 0;
+    double got = 0, request = 0;
     int level = x->s.level;
     uint32_t at = 0;
     for (uint32_t i = 0; i < secs; i++) {
@@ -1023,7 +1023,7 @@ static account_t run_heat(sim_t *x, uint32_t secs, int known, uint32_t cadence, 
         x->in.heatout = known ? heat : NAN;
         run(x, 1);
         got += heat;
-        wanted += x->out.heatw;
+        request += x->out.heatw;
         if (x->s.level != level) {
             if (at && x->now - at < a.shortest)
                 a.shortest = x->now - at;
@@ -1039,11 +1039,11 @@ static account_t run_heat(sim_t *x, uint32_t secs, int known, uint32_t cadence, 
             a.full++;
     }
     a.got = got / secs;
-    a.wanted = wanted / secs;
+    a.request = request / secs;
     return a;
 }
 
-// Heat wanted held still: P only, on a room 2 degrees under the target
+// Heat request held still: P only, on a room under the target
 static void start_heat(sim_t *x, float room)
 {
     start(x);
@@ -1052,29 +1052,29 @@ static void start_heat(sim_t *x, float room)
     x->in.room = room;
 }
 
-// Heat account: demand steps between the levels around the heat wanted, so the heat given is the heat wanted
-static void test_heat_account(void)
+// Heat deficit: demand steps between the levels around the heat request, so the heat given is the heat request
+static void test_heat_deficit(void)
 {
     sim_t x;
     start_heat(&x, 19);
     run_heat(&x, 3 * 3600, 1, 0, 0);
     account_t a = run_heat(&x, 48 * 3600, 1, 0, 0);
-    printf("heat account: wanted %.0f W, given %.0f W, demand %d..%d, %d changes\n", a.wanted, a.got, a.lo, a.hi,
+    printf("heat deficit: request %.0f W, given %.0f W, demand %d..%d, %d changes\n", a.request, a.got, a.lo, a.hi,
            a.changes);
-    CHECK("heat account: wanted lies between the heat of 95 and of 100q", a.wanted > 2300 && a.wanted < 3800);
-    CHECK("heat account: the heat given is the heat wanted", fabsf(a.got - a.wanted) < 0.03f * a.wanted);
-    CHECK("heat account: from the two levels around it", a.lo == 95 && a.hi == 100 && !a.full);
-    CHECK("heat account: demand changes at most once per demand.rate", a.changes > 2 && a.shortest >= 600);
+    CHECK("heat deficit: request lies between the heat of 95 and of 100q", a.request > 2300 && a.request < 3800);
+    CHECK("heat deficit: the heat given is the heat request", fabsf(a.got - a.request) < 0.03f * a.request);
+    CHECK("heat deficit: from the two levels around it", a.lo == 95 && a.hi == 100 && !a.full);
+    CHECK("heat deficit: demand changes at most once per demand.rate", a.changes > 2 && a.shortest >= 600);
     // 3.4 W of heat per W of the table at 95, 2.6 at 100q
-    CHECK("heat account: heat per watt of the table learnt from the unit", x.out.scale > 2.6 && x.out.scale < 3.4);
-    CHECK("heat account: no defrost, so the heat to give is the heat wanted", NEAR(x.out.give, x.out.heatw));
+    CHECK("heat deficit: heat per watt of the table learnt from the unit", x.out.scale > 2.6 && x.out.scale < 3.4);
+    CHECK("heat deficit: no defrost, so the heat target is the heat request", NEAR(x.out.heattarget, x.out.heatw));
 
     // The heat output is not known: the table times demand.cop stands in for it
     start_heat(&x, 19);
     run_heat(&x, 3 * 3600, 0, 0, 0);
     a = run_heat(&x, 48 * 3600, 0, 0, 0);
-    printf("heat account, heat not known: wanted %.0f W, given %.0f W, demand %d..%d\n", a.wanted, a.got, a.lo, a.hi);
-    CHECK("heat not known: the table's heat is the heat wanted", fabsf(a.got - a.wanted) < 0.03f * a.wanted);
+    printf("heat deficit, heat not known: request %.0f W, given %.0f W, demand %d..%d\n", a.request, a.got, a.lo, a.hi);
+    CHECK("heat not known: the table's heat is the heat request", fabsf(a.got - a.request) < 0.03f * a.request);
     CHECK("heat not known: from the two levels around it", a.lo == 95 && a.hi == 100 && !a.full);
     CHECK("heat not known: heat per watt of the table is demand.cop", NEAR(x.out.scale, 3));
 
@@ -1084,15 +1084,15 @@ static void test_heat_account(void)
         x.p.cop = i ? 4.5 : 2;
         run_heat(&x, 3 * 3600, 1, 0, 0);
         a = run_heat(&x, 48 * 3600, 1, 0, 0);
-        CHECK(i ? "demand.cop high: the heat given is the heat wanted"
-                : "demand.cop low: the heat given is the heat wanted",
-              fabsf(a.got - a.wanted) < 0.03f * a.wanted);
+        CHECK(i ? "demand.cop high: the heat given is the heat request"
+                : "demand.cop low: the heat given is the heat request",
+              fabsf(a.got - a.request) < 0.03f * a.request);
     }
 }
 
 // Defrosts cost heat, and the more of them the more: the account makes it up, here with plain 100 after a defrost.
 // Not all of it, as demand only goes up from a level that itself gives too little: the rest is for the integral
-static void test_heat_account_defrost(void)
+static void test_heat_deficit_defrost(void)
 {
     account_t a[2];
     for (int i = 0; i < 2; i++) {
@@ -1101,20 +1101,21 @@ static void test_heat_account_defrost(void)
         uint32_t cadence = i ? 90 * 60 : 60 * 60;
         run_heat(&x, 3 * cadence, 1, cadence, 12 * 60);
         a[i] = run_heat(&x, 48 * 3600, 1, cadence, 12 * 60);
-        printf("heat account, defrost every %d min: wanted %.0f W, given %.0f W, demand %d..%d, plain 100 for %d min\n",
-               (int)cadence / 60, a[i].wanted, a[i].got, a[i].lo, a[i].hi, (int)a[i].full / 60);
-        CHECK(i ? "defrost every 90 min: the heat given is the heat wanted"
-                : "defrost every 60 min: the heat given is the heat wanted",
-              fabsf(a[i].got - a[i].wanted) < 0.05f * a[i].wanted);
+        printf(
+            "heat deficit, defrost every %d min: request %.0f W, given %.0f W, demand %d..%d, plain 100 for %d min\n",
+            (int)cadence / 60, a[i].request, a[i].got, a[i].lo, a[i].hi, (int)a[i].full / 60);
+        CHECK(i ? "defrost every 90 min: the heat given is the heat request"
+                : "defrost every 60 min: the heat given is the heat request",
+              fabsf(a[i].got - a[i].request) < 0.05f * a[i].request);
         CHECK("defrosts: demand changes at most once per demand.rate", a[i].shortest >= 600);
-        CHECK("defrosts: more heat to give than wanted, to make up for them",
-              x.out.give > x.out.heatw + 100 && x.out.give < x.out.heatw + 1500);
+        CHECK("defrosts: the heat target is over the heat request, to make up for them",
+              x.out.heattarget > x.out.heatw + 100 && x.out.heattarget < x.out.heatw + 1500);
     }
     CHECK("more defrosts take more plain 100", a[0].full > a[1].full + 3600);
 }
 
-// A big change of the heat wanted takes demand several levels at once, as far as the heat the unit gives now says
-static void test_heat_account_jump(void)
+// A big change of the heat request takes demand several levels at once, as far as the heat the unit gives now says
+static void test_heat_deficit_jump(void)
 {
     sim_t x;
     start_heat(&x, 21);
@@ -1123,13 +1124,13 @@ static void test_heat_account_jump(void)
         run(&x, 1);
     }
     CHECK("jump: at the lowest level", x.out.demand == 40);
-    x.in.room = 19.9; // 2190 W wanted: 60% gives 2000 W and 70% 2325 W (by demand.cop, 95% would give 1920 W)
+    x.in.room = 19.9; // 2190 W requested: 60% gives 2000 W and 70% 2325 W (by demand.cop, 95% would give 1920 W)
     for (int i = 0; i < 3600 && x.out.demand == 40; i++) {
         x.in.heatout = model_watts(&x) * 5;
         run(&x, 1);
     }
-    CHECK("jump up: to the level under the heat wanted", x.out.demand == 60);
-    x.in.room = 23; // Far too warm: nothing wanted
+    CHECK("jump up: to the level under the heat request", x.out.demand == 60);
+    x.in.room = 23; // Far too warm: nothing requested
     for (int i = 0; i < 1800 && x.out.demand == 60; i++) {
         x.in.heatout = model_watts(&x) * 5;
         run(&x, 1);
@@ -1137,9 +1138,9 @@ static void test_heat_account_jump(void)
     CHECK("jump down: to the lowest level", x.out.demand == 40);
 }
 
-// The top level cannot give the heat wanted: the integral stops, no heat is owed, and demand comes down soon after
+// The top level cannot give the heat request: the integral stops, no deficit builds, and demand comes down soon after
 // the room is over the target
-static void test_heat_account_top(void)
+static void test_heat_deficit_top(void)
 {
     sim_t x;
     start(&x);
@@ -1150,9 +1151,9 @@ static void test_heat_account_top(void)
     CHECK("top: at the top level", x.out.demand == 100 && x.out.quiet);
     run_heat(&x, 8 * 3600, 1, 0, 0);
     // It stops a little over, as it ran on while the heat per watt of the table was still being learnt
-    CHECK("top: the integral stops where the heat wanted is what the top level gives",
+    CHECK("top: the integral stops where the heat request is what the top level gives",
           fabsf(x.out.integral - i8) < 20 && fabsf(x.out.heatw - 3900) < 250);
-    CHECK("top: no heat owed that the top level cannot pay", x.out.owed <= 0.01);
+    CHECK("top: no heat deficit that the top level cannot make up", x.out.deficit <= 0.01);
     x.in.room = 21.5;
     int t = 0;
     while (t < 6 * 3600 && x.out.demand == 100) {
@@ -1185,7 +1186,7 @@ static void test_no_integral(void)
     x.in.room = 20.5;
     run(&x, 2 * 3600);
     CHECK("ti 0: integral does not move", NEAR(x.out.integral, i0));
-    CHECK("ti 0: heat wanted is kp x error on top",
+    CHECK("ti 0: heat request is kp x error on top",
           fabsf(x.out.heatw - (i0 + 900 * 0.5f)) < 1.5f); // Smoothing leaves a hair of error
     x.p.ti = 90 * 60;                                     // Back on: it moves again
     run(&x, 600);
@@ -1264,10 +1265,10 @@ int main(void)
     test_room_model(-8, 0, 2);
     test_room_model(-5, 0, 2);
     test_room_model(0, 0, 2);
-    test_heat_account();
-    test_heat_account_defrost();
-    test_heat_account_jump();
-    test_heat_account_top();
+    test_heat_deficit();
+    test_heat_deficit_defrost();
+    test_heat_deficit_jump();
+    test_heat_deficit_top();
     test_ble_env();
     test_fan_flow();
     test_fanmap();

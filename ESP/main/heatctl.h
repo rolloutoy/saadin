@@ -9,7 +9,7 @@
 #define HEATCTL_DEFROSTS_MAX 16     // Defrost start times kept for the defrost-loop watchdog
 #define HEATCTL_OUTDOOR_SMOOTH 1800 // Outdoor temperature smoothing (s)
 #define HEATCTL_DT_MAX 60           // Longest step integrated (s)
-#define HEATCTL_DEFROST_SPREAD 7200 // The heat a defrost cost is owed over about this long (s)
+#define HEATCTL_DEFROST_SPREAD 7200 // The heat a defrost cost is asked for over about this long (s)
 #define HEATCTL_SCALE_SMOOTH 1800   // Smoothing of the heat the unit gives per watt of the demand table (s)
 #define HEATCTL_FAN_LEAVE (-1)      // Fan: leave alone
 #define HEATCTL_FAN_MAP (-2)        // Fan: by outdoor temperature, from the state's fan map
@@ -110,16 +110,16 @@ typedef struct {
 typedef struct {
     heatctl_state_t state;
     heatctl_sub_t sub;
-    uint8_t demand;     // Demand to send (%)
-    uint8_t quiet;      // Quiet outdoor to send
-    float setpoint;     // Setpoint to send
-    int8_t fan;         // Fan to send, or HEATCTL_FAN_LEAVE
-    float target;       // Effective target (auto.t + curve)
-    float curve;        // Curve offset in target
-    float heatw;        // Heat wanted (W of heat), NAN when not in use
-    float integral;     // Integral: W of heat in DEMAND/IDLE, setpoint °C in COLD
-    float owed;         // Heat owed (Wh): heat wanted less heat given so far, negative if over, NAN when not in use
-    float give;         // Heat to give now (W): the heat wanted and the making up for defrosts, NAN when not in use
+    uint8_t demand; // Demand to send (%)
+    uint8_t quiet;  // Quiet outdoor to send
+    float setpoint; // Setpoint to send
+    int8_t fan;     // Fan to send, or HEATCTL_FAN_LEAVE
+    float target;   // Effective target (auto.t + curve)
+    float curve;    // Curve offset in target
+    float heatw;    // Heat request (W of heat), NAN when not in use
+    float integral; // Integral: W of heat in DEMAND/IDLE, setpoint °C in COLD
+    float deficit; // Heat deficit (Wh): heat target less heat given so far, negative for a surplus, NAN when not in use
+    float heattarget;   // Heat target (W): the heat request and the making up for defrosts, NAN when not in use
     float scale;        // Heat taken per watt of the demand table (W per W), NAN when not in use
     float room;         // Smoothed room temperature, NAN if none
     float outdoor;      // Smoothed outdoor temperature, NAN if unknown
@@ -148,11 +148,11 @@ typedef struct {
     uint32_t cold_since;
     uint32_t warm_since;
     float integral;            // DEMAND integral (W of heat)
-    float owed;                // DEMAND heat owed (Wh)
-    float debt;                // Heat a defrost cost (Wh), not yet in owed
+    float deficit;             // DEMAND heat deficit (Wh)
+    float debt;                // Heat a defrost cost (Wh), not yet in the heat deficit
     float scale;               // Heat the unit gives per watt of the demand table, smoothed, 0 if not set yet
     float cold_integral;       // COLD integral (°C)
-    float heatw;               // Last heat wanted (W of heat)
+    float heatw;               // Last heat request (W of heat)
     int level;                 // Current level (DEMAND)
     uint32_t level_at;         // Time of the last demand change
     float setpoint;            // Current setpoint (COLD)

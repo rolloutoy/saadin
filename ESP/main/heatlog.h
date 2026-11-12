@@ -8,31 +8,31 @@
 #define HEATLOG_NONE INT16_MIN // Value not known
 #define HEATLOG_NONE8 255      // fanset or quiet not known
 
-typedef struct {     // Inputs, about once a second, NAN if not known
-    float room;      // Room temperature, raw sensor reading (°C), mean over the sample
-    float outdoor;   // Outdoor temperature (°C), mean
-    float heatw;     // Heat wanted (W), mean
-    float power;     // Power consumption (W), mean
-    float smoothed;  // Room temperature as the controller sees it, smoothed (°C), mean
-    float liquid;    // Liquid temperature (°C), mean
-    float comp;      // Compressor frequency (Hz), mean
-    float fan;       // Indoor fan speed as the unit reports it (rpm), mean
-    float intake;    // Unit's own room (intake air) temperature (°C), mean
-    float heatout;   // Estimated heat output (W), mean, see heatlog_heatout
-    float target;    // Target, auto.t (°C), last in the sample
-    float effective; // Effective target, with the curve (°C), last
-    float setpoint;  // Unit setpoint (°C), last
-    float demand;    // Unit demand (%), last
-    float integral;  // PI integral, last: W, or setpoint (°C) in COLD
-    float owed;      // Heat owed (Wh), last
-    float give;      // Heat to give (W), mean
-    float scale;     // Heat taken per watt of the demand table (W per W), last
-    float kp;        // PI gain in use, last: W per °C, or °C per °C in COLD
-    float ti;        // PI integral time in use (min), last
-    uint8_t state;   // heatctl_state_t, last
-    uint8_t sub;     // heatctl_sub_t, last, but a defrost anywhere in the sample wins
-    uint8_t fanset;  // Fan setting, last: 0 auto, 1-5, 6 quiet (as daikin.fan), HEATLOG_NONE8 if not known
-    uint8_t quiet;   // Quiet outdoor, last: 0 or 1, HEATLOG_NONE8 if not known
+typedef struct {      // Inputs, about once a second, NAN if not known
+    float room;       // Room temperature, raw sensor reading (°C), mean over the sample
+    float outdoor;    // Outdoor temperature (°C), mean
+    float heatw;      // Heat request (W), mean
+    float power;      // Power consumption (W), mean
+    float smoothed;   // Room temperature as the controller sees it, smoothed (°C), mean
+    float liquid;     // Liquid temperature (°C), mean
+    float comp;       // Compressor frequency (Hz), mean
+    float fan;        // Indoor fan speed as the unit reports it (rpm), mean
+    float intake;     // Unit's own room (intake air) temperature (°C), mean
+    float heatout;    // Estimated heat output (W), mean, see heatlog_heatout
+    float target;     // Target, auto.t (°C), last in the sample
+    float effective;  // Effective target, with the curve (°C), last
+    float setpoint;   // Unit setpoint (°C), last
+    float demand;     // Unit demand (%), last
+    float integral;   // PI integral, last: W, or setpoint (°C) in COLD
+    float deficit;    // Heat deficit (Wh), last
+    float heattarget; // Heat target (W), mean
+    float scale;      // Heat taken per watt of the demand table (W per W), last
+    float kp;         // PI gain in use, last: W per °C, or °C per °C in COLD
+    float ti;         // PI integral time in use (min), last
+    uint8_t state;    // heatctl_state_t, last
+    uint8_t sub;      // heatctl_sub_t, last, but a defrost anywhere in the sample wins
+    uint8_t fanset;   // Fan setting, last: 0 auto, 1-5, 6 quiet (as daikin.fan), HEATLOG_NONE8 if not known
+    uint8_t quiet;    // Quiet outdoor, last: 0 or 1, HEATLOG_NONE8 if not known
 } heatlog_in_t;
 
 typedef struct { // One sample, temperatures in 0.01 °C, HEATLOG_NONE if not known
@@ -50,20 +50,20 @@ typedef struct { // One sample, temperatures in 0.01 °C, HEATLOG_NONE if not kn
     int16_t target;
     int16_t effective;
     int16_t setpoint;
-    int16_t demand;   // %
-    int16_t integral; // W, or 0.01 °C in COLD
-    int16_t owed;     // Wh
-    int16_t give;     // W
-    int16_t scale;    // 0.01 W per W
-    int16_t kp;       // W per °C, or 0.01 °C per °C in COLD
-    int16_t ti;       // min
+    int16_t demand;     // %
+    int16_t integral;   // W, or 0.01 °C in COLD
+    int16_t deficit;    // Wh
+    int16_t heattarget; // W
+    int16_t scale;      // 0.01 W per W
+    int16_t kp;         // W per °C, or 0.01 °C per °C in COLD
+    int16_t ti;         // min
     uint8_t state;
     uint8_t sub;
     uint8_t fanset;
     uint8_t quiet;
 } heatlog_sample_t;
 
-#define HEATLOG_MEANS 11 // room, outdoor, heatw, power, smoothed, liquid, comp, fan, intake, heatout, give
+#define HEATLOG_MEANS 11 // room, outdoor, heatw, power, smoothed, liquid, comp, fan, intake, heatout, heattarget
 
 typedef struct {
     heatlog_sample_t *sample; // Ring of n samples

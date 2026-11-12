@@ -47,8 +47,8 @@ static void keep(heatlog_t *l, uint32_t now)
         .setpoint = scaled(l->last.setpoint, 100),
         .demand = scaled(l->last.demand, 1),
         .integral = scaled(l->last.integral, pi),
-        .owed = scaled(l->last.owed, 1),
-        .give = scaled(mean[10], 1),
+        .deficit = scaled(l->last.deficit, 1),
+        .heattarget = scaled(mean[10], 1),
         .scale = scaled(l->last.scale, 100),
         .kp = scaled(l->last.kp, pi),
         .ti = scaled(l->last.ti, 1),
@@ -81,8 +81,8 @@ void heatlog_add(heatlog_t *l, const heatlog_in_t *in, uint32_t now)
         keep(l, now);
         reset(l, now);
     }
-    const float v[HEATLOG_MEANS] = {in->room, in->outdoor, in->heatw,  in->power,   in->smoothed, in->liquid,
-                                    in->comp, in->fan,     in->intake, in->heatout, in->give};
+    const float v[HEATLOG_MEANS] = {in->room, in->outdoor, in->heatw,  in->power,   in->smoothed,  in->liquid,
+                                    in->comp, in->fan,     in->intake, in->heatout, in->heattarget};
     for (int i = 0; i < HEATLOG_MEANS; i++)
         if (!isnan(v[i])) {
             l->sum[i] += v[i];

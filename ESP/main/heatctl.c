@@ -303,10 +303,10 @@ static float table_cop(const heatctl_params_t *p)
 }
 
 static void enter_demand(heatctl_t *s, const heatctl_params_t *p, heatctl_out_t *out, uint32_t now, int demand)
-{ // DEMAND with the integral at the heat of this demand's level, and nothing owed
+{ // DEMAND with the integral at the heat of this demand's level, and no heat deficit
     enter(s, out, now, HEATCTL_DEMAND, keep_hold(s));
     s->integral = p->table.level[level_for(&p->table, demand)].watts * table_cop(p);
-    s->owed = s->debt = 0;
+    s->deficit = s->debt = 0;
     s->level = -1; // Set at once
 }
 
@@ -423,7 +423,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
     out.room = s->room_ok ? s->room : NAN;
     out.outdoor = outdoor;
     out.heatw = NAN;
-    out.owed = out.give = out.scale = NAN;
+    out.deficit = out.heattarget = out.scale = NAN;
     out.fan = HEATCTL_FAN_LEAVE;
 
     if (!in->enabled || !in->power || !in->heat) {
@@ -532,15 +532,16 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
             s->heatw = p->kp * e + s->integral;
         else if (s->level < 0)
             s->heatw = s->integral; // Starting with no reading
-        // Heat to give now: the heat wanted, and what the last defrosts cost, which is asked for over the next hour
-        // or so, not at once
-        float want = s->heatw + s->debt * 3600 / HEATCTL_DEFROST_SPREAD;
+        // Heat target: the heat request, and what the last defrosts cost, which is asked for over the next hours,
+        // not at once
+        float heattarget = s->heatw + s->debt * 3600 / HEATCTL_DEFROST_SPREAD;
         float heat = s->level < 0 ? 0 : t->level[s->level].watts * scale; // What this level gives
-        // A step is due once the heat owed (or over) is half of what the next level would overpay in the shortest
-        // time demand may stay there: from then on the step leaves less owed or over than staying does
+        // A step is due once the heat deficit (or surplus) is half of what the next level would give over the heat
+        // target in the shortest time demand may stay there: from then on the step leaves less of a deficit or
+        // surplus than staying does
         float pulse = p->demand_rate / 3600.0f / 2;
         if (s->level >= 0 && !stale) {
-            // Heat account: the heat wanted less the heat the unit gave (the table's where that is not known)
+            // Heat deficit: the heat request less the heat the unit gave (the table's where that is not known)
             float got = !isnan(in->heatout)             ? in->heatout
                         : s->sub == HEATCTL_SUB_DEFROST ? 0
                                                         : t->level[s->level].watts * cop;
@@ -548,14 +549,14 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
             if (d > 0 && s->sub != HEATCTL_SUB_NONE)
                 s->debt += d; // Lost to a defrost or the hold after it
             else
-                s->owed += d;
+                s->deficit += d;
             d = s->debt * dt / (HEATCTL_DEFROST_SPREAD + dt);
             s->debt -= d;
-            s->owed += d;
-            if (s->level >= clamp && s->owed > fmaxf(heat - want, 0) * pulse)
-                s->owed = fmaxf(heat - want, 0) * pulse; // No level above to pay more with
-            if (s->level <= 0 && s->owed < -fmaxf(want - heat, 0) * pulse)
-                s->owed = -fmaxf(want - heat, 0) * pulse;
+            s->deficit += d;
+            if (s->level >= clamp && s->deficit > fmaxf(heat - heattarget, 0) * pulse)
+                s->deficit = fmaxf(heat - heattarget, 0) * pulse; // No level above to make more up with
+            if (s->level <= 0 && s->deficit < -fmaxf(heattarget - heat, 0) * pulse)
+                s->deficit = -fmaxf(heattarget - heat, 0) * pulse;
         }
         if (s->level < 0) // Just entered: by the table
             s->level = level_wanted(t, top, s->heatw / cop);
@@ -568,17 +569,17 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         else if (now - s->level_at >= p->demand_rate) {
             // Up only from a level that gives too little, and down only from one that gives too much, so that heat
             // still on its way after a step does not bring on the next. The step goes on over levels that are still
-            // short of the heat to give, or still over it
-            if (s->level < top && !noraise && heat < want &&
-                s->owed >= fmaxf(t->level[s->level + 1].watts * scale - want, 0) * pulse)
+            // short of the heat target, or still over it
+            if (s->level < top && !noraise && heat < heattarget &&
+                s->deficit >= fmaxf(t->level[s->level + 1].watts * scale - heattarget, 0) * pulse)
                 do
                     s->level++;
-                while (s->level < top && t->level[s->level + 1].watts * scale <= want);
-            else if (s->level > 0 && heat > want &&
-                     s->owed <= -fmaxf(want - t->level[s->level - 1].watts * scale, 0) * pulse)
+                while (s->level < top && t->level[s->level + 1].watts * scale <= heattarget);
+            else if (s->level > 0 && heat > heattarget &&
+                     s->deficit <= -fmaxf(heattarget - t->level[s->level - 1].watts * scale, 0) * pulse)
                 do
                     s->level--;
-                while (s->level > 0 && t->level[s->level - 1].watts * scale >= want);
+                while (s->level > 0 && t->level[s->level - 1].watts * scale >= heattarget);
         }
         if (s->level != was)
             s->level_at = now;
@@ -588,8 +589,8 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         out.fan = state_fan(s, p, p->demand_fan, &p->demand_fanmap, outdoor, now);
         out.heatw = s->heatw;
         out.integral = s->integral;
-        out.owed = s->owed;
-        out.give = want;
+        out.deficit = s->deficit;
+        out.heattarget = heattarget;
         out.scale = scale;
         break;
     }
