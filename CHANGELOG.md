@@ -4,6 +4,7 @@ Every user-visible change in Säädin since it was forked from upstream Faikout,
 
 ## 2026-11-12
 
+- The rest after a defrost loop (`defrost.watchdog`) now sets the indoor fan to auto, whatever `idle.fan` is. When heating resumes, the fan for that state (`demand.fan` or `cold.fan`) is set again; if that is *Leave*, the fan stays on auto.
 - The outdoor temperature the heating controller uses is now held still for the hold after a defrost (`defrost.hold`) too, not only during the defrost, and a fan set by outdoor temperature does not change in that hold. The unit's outdoor reading spikes right after a defrost, which could change the fan and then keep it for `fan.hold`. A change of state (to idle, demand or full power) still sets that state's fan at once. With `defrost.hold` at 0 there is no hold, so nothing is held.
 - The mean COP on the heating graph is now over the last 6 hours instead of the last hour. It still shows once there is half an hour of samples.
 

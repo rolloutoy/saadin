@@ -541,7 +541,10 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         out.demand = p->table.level[0].demand;
         out.quiet = 1;
         out.setpoint = p->idle_temp;
-        out.fan = state_fan(s, p, p->idle_fan, &p->idle_fanmap, outdoor, now);
+        if (s->sub == HEATCTL_SUB_REST)
+            out.fan = 0; // Auto for the watchdog rest, whatever idle.fan is
+        else
+            out.fan = state_fan(s, p, p->idle_fan, &p->idle_fanmap, outdoor, now);
         out.integral = s->integral;
         break;
     case HEATCTL_COLD:

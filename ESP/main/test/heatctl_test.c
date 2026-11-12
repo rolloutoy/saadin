@@ -621,6 +621,8 @@ static void test_watchdog(int defrosts)
     sim_t x;
     start(&x);
     x.p.defrost_watchdog = 1;
+    x.p.demand_fan = 3;
+    x.p.idle_fan = 6;
     for (int i = 0; i < defrosts; i++) {
         run(&x, 600);
         x.in.liquid = -20; // 5 min defrost
@@ -635,8 +637,12 @@ static void test_watchdog(int defrosts)
     CHECK("4 defrosts in window: IDLE rest", x.out.state == HEATCTL_IDLE && x.out.sub == HEATCTL_SUB_REST);
     CHECK("rest reason", strstr(x.out.reason, "defrost") != NULL);
     CHECK("rest: setpoint idle.temp", NEAR(x.out.setpoint, 16));
-    int t = run_until(&x, HEATCTL_DEMAND, -1, 4000);
+    CHECK("rest: fan auto, whatever idle.fan is", x.out.fan == 0 && x.out.resend_fan);
+    run(&x, 899);
+    CHECK("rest: fan auto to the end", x.out.sub == HEATCTL_SUB_REST && x.out.fan == 0);
+    int t = 899 + run_until(&x, HEATCTL_DEMAND, -1, 4000);
     CHECK("rest lasts defrost.rest", t == 900);
+    CHECK("after rest: the fan of the state", x.out.fan == 3);
     CHECK("after rest: integral at lowest level", NEAR(x.out.integral, 270));
 }
 

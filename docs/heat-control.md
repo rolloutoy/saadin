@@ -59,7 +59,7 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 - Start with `liquid` only. Log `fanrpm`, `comp` and power at entry and exit so the detection can be refined later.
 - **Post-defrost hold** (after leaving DEFROST, `defrost.hold`, default 10 min, 0 for no hold): demand capped at `defrost.holdmax` (default 100, which is 100q; never plain 100, since quiet outdoor alone damps the surge after a defrost), and demand may go down but not up. In COLD the setpoint may go down but not up. The integral keeps running, so it learns the heat the defrost cost. It carries over between DEMAND and COLD without restarting, so it lasts `defrost.hold` in all.
 - **Fan resend:** after each defrost, resend the configured fan for the current state (the unit doesn't restore a forced fan speed).
-- **Defrost-loop watchdog** (`defrost.watchdog`, default off): more than `defrost.loops` (default 3) defrosts within `defrost.window` (default 90 min) → go to IDLE for `defrost.rest` (default 15 min), then resume DEMAND/COLD. Logged and sent on `info/<host>/heatctl`. Breaks the "death loop" users report at −5…−12 °C.
+- **Defrost-loop watchdog** (`defrost.watchdog`, default off): more than `defrost.loops` (default 3) defrosts within `defrost.window` (default 90 min) → go to IDLE for `defrost.rest` (default 15 min) with the fan on auto (whatever `idle.fan` is), then resume DEMAND/COLD. Logged and sent on `info/<host>/heatctl`. Breaks the "death loop" users report at −5…−12 °C.
 
 ### NOSENSOR
 - No fresh room reading for 30 min (`auto.stale`, default 1800 s). Before that the controller freezes the integral and holds its outputs.

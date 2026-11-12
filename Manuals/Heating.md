@@ -64,7 +64,7 @@ When the liquid temperature drops below `defrost.enter` (5 °C), the controller 
 
 For `defrost.hold` (10 minutes) after a defrost, demand stays at `defrost.holdmax` or below and does not go up, so the unit settles after the defrost. The default 100% means 100% with quiet outdoor: plain 100% is never used in the hold, because without a limit the unit surges to full power after a defrost. Set 95% to hold it down further. In cold-weather mode the setpoint does not go up either. The integral keeps running, so it learns the heat the defrost cost, and demand can step up when the hold ends. The status line shows "after defrost". If a fan speed is set for the state, it is sent again, because the unit does not restore it after a defrost.
 
-With `defrost.watchdog` on (it is off by default), if there are more than `defrost.loops` (3) defrosts within `defrost.window` (90 minutes), the controller turns heating off for `defrost.rest` (15 minutes). The status line shows "rest after defrost loop". This stops the unit from defrosting over and over.
+With `defrost.watchdog` on (it is off by default), if there are more than `defrost.loops` (3) defrosts within `defrost.window` (90 minutes), the controller turns heating off for `defrost.rest` (15 minutes). The fan is on auto for that time, whatever `idle.fan` is, and the fan for the state is set again when heating resumes. The status line shows "rest after defrost loop". This stops the unit from defrosting over and over.
 
 ### No room reading
 
