@@ -25,6 +25,8 @@ typedef struct {     // Inputs, about once a second, NAN if not known
     float demand;    // Unit demand (%), last
     float integral;  // PI integral, last: W, or setpoint (°C) in COLD
     float owed;      // Heat owed (Wh), last
+    float give;      // Heat to give (W), mean
+    float scale;     // Heat taken per watt of the demand table (W per W), last
     float kp;        // PI gain in use, last: W per °C, or °C per °C in COLD
     float ti;        // PI integral time in use (min), last
     uint8_t state;   // heatctl_state_t, last
@@ -51,6 +53,8 @@ typedef struct { // One sample, temperatures in 0.01 °C, HEATLOG_NONE if not kn
     int16_t demand;   // %
     int16_t integral; // W, or 0.01 °C in COLD
     int16_t owed;     // Wh
+    int16_t give;     // W
+    int16_t scale;    // 0.01 W per W
     int16_t kp;       // W per °C, or 0.01 °C per °C in COLD
     int16_t ti;       // min
     uint8_t state;
@@ -59,7 +63,7 @@ typedef struct { // One sample, temperatures in 0.01 °C, HEATLOG_NONE if not kn
     uint8_t quiet;
 } heatlog_sample_t;
 
-#define HEATLOG_MEANS 10 // room, outdoor, heatw, power, smoothed, liquid, comp, fan, intake, heatout
+#define HEATLOG_MEANS 11 // room, outdoor, heatw, power, smoothed, liquid, comp, fan, intake, heatout, give
 
 typedef struct {
     heatlog_sample_t *sample; // Ring of n samples

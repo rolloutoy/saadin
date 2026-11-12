@@ -423,7 +423,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
     out.room = s->room_ok ? s->room : NAN;
     out.outdoor = outdoor;
     out.heatw = NAN;
-    out.owed = NAN;
+    out.owed = out.give = out.scale = NAN;
     out.fan = HEATCTL_FAN_LEAVE;
 
     if (!in->enabled || !in->power || !in->heat) {
@@ -589,6 +589,8 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         out.heatw = s->heatw;
         out.integral = s->integral;
         out.owed = s->owed;
+        out.give = want;
+        out.scale = scale;
         break;
     }
     case HEATCTL_IDLE:

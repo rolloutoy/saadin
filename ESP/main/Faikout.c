@@ -1787,6 +1787,8 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     col("smoothed", offsetof(heatlog_sample_t, smoothed));
     col("integral", offsetof(heatlog_sample_t, integral));
     col("owed", offsetof(heatlog_sample_t, owed));
+    col("give", offsetof(heatlog_sample_t, give));
+    col("scale", offsetof(heatlog_sample_t, scale));
     col("kp", offsetof(heatlog_sample_t, kp));
     col("ti", offsetof(heatlog_sample_t, ti));
     col("liquid", offsetof(heatlog_sample_t, liquid));
@@ -1851,8 +1853,11 @@ static esp_err_t web_graph(httpd_req_t *req)
         "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "        //
         "green hold after a defrost (demand is not raised), red rest after a defrost loop. "            //
         "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint. "        //
-        "Heat wanted and its integral are watts of heat, to compare with the heat output. "             //
-        "Heat owed is the heat wanted less the heat given so far: demand steps up to pay it. "          //
+        "Heat wanted and its integral are watts of heat. The 2 h mean of the heat output, with the "    //
+        "defrosts counted in, should follow the heat wanted. "                                          //
+        "Heat to give is the heat wanted and the making up, over some hours, for what defrosts cost. "  //
+        "Heat owed is the heat to give less the heat given so far: demand steps up to pay it. "         //
+        "Heat per watt of the demand table is what the controller takes each level to give. "           //
         "The tooltip also shows the fan setting and quiet outdoor. "                                    //
         "Heat output and COP are estimates from the fan speed, the unit's own room reading and the "    //
         "liquid temperature. The 6 h mean COP counts the defrosts in.</p>"                              //
@@ -1926,17 +1931,20 @@ static esp_err_t web_graph(httpd_req_t *req)
         "ds('Setpoint integral',only(d.integral,true),tc,'#a6a',{stepped:true,hidden:true}),"                  //
         "ds('Outdoor',d.outdoor,tc,'#08c',{hidden:true})]},"                                                   //
         "options:opt({y:{title:{display:true,text:U}}})}));"                                                   //
+        "var hs=[0],hn=[0];for(var i=0;i<k;i++){var v=d.heatout[i];"                                           //
+        "hs.push(hs[i]+(v==null?0:v));hn.push(hn[i]+(v==null?0:1));}"                                          //
+        "var hm=d.ago.map((a,i)=>{var j=Math.max(0,i+1-7200/d.interval),c=hn[i+1]-hn[j];"                      //
+        "return c<1800/d.interval?null:Math.round((hs[i+1]-hs[j])/c);});"                                      //
         "cs.push(new Chart(document.getElementById('power'),{type:'line',plugins:[band,mark],data:{datasets:[" //
         "ds('Heat wanted',d.heatw,n,'#f80'),"                                                                  //
+        "ds('Heat to give',d.give,n,'#c50',{borderWidth:1}),"                                                  //
         "ds('Integral',only(d.integral,false),n,'#fb6',{borderDash:[4,4]}),"                                   //
-        "ds('Proportional',pw,n,'#0aa',{yAxisID:'p'}),"                                                        //
-        "ds('Heat output, estimated',d.heatout,n,'#080'),"                                                     //
-        "ds('Heat owed',d.owed,n,'#a0a',{yAxisID:'o'}),"                                                       //
+        "ds('Proportional',pw,n,'#0aa',{borderWidth:1}),"                                                      //
+        "ds('Heat output, 2 h mean',hm,n,'#080'),"                                                             //
+        "ds('Heat owed',d.owed,n,'#a0a',{yAxisID:'o',borderWidth:1}),"                                         //
         "ds('Demand',d.demand,n,'#06c',{stepped:true,yAxisID:'d'})]},"                                         //
         "options:opt({y:{title:{display:true,text:'W'}},"                                                      //
         "d:{position:'right',min:0,max:100,title:{display:true,text:'%%'},grid:{drawOnChartArea:false}},"      //
-        "p:{position:'right',display:'auto',title:{display:true,text:'P, W'},"                                 //
-        "grid:{drawOnChartArea:false}},"                                                                       //
         "o:{position:'right',display:'auto',title:{display:true,text:'Owed, Wh'},"                             //
         "grid:{drawOnChartArea:false}}})}));"                                                                  //
         "cs.push(new Chart(document.getElementById('unit'),{type:'line',plugins:[band,mark],data:{datasets:["  //
@@ -1958,6 +1966,7 @@ static esp_err_t web_graph(httpd_req_t *req)
         "ds('Heat output, estimated',d.heatout,n,'#080'),"                                                     //
         "ds('Power',d.power,n,'#c00'),"                                                                        //
         "ds('COP',cop,n,'#8bf',{yAxisID:'c',borderWidth:1}),"                                                  //
+        "ds('Heat per watt of the demand table',d.scale,v=>v/100,'#a0a',{yAxisID:'c',stepped:true}),"          //
         "ds('COP, 6 h mean',cm,n,'#06c',{yAxisID:'c'})]},"                                                     //
         "options:opt({y:{title:{display:true,text:'W'}},"                                                      //
         "c:{position:'right',min:0,max:10,title:{display:true,text:'COP'},grid:{drawOnChartArea:false}}})}));" //
@@ -3701,6 +3710,8 @@ static void heatctl_tick(uint32_t now)
         .heatout = in.heatout,
         .integral = pi ? o.integral : NAN,
         .owed = o.owed,
+        .give = o.give,
+        .scale = o.scale,
         .kp = pi ? (cold ? p.cold_kp : p.kp) : NAN,
         .ti = pi ? (cold ? p.cold_ti : p.ti) / 60.0 : NAN,
         .target = autot ? (float)autot / autot_scale : NAN,

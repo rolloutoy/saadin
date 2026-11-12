@@ -1065,6 +1065,9 @@ static void test_heat_account(void)
     CHECK("heat account: the heat given is the heat wanted", fabsf(a.got - a.wanted) < 0.03f * a.wanted);
     CHECK("heat account: from the two levels around it", a.lo == 95 && a.hi == 100 && !a.full);
     CHECK("heat account: demand changes at most once per demand.rate", a.changes > 2 && a.shortest >= 600);
+    // 3.4 W of heat per W of the table at 95, 2.6 at 100q
+    CHECK("heat account: heat per watt of the table learnt from the unit", x.out.scale > 2.6 && x.out.scale < 3.4);
+    CHECK("heat account: no defrost, so the heat to give is the heat wanted", NEAR(x.out.give, x.out.heatw));
 
     // The heat output is not known: the table times demand.cop stands in for it
     start_heat(&x, 19);
@@ -1073,6 +1076,7 @@ static void test_heat_account(void)
     printf("heat account, heat not known: wanted %.0f W, given %.0f W, demand %d..%d\n", a.wanted, a.got, a.lo, a.hi);
     CHECK("heat not known: the table's heat is the heat wanted", fabsf(a.got - a.wanted) < 0.03f * a.wanted);
     CHECK("heat not known: from the two levels around it", a.lo == 95 && a.hi == 100 && !a.full);
+    CHECK("heat not known: heat per watt of the table is demand.cop", NEAR(x.out.scale, 3));
 
     // A unit that gives more or less heat than demand.cop says is no matter
     for (int i = 0; i < 2; i++) {
@@ -1103,6 +1107,8 @@ static void test_heat_account_defrost(void)
                 : "defrost every 60 min: the heat given is the heat wanted",
               fabsf(a[i].got - a[i].wanted) < 0.05f * a[i].wanted);
         CHECK("defrosts: demand changes at most once per demand.rate", a[i].shortest >= 600);
+        CHECK("defrosts: more heat to give than wanted, to make up for them",
+              x.out.give > x.out.heatw + 100 && x.out.give < x.out.heatw + 1500);
     }
     CHECK("more defrosts take more plain 100", a[0].full > a[1].full + 3600);
 }

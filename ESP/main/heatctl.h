@@ -119,6 +119,8 @@ typedef struct {
     float heatw;        // Heat wanted (W of heat), NAN when not in use
     float integral;     // Integral: W of heat in DEMAND/IDLE, setpoint °C in COLD
     float owed;         // Heat owed (Wh): heat wanted less heat given so far, negative if over, NAN when not in use
+    float give;         // Heat to give now (W): the heat wanted and the making up for defrosts, NAN when not in use
+    float scale;        // Heat taken per watt of the demand table (W per W), NAN when not in use
     float room;         // Smoothed room temperature, NAN if none
     float outdoor;      // Smoothed outdoor temperature, NAN if unknown
     uint8_t changed;    // State or sub-state changed in this step
