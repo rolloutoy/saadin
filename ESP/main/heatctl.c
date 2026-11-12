@@ -330,8 +330,8 @@ static int8_t state_fan(heatctl_t *s, const heatctl_params_t *p, int8_t fan, con
     int8_t want = heatctl_fanmap_fan(map, outdoor);
     if (want == HEATCTL_FAN_LEAVE) // No map, or outdoor unknown: keep what there is
         return s->fan_state == s->state ? s->fan : HEATCTL_FAN_LEAVE;
-    if (s->fan_state != s->state ||
-        (want != s->fan && now - s->fan_at >= p->fan_hold && s->sub != HEATCTL_SUB_DEFROST)) {
+    if (s->fan_state != s->state || (want != s->fan && now - s->fan_at >= p->fan_hold &&
+                                     s->sub != HEATCTL_SUB_DEFROST && s->sub != HEATCTL_SUB_HOLD)) {
         s->fan = want;
         s->fan_at = now;
         s->fan_state = s->state;
@@ -397,8 +397,8 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
     } else
         s->armed = 0; // Not heating, so the coil may cool; heating has to be established again
 
-    // Outdoor, smoothed, frozen during defrost (the unit's reading jumps)
-    if (!isnan(in->outdoor) && s->sub != HEATCTL_SUB_DEFROST) {
+    // Outdoor, smoothed, frozen during defrost and the hold after it (the unit's reading jumps)
+    if (!isnan(in->outdoor) && s->sub != HEATCTL_SUB_DEFROST && s->sub != HEATCTL_SUB_HOLD) {
         if (!s->outdoor_ok)
             s->outdoor = in->outdoor;
         else
@@ -541,7 +541,10 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         out.demand = p->table.level[0].demand;
         out.quiet = 1;
         out.setpoint = p->idle_temp;
-        out.fan = state_fan(s, p, p->idle_fan, &p->idle_fanmap, outdoor, now);
+        if (s->sub == HEATCTL_SUB_REST)
+            out.fan = 0; // Auto for the watchdog rest, whatever idle.fan is
+        else
+            out.fan = state_fan(s, p, p->idle_fan, &p->idle_fanmap, outdoor, now);
         out.integral = s->integral;
         break;
     case HEATCTL_COLD:

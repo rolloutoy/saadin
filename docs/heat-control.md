@@ -59,7 +59,7 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 - Start with `liquid` only. Log `fanrpm`, `comp` and power at entry and exit so the detection can be refined later.
 - **Post-defrost hold** (after leaving DEFROST, `defrost.hold`, default 10 min, 0 for no hold): demand capped at `defrost.holdmax` (default 100, which is 100q; never plain 100, since quiet outdoor alone damps the surge after a defrost), and demand may go down but not up. In COLD the setpoint may go down but not up. The integral keeps running, so it learns the heat the defrost cost. It carries over between DEMAND and COLD without restarting, so it lasts `defrost.hold` in all.
 - **Fan resend:** after each defrost, resend the configured fan for the current state (the unit doesn't restore a forced fan speed).
-- **Defrost-loop watchdog** (`defrost.watchdog`, default off): more than `defrost.loops` (default 3) defrosts within `defrost.window` (default 90 min) → go to IDLE for `defrost.rest` (default 15 min), then resume DEMAND/COLD. Logged and sent on `info/<host>/heatctl`. Breaks the "death loop" users report at −5…−12 °C.
+- **Defrost-loop watchdog** (`defrost.watchdog`, default off): more than `defrost.loops` (default 3) defrosts within `defrost.window` (default 90 min) → go to IDLE for `defrost.rest` (default 15 min) with the fan on auto (whatever `idle.fan` is), then resume DEMAND/COLD. Logged and sent on `info/<host>/heatctl`. Breaks the "death loop" users report at −5…−12 °C.
 
 ### NOSENSOR
 - No fresh room reading for 30 min (`auto.stale`, default 1800 s). Before that the controller freezes the integral and holds its outputs.
@@ -70,7 +70,7 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 
 - **Target** = `auto.t` + offset from `auto.curve` at the smoothed outdoor temperature.
 - `auto.curve` is a string of `outdoor:offset` points, e.g. `"-25:1.0,-10:0.5,0:0"`. Linear between points, flat beyond the ends, empty = no offset. It's an offset, so setting the target from web / HA / MQTT keeps working.
-- **Outdoor** temperature is the unit's own reading, smoothed (e.g. 30 min EMA) and frozen during DEFROST (the unit's outdoor reading jumps about +4 °C during defrost).
+- **Outdoor** temperature is the unit's own reading, smoothed (e.g. 30 min EMA) and frozen during DEFROST and the post-defrost hold (the unit's outdoor reading jumps about +4 °C during defrost, and spikes again right after it).
 - **Room** temperature: BLE sensor (`auto.b`) if set and fresh, otherwise MQTT (`auto.topic`/`auto.payload`, or `env` in the `control` command). Smoothed over `auto.smooth` (default 0, none: a sensor with 0.01 °C steps barely flickers, and smoothing only adds lag; set e.g. 300 s for a sensor with 0.1 °C steps). The unit's own sensor is never used as the room reading for control (it reads 3–7 K high against the fixed setpoint); it's only used via NOSENSOR.
 
 ## Demand table
@@ -90,7 +90,7 @@ Per-state fan settings `idle.fan`, `demand.fan`, `cold.fan`: leave alone, auto, 
 Each setting can also be "Outdoor": the fan then follows the outdoor temperature (smoothed, as for the curve) through the state's map, `idle.fanmap`, `demand.fanmap` or `cold.fanmap`. A map is `outdoor:fan,...` with increasing temperatures, up to 8 points, the fan being `A` (auto), `1`–`5` or `Q` (quiet). The fan is that of the highest point at or below the outdoor temperature; below the first point it is the first point's. So `-5:5,0:4,5:3` is fan 5 below 0 °C, 4 from 0 °C and 3 from 5 °C.
 
 - The fan is set at once on entering the state, and after a change of the map. After that each fan is kept for `fan.hold` (default 60 min) at least, so it does not flap around a point. The hold counts within a state only: a change of state (to idle, demand or full power, also by way of no sensor) applies the new state's fan at once.
-- No change during a defrost.
+- No change during a defrost or the hold after it.
 - Empty or invalid map (logged), or outdoor temperature unknown → leave alone.
 
 Defaults: `demand.fan` is "Outdoor" with `demand.fanmap` `-20:4,-6:3,1:2,7:1`, so fan 4 below −6 °C, 3 from −6 °C, 2 from 1 °C and 1 from 7 °C. On a 3-speed unit fans 2 and 4 are left alone, so set another map there. `cold.fan` defaults to 4 (left alone on a 3-speed unit) and `idle.fan` to auto (left alone on a unit with no auto fan).
