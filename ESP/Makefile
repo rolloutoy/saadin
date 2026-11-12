@@ -31,7 +31,12 @@ components/ESP32-RevK/idfmon: components/ESP32-RevK/idfmon.c
 sdkconfig: sdkconfig.defaults
 	rm -rf sdkconfig build
 
-c3 c5 c6 s3 s3eth s3n8 pico wroom1 wroom solo: sdkconfig
+# setbuildsuffix sets options by what is in managed_components, which a clean checkout only has once idf.py has
+# fetched it.
+managed_components: | main/settings.h
+	idf.py reconfigure
+
+c3 c5 c6 s3 s3eth s3n8 pico wroom1 wroom solo: sdkconfig managed_components
 
 # set:    main/settings.h c3 c5 c6 wroom1 wroom solo pico s3n8 s3
 set:    main/settings.h pico s3eth s3
