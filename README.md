@@ -61,7 +61,6 @@ Säädin is firmware only. It is meant to run on [Faikout boards](https://shop.r
 ## Planned
 
 - **Heating control, next steps:** slow on/off cycling below the lowest demand, time-proportioning in the gap between 95% and 100% with quiet outdoor, and optional outdoor-temperature feedforward.
-- **Releases:** builds published as GitHub Releases, with Säädin naming throughout.
 
 ## Building
 
@@ -83,6 +82,8 @@ make flash
 ```
 
 `ESP/Makefile` has targets for the other chips.
+
+GitHub Actions builds these three boards on every push to `main` and every pull request; the binaries are attached to the workflow run as artifacts. Pushing a `v*` tag also publishes them as a GitHub Release.
 
 Libraries are included as git subtrees, so a plain clone is enough; `--recursive` is not needed. Boards can be flashed through the USB test pads, or with a [TC2030-USB-NL](https://www.tag-connect.com/product/tc2030-usb-nl) lead on boards with a Tag-Connect footprint.
 
