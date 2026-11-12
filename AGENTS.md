@@ -33,3 +33,4 @@ Säädin is a fork of Faikout (by RevK / Andrews & Arnold). Firmware only.
 - Run logic on the host where possible instead of on hardware:
   - Use the air-con simulators in `Tools/Simulators` (`faikin-s21`, `faikin-x50`, `s21-control`) to exercise protocol and control behaviour without a board. `make` there builds them; they need `popt`.
   - Where it makes sense, factor control logic (for example the demand PI loop and defrost inference) so it compiles and runs as a plain host unit test, separate from the on-device build.
+  - `make -C ESP test` runs the host tests. It needs `gcc`, and `node` for the test of the graph page's data logic (`ESP/main/graph.js`).

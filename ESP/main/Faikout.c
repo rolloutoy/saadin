@@ -1699,14 +1699,14 @@ static esp_err_t web_favicon(httpd_req_t *req)
     return ESP_OK;
 }
 
-static esp_err_t web_chartjs(httpd_req_t *req)
-{ // Chart.js for the graph page, gzipped at build time (see CMakeLists.txt)
-    extern const char cstart[] asm("_binary_chart_umd_min_js_gz_start");
-    extern const char cend[] asm("_binary_chart_umd_min_js_gz_end");
+static esp_err_t web_graphjs(httpd_req_t *req)
+{ // Script of the graph page, d3 and then graph.js, gzipped at build time (see CMakeLists.txt)
+    extern const char jstart[] asm("_binary_graph_js_gz_start");
+    extern const char jend[] asm("_binary_graph_js_gz_end");
     httpd_resp_set_type(req, "text/javascript");
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
     httpd_resp_set_hdr(req, "Cache-Control", "max-age=604800"); // The page asks for it by firmware version
-    httpd_resp_send(req, cstart, cend - cstart);
+    httpd_resp_send(req, jstart, jend - jstart);
     return ESP_OK;
 }
 
@@ -1770,7 +1770,16 @@ static esp_err_t web_graph_json(httpd_req_t *req)
         }
     }
     httpd_resp_set_type(req, "application/json");
-    out("{\"interval\":%d,\"ago\":[", HEATLOG_INTERVAL);
+    // The demand table in use, as heatctl_settings parses it, for the level lines of the graph. It is the first thing
+    // sent, so it fits the buffer though it is not short.
+    {
+        extern revk_settings_t *revk_settings_find(const char *name, int *index); // ESP32-RevK settings_lib.h
+        heatctl_table_t table;
+        char text[HEATCTL_LEVELS_MAX * 20];
+        heatctl_parse_table(&table, demandtable ?: "", revk_settings_find("demandtable", NULL)->def);
+        heatctl_format_table(&table, text, sizeof(text));
+        out("{\"interval\":%d,\"table\":\"%s\",\"ago\":[", HEATLOG_INTERVAL, text);
+    }
     for (uint32_t i = 0, ago = 0; i < n; i++) {
         const heatlog_sample_t *p = get(i);
         ago = p ? now - p->t : ago > HEATLOG_INTERVAL ? ago - HEATLOG_INTERVAL : 0;
@@ -1829,152 +1838,14 @@ static esp_err_t web_graph_json(httpd_req_t *req)
 }
 
 static esp_err_t web_graph(httpd_req_t *req)
-{ // Graph of the heating log, drawn once from /graph.json
+{ // Graph of the heating log: graph.js draws it in the div from /graph.json
 #ifdef CONFIG_REVK_WEB_AUTH
     if (!web_auth_check(req))
         return ESP_OK;
 #endif
     web_head(req, "Heating graph");
-    revk_web_send(
-        req,
-        "<style>.g{background:white;max-width:1000px;padding:5px;margin-bottom:10px;}</style>"          //
-        "<p id=msg>Loading…</p>"                                                                        //
-        "<p id=zb hidden>Show <button data-s=0>All</button> <button data-s=259200>3 days</button> "     //
-        "<button data-s=86400>1 day</button> "                                                          //
-        "<button data-s=43200>12 h</button> <button data-s=10800>3 h</button></p>"                      //
-        "<p>Refresh <select id=rf><option value=0>Off<option value=15>15 s<option value=30>30 s"        //
-        "<option value=60>1 min<option value=300>5 min</select></p>"                                    //
-        "<div class=g><canvas id=temps></canvas></div><div class=g><canvas id=power></canvas></div>"    //
-        "<div class=g><canvas id=unit></canvas></div><div class=g><canvas id=cop></canvas></div>"       //
-        "<p>One sample every 15 s, kept until a restart. Click a legend entry to show or hide it. "     //
-        "Drag across a chart or ctrl+scroll to zoom in, shift+drag to pan. "                            //
-        "On a phone, pinch to zoom and drag to pan. "                                                   //
-        "Refresh reloads the page at the chosen interval and keeps the range chosen with the buttons. " //
-        "Shading: grey heating off, purple cold weather, yellow no room reading, blue defrost, "        //
-        "green hold after a defrost (demand is not raised), red rest after a defrost loop. "            //
-        "A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint. "        //
-        "Heat request and its integral are watts of heat. The 2 h mean of the heat output, with the "   //
-        "defrosts counted in, should follow the heat request. "                                         //
-        "Heat target is the heat request and the making up, over some hours, for what defrosts cost. "  //
-        "Heat deficit is the heat target less the heat given so far: demand steps up to make it up. "   //
-        "Heat per watt of the demand table is what the controller takes each level to give. "           //
-        "The tooltip also shows the fan setting and quiet outdoor. "                                    //
-        "Heat output and COP are estimates from the fan speed, the unit's own room reading and the "    //
-        "liquid temperature. The 6 h mean COP counts the defrosts in.</p>"                              //
-        "<script src='/chart.js?%s'></script>"                                                          //
-        "<script>"                                                                                      //
-        "var F=%d,U=F?'℉':'℃';"                                                                         //
-        "function tc(v){return F?v*0.018+32:v/100;}"                                                    //
-        "function n(v){return v;}"                                                                      //
-        "var Q=new URLSearchParams(location.search),R=+Q.get('refresh')||0,SP=+Q.get('span')||0;"       //
-        "if(R<0)R=0;if(R&&R<5)R=5;"                                                                     //
-        "function go(){var q=(R?'refresh='+R:'')+(R&&SP?'&':'')+(SP?'span='+SP:'');q=q?'?'+q:'';"       //
-        "if(q==location.search)location.reload();else location.search=q;}"                              //
-        "var rf=document.getElementById('rf');"                                                         //
-        "if(R&&![...rf.options].some(o=>+o.value==R))rf.add(new Option(R+' s',R));"                     //
-        "rf.value=R;rf.onchange=()=>{R=+rf.value;go();};"                                               //
-        "fetch('/graph.json').then(r=>r.json()).then(d=>{"                                              //
-        "var m=document.getElementById('msg'),k=d.ago.length;"                                          //
-        "if(!k){m.textContent='No samples yet, the first comes after 15 s.';return;}"                   //
-        "var now=Date.now(),x=d.ago.map(a=>now-a*1000);"                                                //
-        "m.textContent='Last '+(d.ago[0]>=172800?Math.round(d.ago[0]/8640)/10+' days':Math.round(d.ago[0]/360)/10+' hours')+', to '+new Date(x[k-1]).toLocaleString();" //
-        "function p(a,f){return a.map((v,i)=>({x:x[i],y:v==null?null:f(v)}));}" //
-        "function ds(l,a,f,c,o){return Object.assign({label:l,data:p(a,f),borderColor:c,backgroundColor:c,"
-        "borderWidth:1.5,pointRadius:0,spanGaps:false},o||{});}"           //
-        "function shade(i){var s=d.subs[d.sub[i]],t=d.states[d.state[i]];" //
-        "return s=='defrost'?'#bdf':s=='hold'?'#cfc':s=='rest'?'#fcc':t=='idle'?'#e4e4e4':t=='cold'?'#dcf':"
-        "t=='nosensor'?'#fe9':null;}"                                                                          //
-        "var band={id:'band',beforeDatasetsDraw(c){var a=c.chartArea,g=c.ctx,s=c.scales.x;g.save();"           //
-        "g.beginPath();g.rect(a.left,a.top,a.width,a.height);g.clip();"                                        //
-        "for(var i=0;i<k;i++){var f=shade(i);if(!f)continue;"                                                  //
-        "var x0=s.getPixelForValue(x[i]-d.interval*1000),x1=s.getPixelForValue(x[i]);"                         //
-        "g.fillStyle=f;g.fillRect(x0,a.top,x1-x0+1,a.height);}g.restore();}};"                                 //
-        "function cold(i){return d.states[d.state[i]]=='cold';}"                                               //
-        "function only(a,c){return a.map((v,i)=>cold(i)==c?v:null);}"                                          //
-        "var pw=d.heatw.map((v,i)=>v==null||d.integral[i]==null||cold(i)?null:v-d.integral[i]);"               //
-        "function tune(i){var v=d.kp[i];if(v==null)return '';"                                                 //
-        "return 'kp '+(cold(i)?v/100+' ℃/℃':v+' W/℃')+(d.ti[i]?', ti '+d.ti[i]+' min':', no integral');}"      //
-        "function unit(i){var f=d.fanset[i],q=d.quiet[i];"                                                     //
-        "return (f==null?'':'fan '+['auto',1,2,3,4,5,'quiet'][f])+(q?(f==null?'':', ')+'quiet outdoor':'');}"  //
-        "var mk=[],last=[];for(var i=0;i<k;i++){var t=tune(i),c=+cold(i);if(!t)continue;"                      //
-        "if(last[c]&&last[c]!=t)mk.push(i);last[c]=t;}"                                                        //
-        "var mark={id:'mark',afterDatasetsDraw(c){var a=c.chartArea,g=c.ctx,s=c.scales.x;g.save();"            //
-        "g.beginPath();g.rect(a.left,a.top,a.width,a.height);g.clip();"                                        //
-        "g.strokeStyle=g.fillStyle='#444';g.setLineDash([3,3]);g.font='11px sans-serif';"                      //
-        "mk.forEach(i=>{var v=s.getPixelForValue(x[i]-d.interval*1000);"                                       //
-        "g.beginPath();g.moveTo(v,a.top);g.lineTo(v,a.bottom);g.stroke();g.fillText(tune(i),v+3,a.top+11);});" //
-        "g.restore();}};"                                                                                      //
-        "function time(v){return new Date(v).toLocaleString([],Object.assign({hour:'2-digit',minute:'2-digit'},"
-        "x[k-1]-x[0]>864e5?{weekday:'short'}:{}));}"                                                  //
-        "var cs=[];function sync(e){var s=e.chart.scales.x;"                                          //
-        "cs.forEach(c=>{if(c!=e.chart)c.zoomScale('x',{min:s.min,max:s.max},'none');});}"             //
-        "function span(s){cs.forEach(c=>s?c.zoomScale('x',{min:x[k-1]-s*1000,max:x[k-1]},'none'):"    //
-        "c.resetZoom('none'));}"                                                                      //
-        "var zb=document.getElementById('zb');zb.hidden=false;"                                       //
-        "zb.querySelectorAll('button').forEach(b=>{var s=+b.dataset.s;b.onclick=()=>{SP=s;span(s);};" //
-        "b.hidden=s>0&&s*1000>=x[k-1]-x[0];});"                                                       //
-        "function opt(y){return{animation:false,interaction:{mode:'index',intersect:false},"          //
-        "plugins:{tooltip:{callbacks:{title:t=>time(t[0].parsed.x),footer:t=>[tune(t[0].dataIndex),unit(t[0].dataIndex)]}}," //
-        "zoom:{limits:{x:{min:'original',max:'original',minRange:6e5}},"                                       //
-        "pan:{enabled:true,mode:'x',modifierKey:'shift',onPanComplete:sync},"                                  //
-        "zoom:{wheel:{enabled:true,modifierKey:'ctrl'},pinch:{enabled:true},"                                  //
-        "drag:{enabled:true,threshold:5,borderColor:'#06c',borderWidth:1,"                                     //
-        "backgroundColor:'rgba(0,102,204,.15)'},mode:'x',onZoomComplete:sync}}},"                              //
-        "scales:Object.assign({x:{type:'linear',min:x[0]-d.interval*1000,max:x[k-1],"                          //
-        "ticks:{callback:time,maxTicksLimit:12}}},y)};}"                                                       //
-        "cs.push(new Chart(document.getElementById('temps'),{type:'line',plugins:[band,mark],data:{datasets:[" //
-        "ds('Room',d.room,tc,'#c00'),"                                                                         //
-        "ds('Room, smoothed',d.smoothed,tc,'#e99',{borderWidth:1}),"                                           //
-        "ds('Target',d.target,tc,'#080',{stepped:true}),"                                                      //
-        "ds('Effective target',d.effective,tc,'#0b0',{stepped:true,borderDash:[4,4]}),"                        //
-        "ds('Setpoint',d.setpoint,tc,'#888',{stepped:true,hidden:true}),"                                      //
-        "ds('Setpoint integral',only(d.integral,true),tc,'#a6a',{stepped:true,hidden:true}),"                  //
-        "ds('Outdoor',d.outdoor,tc,'#08c',{hidden:true})]},"                                                   //
-        "options:opt({y:{title:{display:true,text:U}}})}));"                                                   //
-        "var hs=[0],hn=[0];for(var i=0;i<k;i++){var v=d.heatout[i];"                                           //
-        "hs.push(hs[i]+(v==null?0:v));hn.push(hn[i]+(v==null?0:1));}"                                          //
-        "var hm=d.ago.map((a,i)=>{var j=Math.max(0,i+1-7200/d.interval),c=hn[i+1]-hn[j];"                      //
-        "return c<1800/d.interval?null:Math.round((hs[i+1]-hs[j])/c);});"                                      //
-        "cs.push(new Chart(document.getElementById('power'),{type:'line',plugins:[band,mark],data:{datasets:[" //
-        "ds('Heat request',d.heatw,n,'#f80'),"                                                                 //
-        "ds('Heat target',d.heattarget,n,'#c50',{borderWidth:1}),"                                             //
-        "ds('Integral',only(d.integral,false),n,'#fb6',{borderDash:[4,4]}),"                                   //
-        "ds('Proportional',pw,n,'#0aa',{borderWidth:1}),"                                                      //
-        "ds('Heat output, 2 h mean',hm,n,'#080'),"                                                             //
-        "ds('Heat deficit',d.deficit,n,'#a0a',{yAxisID:'o',borderWidth:1}),"                                   //
-        "ds('Demand',d.demand,n,'#06c',{stepped:true,yAxisID:'d'})]},"                                         //
-        "options:opt({y:{title:{display:true,text:'W'}},"                                                      //
-        "d:{position:'right',min:0,max:100,title:{display:true,text:'%%'},grid:{drawOnChartArea:false}},"      //
-        "o:{position:'right',display:'auto',title:{display:true,text:'Deficit, Wh'},"                          //
-        "grid:{drawOnChartArea:false}}})}));"                                                                  //
-        "cs.push(new Chart(document.getElementById('unit'),{type:'line',plugins:[band,mark],data:{datasets:["  //
-        "ds('Liquid',d.liquid,tc,'#a0a'),"                                                                     //
-        "ds('Unit room',d.intake,tc,'#c60'),"                                                                  //
-        "ds('Compressor',d.comp,n,'#555',{yAxisID:'h'}),"                                                      //
-        "ds('Fan',d.fan,n,'#0a0',{yAxisID:'f'})]},"                                                            //
-        "options:opt({y:{title:{display:true,text:U}},"                                                        //
-        "h:{position:'right',min:0,title:{display:true,text:'Hz'},grid:{drawOnChartArea:false}},"              //
-        "f:{position:'right',min:0,title:{display:true,text:'rpm'},grid:{drawOnChartArea:false}}})}));"        //
-        "var cop=d.heatout.map((v,i)=>v==null||d.power[i]==null||d.power[i]<100||d.subs[d.sub[i]]=='defrost'?" //
-        "null:Math.round(v/d.power[i]*100)/100);"                                                              //
-        "var W=21600/d.interval,M=1800/d.interval,ph=[0],pp=[0],pn=[0];for(var i=0;i<k;i++){"                  //
-        "var o=d.heatout[i]!=null&&d.power[i]!=null;ph.push(ph[i]+(o?d.heatout[i]:0));"                        //
-        "pp.push(pp[i]+(o?d.power[i]:0));pn.push(pn[i]+(o?1:0));}"                                             //
-        "var cm=d.ago.map((a,i)=>{var j=Math.max(0,i+1-W),e=pp[i+1]-pp[j];"                                    //
-        "return pn[i+1]-pn[j]<M||e<=0?null:Math.round((ph[i+1]-ph[j])/e*100)/100;});"                          //
-        "cs.push(new Chart(document.getElementById('cop'),{type:'line',plugins:[band,mark],data:{datasets:["   //
-        "ds('Heat output, estimated',d.heatout,n,'#080'),"                                                     //
-        "ds('Power',d.power,n,'#c00'),"                                                                        //
-        "ds('COP',cop,n,'#8bf',{yAxisID:'c',borderWidth:1}),"                                                  //
-        "ds('Heat per watt of the demand table',d.scale,v=>v/100,'#a0a',{yAxisID:'c',stepped:true}),"          //
-        "ds('COP, 6 h mean',cm,n,'#06c',{yAxisID:'c'})]},"                                                     //
-        "options:opt({y:{title:{display:true,text:'W'}},"                                                      //
-        "c:{position:'right',min:0,max:10,title:{display:true,text:'COP'},grid:{drawOnChartArea:false}}})}));" //
-        "if(SP&&SP*1000<x[k-1]-x[0])span(SP);"                                                                 //
-        "}).catch(e=>{document.getElementById('msg').textContent='Could not load the log: '+e;})"              //
-        ".finally(()=>{if(R)setTimeout(go,R*1000);});"                                                         //
-        "</script>",
-        revk_version, fahrenheit);
+    revk_web_send(req, "<div id=graph></div><script>var F=%d;</script><script src='/graph.js?%s'></script>", fahrenheit,
+                  revk_version);
     return revk_web_foot(req, 1, websettings, NULL);
 }
 
@@ -3921,7 +3792,7 @@ void app_main()
                 revk_register_ws_uri(webserver, "/status", web_status);
                 revk_register_get_uri(webserver, "/graph", web_graph);
                 revk_register_get_uri(webserver, "/graph.json", web_graph_json);
-                revk_register_get_uri(webserver, "/chart.js", web_chartjs);
+                revk_register_get_uri(webserver, "/graph.js", web_graphjs);
                 revk_register_get_uri(webserver, "/common/basic_info", legacy_web_get_basic_info);
                 revk_register_get_uri(webserver, "/aircon/get_model_info", legacy_web_get_model_info);
                 revk_register_get_uri(webserver, "/aircon/get_control_info", legacy_web_get_control_info);

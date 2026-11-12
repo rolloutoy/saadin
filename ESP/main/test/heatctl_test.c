@@ -143,6 +143,16 @@ static void test_table(void)
         CHECK(name, heatctl_parse_table(&t, bad[i], DEMAND_TABLE) && t.n == 11 && NEAR(t.level[10].watts, 2470));
     }
     CHECK("table bad uses the given default", heatctl_parse_table(&t, "x", "30:1,100:2") && t.n == 2);
+    char buf[100];
+    heatctl_parse_table(&t, "", DEMAND_TABLE);
+    CHECK("table as text is the default again",
+          heatctl_format_table(&t, buf, sizeof(buf)) == (int)strlen(DEMAND_TABLE) && !strcmp(buf, DEMAND_TABLE));
+    heatctl_parse_table(&t, " 30:100, 60:300.5 ,100q:800,100:900", DEMAND_TABLE);
+    CHECK("table as text",
+          heatctl_format_table(&t, buf, sizeof(buf)) == 32 && !strcmp(buf, "30:100,60:300.5,100q:800,100:900"));
+    CHECK("table as text, cut short", heatctl_format_table(&t, buf, 10) == 32 && !strcmp(buf, "30:100,60"));
+    t.n = 0;
+    CHECK("table as text, empty", heatctl_format_table(&t, buf, sizeof(buf)) == 0 && !*buf);
 }
 
 static void test_curve(void)

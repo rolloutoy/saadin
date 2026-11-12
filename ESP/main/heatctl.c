@@ -63,6 +63,20 @@ static const char *parse_table(heatctl_table_t *t, const char *s)
     return NULL;
 }
 
+int heatctl_format_table(const heatctl_table_t *t, char *buf, size_t len)
+{
+    int n = 0;
+    if (len)
+        *buf = 0;
+    for (int i = 0; i < t->n; i++) {
+        const heatctl_level_t *r = &t->level[i];
+        size_t left = (size_t)n < len ? len - n : 0; // Nothing more is written once buf is full
+        n += snprintf(left ? buf + n : NULL, left, "%s%u%s:%g", i ? "," : "", r->demand,
+                      r->demand == 100 && r->quiet ? "q" : "", r->watts);
+    }
+    return n;
+}
+
 const char *heatctl_parse_table(heatctl_table_t *t, const char *s, const char *def)
 {
     const char *err = NULL;

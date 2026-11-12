@@ -4,6 +4,17 @@ Every user-visible change in Säädin since it was forked from upstream Faikout,
 
 ## 2026-11-12
 
+- The heating graph is drawn anew, as strips stacked on one time axis in place of four charts with up to three scales each. Each strip has one scale and all are the same width, so a defrost lines up down the page.
+  - The strips are in five groups. *Room*: room temperature, target and effective target, and the outdoor temperature, which is now always shown. *Heat wanted and given*: heat request, integral, heat target, the demand level as the heat it is taken to give, heat output and its 2 hour mean, and the heat deficit. *Compressor side*: the demand level, power with the level's watts in `demand.table`, and compressor frequency. *Air side*: liquid temperature, the unit's room reading and fan speed. *Efficiency*: COP and its 6 hour mean.
+  - The demand level is shown by name (`95`, `100q`, `100`) in a band, in place of the demand % line, which could not tell 100% with quiet outdoor from plain 100%.
+  - There is one room temperature line, the reading as the controller sees it after `auto.smooth`. The raw reading is still in `/graph.json` as `room`.
+  - Three new charts sum up the range shown: the power drawn at each demand level against `demand.table`, the COP of each defrost cycle by outdoor temperature, and the room temperature through each defrost.
+  - A strip at the top shows the whole log: drag across it to choose the range. On the strips, a drag now pans (it used to zoom in on the range dragged across, with shift+drag to pan), ctrl+scroll or a pinch zooms as before, and a double-click shows the whole log.
+  - Moving the pointer over a strip shows the values at that moment in every legend, and the state, demand level, fan setting, kp and ti in a line above the strips, in place of the tooltip.
+  - *Refresh* now loads the log again without reloading the page, and keeps the range shown, a zoom made by dragging included.
+  - *Saved log* shows a `/graph.json` file saved earlier in place of the device's log.
+  - `/graph.json` has a new field `table`: the demand table in use, as `demand.table` is written.
+  - The page is now drawn with [d3](https://d3js.org) 7.9.0 (ISC licence), built into the firmware, in place of Chart.js, chartjs-plugin-zoom and Hammer.js. The firmware is about 15 KB larger.
 - Demand control now works on heat, not electrical power. The PI loop's output, now called the heat request (was heat wanted), is in watts of heat. Every second the controller adds the heat request less the estimated heat output to the heat deficit, and steps demand between the levels around the heat request so that the deficit stays near nothing. Before, it used the highest level whose watts in `demand.table` were at or below the heat wanted, so with the big gaps at the top (95% → 100% with quiet outdoor → plain 100% draw about 680 → 1350 → 3000 W) the room had to stay off target for hours before demand moved a level.
   - Heat not given during a defrost and the hold after it is made up over the next two hours or so: it is added to the heat request to give the heat target, so more defrosts mean more heat between them.
   - `pid.kp` is now watts of heat per degree, and its default is 900 (was 300 electrical watts). **A device with its own `pid.kp` keeps the number, which is now about a third as strong: multiply it by 3.**

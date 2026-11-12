@@ -2,6 +2,7 @@
 // Pure logic, no ESP-IDF calls, so it also builds as a host unit test (see test/heatctl_test.c)
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 #define HEATCTL_LEVELS_MAX 12
@@ -167,6 +168,10 @@ typedef struct {
 // Parse a demand table "demand:watts,..." ("100q" is 100 with QO). Empty means def, the default (demand.table's
 // default in settings.def). Returns NULL if OK, else an error, and the table is then def.
 const char *heatctl_parse_table(heatctl_table_t *t, const char *s, const char *def);
+
+// Write the table to buf as "demand:watts,..." ("100q" for 100 with QO), as heatctl_parse_table reads it. Returns the
+// length of the text, which is len or more if buf was too short for all of it.
+int heatctl_format_table(const heatctl_table_t *t, char *buf, size_t len);
 
 // Parse a target curve "outdoor:offset,...". Empty means no offset. Returns NULL if OK, else an error, and the curve
 // is then empty.
