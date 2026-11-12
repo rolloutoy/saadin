@@ -107,6 +107,9 @@ These manuals come from upstream and still use the Faikout name:
 
 As required by GPL-3.0 §5(a), this section lists how Säädin differs from upstream Faikout.
 
+**2026-11-12**
+- The mean COP on the heating graph is now over the last 6 hours instead of the last hour. It still shows once there is half an hour of samples.
+
 **2026-11-11**
 - Heating control can set the fan by outdoor temperature. `demand.fan`, `idle.fan` and `cold.fan` have a new choice *Outdoor*, which takes the fan from the new settings `demand.fanmap`, `idle.fanmap` and `cold.fanmap` (`outdoor:fan,...`, for example `-5:5,0:4,5:3`). Each fan is then kept for `fan.hold` (default 60 minutes) at least, so it does not flap. `demand.fan` now defaults to *Outdoor*, with the map `-20:4,-6:3,1:2,7:1`: fan 4 below −6 °C, 3 from −6 °C, 2 from 1 °C and 1 from 7 °C. It used to default to leaving the fan alone; set `demand.fan` to *Leave* for that. `cold.fan` now defaults to fan 4 and `idle.fan` to auto, also in place of leaving the fan alone.
 - The heating graph keeps 5 days instead of 3 on boards with PSRAM, which takes about 1.3 MB of it, and has a *3 days* range button.
