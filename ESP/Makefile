@@ -92,6 +92,7 @@ menuconfig:
 test:	main/test/heatctl_test main/test/heatlog_test
 	./main/test/heatctl_test
 	./main/test/heatlog_test
+	node main/test/graph_test.js
 
 # The demand.table default from settings.def, so the test runs on the real default
 DEMAND_TABLE := $(shell sed -n 's/^s[[:space:]]*demand\.table[[:space:]]*\("[^"]*"\).*/\1/p' main/settings.def)

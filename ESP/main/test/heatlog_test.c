@@ -40,6 +40,9 @@ static heatlog_in_t in_none(void)
         .intake = NAN,
         .heatout = NAN,
         .integral = NAN,
+        .deficit = NAN,
+        .heattarget = NAN,
+        .scale = NAN,
         .kp = NAN,
         .ti = NAN,
         .state = HEATCTL_OFF,
@@ -68,6 +71,9 @@ static heatlog_in_t in_demand(void)
         .intake = 23.5,
         .heatout = 1700,
         .integral = 350,
+        .deficit = 120,
+        .heattarget = 700,
+        .scale = 3,
         .kp = 300,
         .ti = 90,
         .state = HEATCTL_DEMAND,
@@ -109,6 +115,7 @@ static void test_one(void)
         in.fan = first ? 750 : 0; // The fan stops in a defrost
         in.intake = first ? 23.5 : 22;
         in.heatout = first ? 1700 : -100;
+        in.heattarget = first ? 700 : 1000;
         in.target = now <= I - 5 ? 21 : 21.5;
         in.demand = now <= I - 5 ? 70 : 80;
         in.fanset = now <= I - 5 ? 3 : 5;
@@ -127,6 +134,7 @@ static void test_one(void)
     CHECK("fan is the mean", out[0].fan == 250);
     CHECK("intake is the mean", out[0].intake == 2250);
     CHECK("heat output is the mean", out[0].heatout == 500);
+    CHECK("heat target is the mean", out[0].heattarget == 900);
     CHECK("outdoor negative", out[0].outdoor == -500);
     CHECK("target is the last", out[0].target == 2150);
     CHECK("demand is the last", out[0].demand == 80);
@@ -153,6 +161,7 @@ static void test_unknown(void)
           out[0].outdoor == HEATLOG_NONE && out[0].heatw == HEATLOG_NONE && out[0].power == HEATLOG_NONE &&
               out[0].target == HEATLOG_NONE && out[0].effective == HEATLOG_NONE && out[0].setpoint == HEATLOG_NONE &&
               out[0].demand == HEATLOG_NONE && out[0].smoothed == HEATLOG_NONE && out[0].integral == HEATLOG_NONE &&
+              out[0].deficit == HEATLOG_NONE && out[0].heattarget == HEATLOG_NONE && out[0].scale == HEATLOG_NONE &&
               out[0].kp == HEATLOG_NONE && out[0].ti == HEATLOG_NONE && out[0].liquid == HEATLOG_NONE &&
               out[0].comp == HEATLOG_NONE && out[0].fan == HEATLOG_NONE && out[0].intake == HEATLOG_NONE &&
               out[0].heatout == HEATLOG_NONE);
@@ -188,6 +197,8 @@ static void test_tuning(void)
     for (int i = 0; i < HEATLOG_INTERVAL; i++, now++) {
         in.smoothed = i < I / 3 ? 21 : 21.3;
         in.integral = i < I - 5 ? 300 : 360.4;
+        in.deficit = i < I - 5 ? 100 : -42.4;
+        in.scale = i < I - 5 ? 3 : 2.876;
         in.kp = i < I - 5 ? 300 : 400;
         heatlog_add(&l, &in, now);
     }
@@ -201,6 +212,8 @@ static void test_tuning(void)
     CHECK("tuning two samples", heatlog_get(&l, out, 4) == 2);
     CHECK("smoothed room is the mean", out[0].smoothed == 2120);
     CHECK("integral is the last, in W", out[0].integral == 360);
+    CHECK("heat deficit is the last, in Wh", out[0].deficit == -42);
+    CHECK("heat per watt of the table is the last, in 0.01", out[0].scale == 288);
     CHECK("kp is the last", out[0].kp == 400);
     CHECK("ti in minutes", out[0].ti == 90);
     CHECK("cold integral in 0.01 °C", out[1].state == HEATCTL_COLD && out[1].integral == 2425);

@@ -2,6 +2,7 @@
 // Build and run with: make -C ESP test
 
 #include <math.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include "../heatctl.h"
@@ -38,7 +39,8 @@ static heatctl_params_t params(void)
         .demand_start = 60,
         .demand_rate = 600,
         .demand_minrun = 30 * 60,
-        .kp = 300,
+        .cop = 3,
+        .kp = 900,
         .ti = 90 * 60,
         .idle_temp = 16,
         .idle_over = 0.5,
@@ -68,10 +70,10 @@ static heatctl_params_t params(void)
     return p;
 }
 
-// Unit on in heat, room at target, mild outside, liquid hot (heating)
+// Unit on in heat, room at target, mild outside, liquid hot (heating), heat output not known
 static heatctl_in_t inputs(void)
 {
-    return (heatctl_in_t){.enabled = 1, .power = 1, .heat = 1, .room = 21, .outdoor = 5, .liquid = 35};
+    return (heatctl_in_t){.enabled = 1, .power = 1, .heat = 1, .room = 21, .outdoor = 5, .liquid = 35, .heatout = NAN};
 }
 
 typedef struct {
@@ -142,6 +144,16 @@ static void test_table(void)
         CHECK(name, heatctl_parse_table(&t, bad[i], DEMAND_TABLE) && t.n == 11 && NEAR(t.level[10].watts, 2470));
     }
     CHECK("table bad uses the given default", heatctl_parse_table(&t, "x", "30:1,100:2") && t.n == 2);
+    char buf[100];
+    heatctl_parse_table(&t, "", DEMAND_TABLE);
+    CHECK("table as text is the default again",
+          heatctl_format_table(&t, buf, sizeof(buf)) == (int)strlen(DEMAND_TABLE) && !strcmp(buf, DEMAND_TABLE));
+    heatctl_parse_table(&t, " 30:100, 60:300.5 ,100q:800,100:900", DEMAND_TABLE);
+    CHECK("table as text",
+          heatctl_format_table(&t, buf, sizeof(buf)) == 32 && !strcmp(buf, "30:100,60:300.5,100q:800,100:900"));
+    CHECK("table as text, cut short", heatctl_format_table(&t, buf, 10) == 32 && !strcmp(buf, "30:100,60"));
+    t.n = 0;
+    CHECK("table as text, empty", heatctl_format_table(&t, buf, sizeof(buf)) == 0 && !*buf);
 }
 
 static void test_curve(void)
@@ -169,11 +181,11 @@ static void test_off_and_start(void)
     sim_t x;
     start(&x);
     CHECK("start: DEMAND", x.out.state == HEATCTL_DEMAND && x.out.sub == HEATCTL_SUB_NONE && x.out.changed);
-    CHECK("start: integral at demand.start level", NEAR(x.out.integral, 400));
+    CHECK("start: integral at the heat of the demand.start level", NEAR(x.out.integral, 1200));
     CHECK("start: demand 60 with QO", x.out.demand == 60 && x.out.quiet);
     CHECK("start: setpoint demand.set", NEAR(x.out.setpoint, 30));
     CHECK("start: target", NEAR(x.out.target, 21));
-    CHECK("start: heat wanted", NEAR(x.out.heatw, 400));
+    CHECK("start: heat request", NEAR(x.out.heatw, 1200));
     CHECK("start: fan left alone", x.out.fan == HEATCTL_FAN_LEAVE);
 
     x.in.heat = 0;
@@ -193,13 +205,13 @@ static void test_off_and_start(void)
     x.in.room = 19;
     run(&x, 1);
     run(&x, 3600);
-    CHECK("integral grew", x.out.integral > 400);
+    CHECK("integral grew", x.out.integral > 1200);
     x.in.enabled = 0;
     run(&x, 1);
     x.in.enabled = 1;
     run(&x, 1);
     CHECK("restart: DEMAND", x.out.state == HEATCTL_DEMAND && x.out.changed);
-    CHECK("restart: fresh integral", NEAR(x.out.integral, 400));
+    CHECK("restart: fresh integral", NEAR(x.out.integral, 1200));
 }
 
 // IDLE is for when even the lowest level is too much: an overshoot at a higher level steps demand down, not off
@@ -249,7 +261,7 @@ static void test_demand_idle(void)
     x.in.room = 20.9;
     t = run_until(&x, HEATCTL_DEMAND, -1, 4000);
     CHECK("IDLE -> DEMAND after idle.min", t == 1800);
-    CHECK("after IDLE: integral at lowest level", NEAR(x.out.integral, 270));
+    CHECK("after IDLE: integral at the heat of the lowest level", NEAR(x.out.integral, 810));
     CHECK("after IDLE: setpoint demand.set", NEAR(x.out.setpoint, 30));
 
     start(&x);
@@ -297,7 +309,7 @@ static void test_cold(void)
     }
     CHECK("COLD -> DEMAND", left && x.out.state == HEATCTL_DEMAND);
     CHECK("COLD -> DEMAND after cold.hold above cold.exit", crossed && x.now - crossed == 900);
-    CHECK("after COLD: integral at 95% level", NEAR(x.out.integral, 640));
+    CHECK("after COLD: integral at 95% level", NEAR(x.out.integral, 1920));
 
     // Unknown outdoor never enters COLD
     start(&x);
@@ -601,7 +613,7 @@ static void test_hold_cap(int full, int max)
         CHECK("cold room reaches plain 100", x.out.demand == 100 && !x.out.quiet);
     else
         CHECK("demand.full off tops out at 100q", x.out.demand == 100 && x.out.quiet);
-    CHECK("anti-windup: integral at most top level", x.out.integral <= (full ? 2470 : 1510) + 1e-3f);
+    CHECK("anti-windup: integral at most top level", x.out.integral <= (full ? 7410 : 4530) + 1e-3f);
     x.in.liquid = -20;
     run(&x, 1);
     CHECK("defrost at 100: QO on", x.out.sub == HEATCTL_SUB_DEFROST && x.out.demand == 100 && x.out.quiet);
@@ -643,7 +655,7 @@ static void test_watchdog(int defrosts)
     int t = 899 + run_until(&x, HEATCTL_DEMAND, -1, 4000);
     CHECK("rest lasts defrost.rest", t == 900);
     CHECK("after rest: the fan of the state", x.out.fan == 3);
-    CHECK("after rest: integral at lowest level", NEAR(x.out.integral, 270));
+    CHECK("after rest: integral at lowest level", NEAR(x.out.integral, 810));
 }
 
 // defrost.watchdog off (the default): no rest however many defrosts
@@ -681,7 +693,7 @@ static void test_stale(void)
     sim_t x;
     start(&x);
     run(&x, 100);
-    x.in.room = 19; // Heat wanted would rise
+    x.in.room = 19; // Heat request would rise
     run(&x, 50);
     x.in.room = NAN;
     run(&x, 1);
@@ -699,7 +711,7 @@ static void test_stale(void)
     x.in.room = 22;
     run(&x, 1);
     CHECK("reading back: DEMAND", x.out.state == HEATCTL_DEMAND && x.out.changed);
-    CHECK("reading back: fresh integral", NEAR(x.out.integral, 400));
+    CHECK("reading back: fresh integral", NEAR(x.out.integral, 1200));
 
     // No reading at all from the start
     start(&x);
@@ -728,7 +740,7 @@ static void test_gap(void)
     x.in.room = 19;
     x.now += 3600;
     x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
-    CHECK("long gap: integral grows by at most a minute", x.out.integral - 400 <= 300 * 2 * 60 / 5400.0 + 0.01);
+    CHECK("long gap: integral grows by at most a minute", x.out.integral - 1200 <= 900 * 2 * 60 / 5400.0 + 0.01);
 }
 
 static void test_rate_and_levels(void)
@@ -761,7 +773,7 @@ static void test_rate_and_levels(void)
     x.in.room = 23;
     run(&x, 6 * 3600);
     CHECK("warm room: lowest level", x.out.demand == 40 && x.out.state == HEATCTL_DEMAND);
-    CHECK("anti-windup: integral not below lowest level", x.out.integral >= 220 - 1e-3f);
+    CHECK("anti-windup: integral not below lowest level", x.out.integral >= 810 - 1e-3f);
     x.in.room = 21;
     run(&x, 1200);
     CHECK("back at target: demand leaves the lowest level", x.out.demand > 40);
@@ -938,7 +950,8 @@ static float model_watts(const sim_t *x)
 
 // Room model: first-order (one node, capacity C, loss UA x (room - outdoor), COP 3), or the two-node house from the
 // heat-model PoC (room air 2 MJ/K, building mass 40 MJ/K, COP 3.3 + 0.07 x outdoor, 10 min heat pump lag, BLE in 0.1
-// steps). Checks the loop settles without hunting between DEMAND and IDLE.
+// steps). Checks the loop settles without hunting between DEMAND and IDLE. two_node 2 is that house with the heat
+// output known to the controller and a 9 min defrost every hour, which alone swings that room by a degree.
 static void test_room_model(float outdoor, float capacity, int two_node)
 {
     sim_t x;
@@ -950,6 +963,12 @@ static void test_room_model(float outdoor, float capacity, int two_node)
     float lo = 99, hi = -99;
     for (uint32_t i = 0; i < 72 * 3600; i++) {
         float w = model_watts(&x);
+        if (two_node == 2) {
+            x.in.liquid = (i % 3600 >= 3600 - 540) ? -20 : 35;
+            if (x.in.liquid < 0)
+                w = q = 0;
+            x.in.heatout = q;
+        }
         if (two_node) {
             q += (w * cop - q) / 600;
             float droom = (500 * (mass - room) + 40 * (outdoor - room) + q) / 2e6f;
@@ -972,12 +991,188 @@ static void test_room_model(float outdoor, float capacity, int two_node)
     }
     char name[120];
     if (two_node)
-        snprintf(name, sizeof(name), "two-node house outdoor %.0f C: %d IDLE, room %.2f..%.2f", outdoor, idles, lo, hi);
+        snprintf(name, sizeof(name), "two-node house%s outdoor %.0f C: %d IDLE, room %.2f..%.2f",
+                 two_node == 2 ? " with defrosts" : "", outdoor, idles, lo, hi);
     else
         snprintf(name, sizeof(name), "first-order room outdoor %.0f C %.0f MJ/K: %d IDLE, room %.2f..%.2f", outdoor,
                  capacity / 1e6, idles, lo, hi);
-    CHECK(name, idles == 0 && lo > 20.5f && hi < 21.5f);
+    CHECK(name, idles == 0 && lo > (two_node == 2 ? 20 : 20.5f) && hi < (two_node == 2 ? 22.3f : 21.5f));
     printf("%s\n", name);
+}
+
+// Heat (W) the unit gives for the controller's outputs. Not the table times demand.cop: the controller is to go by
+// the heat it is told of
+static float model_heat(const sim_t *x)
+{
+    if (x->out.state != HEATCTL_DEMAND)
+        return 0;
+    if (x->out.demand == 100)
+        return x->out.quiet ? 3900 : 6800;
+    return model_watts(x) * 3.4f;
+}
+
+typedef struct {
+    float got, request; // Mean heat given and requested (W)
+    int changes;        // Demand changes
+    uint32_t shortest;  // Shortest time between two of them (s)
+    uint32_t full;      // Time at plain 100 (s)
+    uint8_t lo, hi;     // Lowest and highest demand
+} account_t;
+
+// Run for secs. The heat the unit gives is fed back (known), or it is not and the unit gives the table's watts times
+// demand.cop. A defrost of outage seconds ends every cadence seconds (0 for none).
+static account_t run_heat(sim_t *x, uint32_t secs, int known, uint32_t cadence, uint32_t outage)
+{
+    account_t a = {.lo = 255, .shortest = UINT32_MAX};
+    double got = 0, request = 0;
+    int level = x->s.level;
+    uint32_t at = 0;
+    for (uint32_t i = 0; i < secs; i++) {
+        uint8_t defrost = (cadence && i % cadence >= cadence - outage);
+        float heat = defrost ? 0 : known ? model_heat(x) : model_watts(x) * x->p.cop;
+        x->in.liquid = defrost ? -20 : 35;
+        x->in.heatout = known ? heat : NAN;
+        run(x, 1);
+        got += heat;
+        request += x->out.heatw;
+        if (x->s.level != level) {
+            if (at && x->now - at < a.shortest)
+                a.shortest = x->now - at;
+            at = x->now;
+            level = x->s.level;
+            a.changes++;
+        }
+        if (x->out.demand < a.lo)
+            a.lo = x->out.demand;
+        if (x->out.demand > a.hi)
+            a.hi = x->out.demand;
+        if (x->out.demand == 100 && !x->p.table.level[x->s.level].quiet)
+            a.full++;
+    }
+    a.got = got / secs;
+    a.request = request / secs;
+    return a;
+}
+
+// Heat request held still: P only, on a room under the target
+static void start_heat(sim_t *x, float room)
+{
+    start(x);
+    x->p.ti = 0;
+    x->p.smooth = 0;
+    x->in.room = room;
+}
+
+// Heat deficit: demand steps between the levels around the heat request, so the heat given is the heat request
+static void test_heat_deficit(void)
+{
+    sim_t x;
+    start_heat(&x, 19);
+    run_heat(&x, 3 * 3600, 1, 0, 0);
+    account_t a = run_heat(&x, 48 * 3600, 1, 0, 0);
+    printf("heat deficit: request %.0f W, given %.0f W, demand %d..%d, %d changes\n", a.request, a.got, a.lo, a.hi,
+           a.changes);
+    CHECK("heat deficit: request lies between the heat of 95 and of 100q", a.request > 2300 && a.request < 3800);
+    CHECK("heat deficit: the heat given is the heat request", fabsf(a.got - a.request) < 0.03f * a.request);
+    CHECK("heat deficit: from the two levels around it", a.lo == 95 && a.hi == 100 && !a.full);
+    CHECK("heat deficit: demand changes at most once per demand.rate", a.changes > 2 && a.shortest >= 600);
+    // 3.4 W of heat per W of the table at 95, 2.6 at 100q
+    CHECK("heat deficit: heat per watt of the table learnt from the unit", x.out.scale > 2.6 && x.out.scale < 3.4);
+    CHECK("heat deficit: no defrost, so the heat target is the heat request", NEAR(x.out.heattarget, x.out.heatw));
+
+    // The heat output is not known: the table times demand.cop stands in for it
+    start_heat(&x, 19);
+    run_heat(&x, 3 * 3600, 0, 0, 0);
+    a = run_heat(&x, 48 * 3600, 0, 0, 0);
+    printf("heat deficit, heat not known: request %.0f W, given %.0f W, demand %d..%d\n", a.request, a.got, a.lo, a.hi);
+    CHECK("heat not known: the table's heat is the heat request", fabsf(a.got - a.request) < 0.03f * a.request);
+    CHECK("heat not known: from the two levels around it", a.lo == 95 && a.hi == 100 && !a.full);
+    CHECK("heat not known: heat per watt of the table is demand.cop", NEAR(x.out.scale, 3));
+
+    // A unit that gives more or less heat than demand.cop says is no matter
+    for (int i = 0; i < 2; i++) {
+        start_heat(&x, 19);
+        x.p.cop = i ? 4.5 : 2;
+        run_heat(&x, 3 * 3600, 1, 0, 0);
+        a = run_heat(&x, 48 * 3600, 1, 0, 0);
+        CHECK(i ? "demand.cop high: the heat given is the heat request"
+                : "demand.cop low: the heat given is the heat request",
+              fabsf(a.got - a.request) < 0.03f * a.request);
+    }
+}
+
+// Defrosts cost heat, and the more of them the more: the account makes it up, here with plain 100 after a defrost.
+// Not all of it, as demand only goes up from a level that itself gives too little: the rest is for the integral
+static void test_heat_deficit_defrost(void)
+{
+    account_t a[2];
+    for (int i = 0; i < 2; i++) {
+        sim_t x;
+        start_heat(&x, 18.6);
+        uint32_t cadence = i ? 90 * 60 : 60 * 60;
+        run_heat(&x, 3 * cadence, 1, cadence, 12 * 60);
+        a[i] = run_heat(&x, 48 * 3600, 1, cadence, 12 * 60);
+        printf(
+            "heat deficit, defrost every %d min: request %.0f W, given %.0f W, demand %d..%d, plain 100 for %d min\n",
+            (int)cadence / 60, a[i].request, a[i].got, a[i].lo, a[i].hi, (int)a[i].full / 60);
+        CHECK(i ? "defrost every 90 min: the heat given is the heat request"
+                : "defrost every 60 min: the heat given is the heat request",
+              fabsf(a[i].got - a[i].request) < 0.05f * a[i].request);
+        CHECK("defrosts: demand changes at most once per demand.rate", a[i].shortest >= 600);
+        CHECK("defrosts: the heat target is over the heat request, to make up for them",
+              x.out.heattarget > x.out.heatw + 100 && x.out.heattarget < x.out.heatw + 1500);
+    }
+    CHECK("more defrosts take more plain 100", a[0].full > a[1].full + 3600);
+}
+
+// A big change of the heat request takes demand several levels at once, as far as the heat the unit gives now says
+static void test_heat_deficit_jump(void)
+{
+    sim_t x;
+    start_heat(&x, 21);
+    for (int i = 0; i < 2 * 3600; i++) { // Mild weather, 5 W of heat per W: even the lowest level gives too much
+        x.in.heatout = model_watts(&x) * 5;
+        run(&x, 1);
+    }
+    CHECK("jump: at the lowest level", x.out.demand == 40);
+    x.in.room = 19.9; // 2190 W requested: 60% gives 2000 W and 70% 2325 W (by demand.cop, 95% would give 1920 W)
+    for (int i = 0; i < 3600 && x.out.demand == 40; i++) {
+        x.in.heatout = model_watts(&x) * 5;
+        run(&x, 1);
+    }
+    CHECK("jump up: to the level under the heat request", x.out.demand == 60);
+    x.in.room = 23; // Far too warm: nothing requested
+    for (int i = 0; i < 1800 && x.out.demand == 60; i++) {
+        x.in.heatout = model_watts(&x) * 5;
+        run(&x, 1);
+    }
+    CHECK("jump down: to the lowest level", x.out.demand == 40);
+}
+
+// The top level cannot give the heat request: the integral stops, no deficit builds, and demand comes down soon after
+// the room is over the target
+static void test_heat_deficit_top(void)
+{
+    sim_t x;
+    start(&x);
+    x.p.demand_full = 0;
+    x.in.room = 20;
+    run_heat(&x, 8 * 3600, 1, 0, 0);
+    float i8 = x.out.integral;
+    CHECK("top: at the top level", x.out.demand == 100 && x.out.quiet);
+    run_heat(&x, 8 * 3600, 1, 0, 0);
+    // It stops a little over, as it ran on while the heat per watt of the table was still being learnt
+    CHECK("top: the integral stops where the heat request is what the top level gives",
+          fabsf(x.out.integral - i8) < 20 && fabsf(x.out.heatw - 3900) < 250);
+    CHECK("top: no heat deficit that the top level cannot make up", x.out.deficit <= 0.01);
+    x.in.room = 21.5;
+    int t = 0;
+    while (t < 6 * 3600 && x.out.demand == 100) {
+        x.in.heatout = model_heat(&x);
+        run(&x, 1);
+        t++;
+    }
+    CHECK("top: demand comes down once the room is over the target", t < 1200);
 }
 
 static void test_ble_env(void)
@@ -1002,8 +1197,8 @@ static void test_no_integral(void)
     x.in.room = 20.5;
     run(&x, 2 * 3600);
     CHECK("ti 0: integral does not move", NEAR(x.out.integral, i0));
-    CHECK("ti 0: heat wanted is kp x error on top",
-          fabsf(x.out.heatw - (i0 + 300 * 0.5f)) < 0.5f); // Smoothing leaves a hair of error
+    CHECK("ti 0: heat request is kp x error on top",
+          fabsf(x.out.heatw - (i0 + 900 * 0.5f)) < 1.5f); // Smoothing leaves a hair of error
     x.p.ti = 90 * 60;                                     // Back on: it moves again
     run(&x, 600);
     CHECK("ti back on: integral moves", x.out.integral > i0 + 1);
@@ -1038,6 +1233,427 @@ static void test_fan_flow(void)
     CHECK("fan.flow below the slowest setting", f > 150 && f < 342);
     CHECK("fan.flow stopped", NEAR(heatctl_curve_offset(&c, 0), 0));
     CHECK("fan.flow above the fastest setting", heatctl_curve_offset(&c, 1300) > 1104);
+}
+
+// State kept over a restart (heatctl_keep, heatctl_resume)
+
+#define CLOCK 100000 // Clock that runs on over a restart (s), when the block is written
+
+// CRC-32 (as zlib's), to seal a block the tests have changed
+static uint32_t crc32(const void *data, size_t len)
+{
+    const uint8_t *b = data;
+    uint32_t c = 0xFFFFFFFF;
+    while (len--) {
+        c ^= *b++;
+        for (int i = 0; i < 8; i++)
+            c = (c >> 1) ^ (0xEDB88320 & -(c & 1));
+    }
+    return ~c;
+}
+
+static void seal(heatctl_keep_t *k)
+{
+    k->crc = crc32(k, offsetof(heatctl_keep_t, crc));
+}
+
+// The block as Faikout.c writes it after a step
+static heatctl_keep_t keep(const sim_t *x)
+{
+    heatctl_keep_t k;
+    memset(&k, 0x55, sizeof(k)); // RTC memory holds whatever it held
+    heatctl_keep(&x->s, &x->p, &k, CLOCK);
+    return k;
+}
+
+// A restart: a new controller, uptime from 1, given the kept block at clock. The step is left to the caller.
+static void reboot(sim_t *x, const heatctl_keep_t *k, uint32_t clock)
+{
+    memset(&x->s, 0, sizeof(x->s));
+    x->now = 1;
+    heatctl_resume(&x->s, k, clock, x->now);
+}
+
+// A fresh start, as without a kept block
+static int fresh(const sim_t *x)
+{
+    return x->out.state == HEATCTL_DEMAND && x->out.changed && x->out.demand == 60 && NEAR(x->out.integral, 1200) &&
+           !x->out.resumed && !strncmp(x->out.reason, "start", 5);
+}
+
+// DEMAND: cold room at a high level, learnt scale, a defrost not yet made up
+static void demand_moved(sim_t *x)
+{
+    start(x);
+    x->in.room = 19.5;
+    x->in.heatout = 1500;
+    run(x, 3600);
+    x->in.liquid = -20;
+    run(x, 300);
+    x->in.liquid = 35;
+    run(x, 60);
+    x->in = inputs();
+}
+
+static void test_keep_demand(void)
+{
+    sim_t x;
+    demand_moved(&x);
+    heatctl_t was = x.s;
+    heatctl_out_t o = x.out;
+    CHECK("keep demand: moved from the start", o.state == HEATCTL_DEMAND && o.demand != 60 && !NEAR(o.integral, 1200) &&
+                                                   x.s.debt > 1 && fabsf(x.s.deficit) > 1 && !NEAR(x.s.scale, 3));
+    heatctl_keep_t k = keep(&x);
+    reboot(&x, &k, CLOCK + 60);
+    run(&x, 1);
+    CHECK("resume demand: DEMAND", x.out.state == HEATCTL_DEMAND && x.out.changed);
+    CHECK("resume demand: level kept", x.out.demand == o.demand && x.out.quiet == o.quiet);
+    CHECK("resume demand: integral kept", x.out.integral == was.integral);
+    CHECK("resume demand: scale, deficit and debt kept",
+          x.s.scale == was.scale && x.s.deficit == was.deficit && x.s.debt == was.debt);
+    CHECK("resume demand: no hold kept", x.out.sub == HEATCTL_SUB_NONE);
+    CHECK("resume demand: reason", strstr(x.out.reason, "resumed") && strstr(x.out.reason, "demand"));
+    CHECK("resume demand: shown", x.out.resumed);
+    uint8_t demand = x.out.demand;
+    x.in.room = 25; // Far over: demand would come down, but not before demand.rate from the resume
+    run(&x, 598);
+    CHECK("resume demand: demand.rate counts from the resume", x.out.demand == demand);
+    run(&x, 2);
+    CHECK("resume demand: then it moves", x.out.demand < demand);
+    run(&x, HEATCTL_RESUMED_SHOW);
+    CHECK("resume demand: shown for a while only", !x.out.resumed);
+
+    // Without a kept block it starts as before
+    heatctl_keep_t none;
+    memset(&none, 0, sizeof(none));
+    x.in = inputs();
+    reboot(&x, &none, CLOCK + 60);
+    run(&x, 1);
+    CHECK("nothing kept: fresh start", fresh(&x) && !strcmp(x.out.reason, "start"));
+}
+
+static void test_keep_cold(void)
+{
+    sim_t x;
+    start(&x);
+    memset(&x.s, 0, sizeof(x.s));
+    x.in.outdoor = -20;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    run_until(&x, HEATCTL_COLD, -1, 4000);
+    x.in.room = 19;
+    run(&x, 2 * 3600);
+    heatctl_out_t o = x.out;
+    float integral = x.s.cold_integral;
+    CHECK("keep cold: setpoint moved", o.state == HEATCTL_COLD && o.setpoint > 23.4f);
+    heatctl_keep_t k = keep(&x);
+    reboot(&x, &k, CLOCK + 60);
+    run(&x, 1);
+    CHECK("resume cold: COLD", x.out.state == HEATCTL_COLD && x.out.changed && x.out.resumed);
+    CHECK("resume cold: setpoint and integral kept", x.out.setpoint == o.setpoint && x.out.integral == integral);
+    CHECK("resume cold: demand 100", x.out.demand == 100 && !x.out.quiet);
+    CHECK("resume cold: reason", strstr(x.out.reason, "resumed") && strstr(x.out.reason, "setpoint"));
+    run(&x, 4 * 3600);
+    CHECK("resume cold: stays COLD while cold", x.out.state == HEATCTL_COLD);
+
+    // Warm after the restart: back to DEMAND only after cold.hold
+    x.in = inputs();
+    x.in.outdoor = -5;
+    reboot(&x, &k, CLOCK + 60);
+    run(&x, 1);
+    CHECK("resume cold, warm: COLD", x.out.state == HEATCTL_COLD);
+    int t = run_until(&x, HEATCTL_DEMAND, -1, 4000);
+    CHECK("resume cold, warm: DEMAND after cold.hold", t == 900);
+}
+
+static void test_keep_idle(void)
+{
+    sim_t x;
+    start(&x);
+    x.in.room = 21.6;
+    run_until(&x, HEATCTL_IDLE, -1, 4000);
+    run(&x, 1500);
+    heatctl_keep_t k = keep(&x);
+    reboot(&x, &k, CLOCK + 60);
+    x.in.room = 19;
+    run(&x, 1);
+    CHECK("resume idle: IDLE", x.out.state == HEATCTL_IDLE && x.out.sub == HEATCTL_SUB_NONE && x.out.changed);
+    CHECK("resume idle: setpoint idle.temp", NEAR(x.out.setpoint, 16));
+    CHECK("resume idle: reason", strstr(x.out.reason, "resumed") != NULL);
+    run(&x, 1799);
+    CHECK("resume idle: idle.min counts from the resume", x.out.state == HEATCTL_IDLE);
+    run(&x, 1);
+    CHECK("resume idle: then DEMAND at the lowest level", x.out.state == HEATCTL_DEMAND && NEAR(x.out.integral, 810));
+}
+
+// The defrost-loop watchdog rest is kept, and lasts defrost.rest from the resume
+static void test_keep_rest(void)
+{
+    sim_t x;
+    start(&x);
+    x.p.defrost_watchdog = 1;
+    for (int i = 0; i < 4; i++) {
+        run(&x, 600);
+        x.in.liquid = -20;
+        run(&x, 300);
+        x.in.liquid = 35;
+        run(&x, 1);
+    }
+    run(&x, 600);
+    CHECK("keep rest: resting", x.out.state == HEATCTL_IDLE && x.out.sub == HEATCTL_SUB_REST);
+    heatctl_keep_t k = keep(&x);
+    reboot(&x, &k, CLOCK + 60);
+    run(&x, 1);
+    CHECK("resume rest: IDLE rest", x.out.state == HEATCTL_IDLE && x.out.sub == HEATCTL_SUB_REST && x.out.fan == 0);
+    run(&x, 899);
+    CHECK("resume rest: defrost.rest from the resume", x.out.sub == HEATCTL_SUB_REST);
+    run(&x, 1);
+    CHECK("resume rest: then DEMAND at the lowest level", x.out.state == HEATCTL_DEMAND && NEAR(x.out.integral, 810));
+}
+
+// NOSENSOR is not kept: a restart starts afresh, as leaving NOSENSOR does
+static void test_keep_nosensor(void)
+{
+    sim_t x;
+    demand_moved(&x);
+    x.in.room = NAN;
+    run_until(&x, HEATCTL_NOSENSOR, -1, 4000);
+    heatctl_keep_t k = keep(&x);
+    x.in.room = 21;
+    reboot(&x, &k, CLOCK + 60);
+    run(&x, 1);
+    CHECK("nosensor not kept: fresh start", fresh(&x));
+}
+
+static void test_keep_off(void)
+{
+    const char *why[] = {"disabled", "unit off", "not heating"};
+    for (int i = 0; i < 3; i++) {
+        sim_t x;
+        demand_moved(&x);
+        if (i == 0)
+            x.in.enabled = 0;
+        else if (i == 1)
+            x.in.power = 0;
+        else
+            x.in.heat = 0;
+        run(&x, 1);
+        heatctl_keep_t k = keep(&x);
+        x.in = inputs();
+        reboot(&x, &k, CLOCK + 60);
+        run(&x, 1);
+        char name[60];
+        snprintf(name, sizeof(name), "off (%s): nothing kept", why[i]);
+        CHECK(name, fresh(&x));
+    }
+
+    // At boot the unit's state is not known yet: the block is not written over until it has been tried, over a
+    // second restart too
+    sim_t x;
+    demand_moved(&x);
+    heatctl_out_t o = x.out;
+    heatctl_keep_t k = keep(&x);
+    x.in.power = 0;
+    reboot(&x, &k, CLOCK + 60);
+    for (int i = 0; i < 20; i++) {
+        run(&x, 1);
+        heatctl_keep(&x.s, &x.p, &k, CLOCK + 60 + x.now);
+    }
+    reboot(&x, &k, CLOCK + 90);
+    for (int i = 0; i < 20; i++) {
+        run(&x, 1);
+        heatctl_keep(&x.s, &x.p, &k, CLOCK + 90 + x.now);
+    }
+    x.in.power = 1;
+    run(&x, 1);
+    CHECK("unknown at boot: resumed later", x.out.resumed && x.out.demand == o.demand && x.out.integral == o.integral);
+    heatctl_keep(&x.s, &x.p, &k, CLOCK + 90 + x.now);
+    x.in.enabled = 0; // Switched off after the resume: nothing kept
+    run(&x, 1);
+    heatctl_keep(&x.s, &x.p, &k, CLOCK + 90 + x.now);
+    x.in.enabled = 1;
+    reboot(&x, &k, CLOCK + 200);
+    run(&x, 1);
+    CHECK("off after the resume: nothing kept", fresh(&x));
+
+    // Unit off at boot for longer than the block lasts: not resumed, and written over
+    demand_moved(&x);
+    k = keep(&x);
+    x.in.power = 0;
+    reboot(&x, &k, CLOCK + 60);
+    for (int i = 0; i < HEATCTL_KEEP_AGE - 60; i++) {
+        run(&x, 1);
+        heatctl_keep(&x.s, &x.p, &k, CLOCK + 60 + x.now);
+    }
+    x.in.power = 1;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now); // Same step: the block is exactly HEATCTL_KEEP_AGE old
+    CHECK("off at boot: resumed up to HEATCTL_KEEP_AGE", x.out.resumed);
+    demand_moved(&x);
+    k = keep(&x);
+    x.in.power = 0;
+    reboot(&x, &k, CLOCK + 60);
+    for (int i = 0; i < HEATCTL_KEEP_AGE - 59; i++) {
+        run(&x, 1);
+        heatctl_keep(&x.s, &x.p, &k, CLOCK + 60 + x.now);
+    }
+    x.in.power = 1;
+    reboot(&x, &k, CLOCK + 60 + x.now);
+    run(&x, 1);
+    CHECK("off at boot past HEATCTL_KEEP_AGE: written over", fresh(&x));
+    demand_moved(&x);
+    k = keep(&x);
+    x.in.power = 0;
+    reboot(&x, &k, CLOCK + 60);
+    run(&x, HEATCTL_KEEP_AGE - 59);
+    x.in.power = 1;
+    run(&x, 1);
+    CHECK("off at boot past HEATCTL_KEEP_AGE: not resumed", fresh(&x));
+
+    // Switched off at boot: not resumed, and written over
+    demand_moved(&x);
+    k = keep(&x);
+    x.in.enabled = 0;
+    reboot(&x, &k, CLOCK + 60);
+    run(&x, 1);
+    heatctl_keep(&x.s, &x.p, &k, CLOCK + 60 + x.now);
+    x.in.enabled = 1;
+    run(&x, 1);
+    CHECK("disabled at boot: not resumed", fresh(&x));
+    reboot(&x, &k, CLOCK + 70);
+    run(&x, 1);
+    CHECK("disabled at boot: written over", fresh(&x));
+}
+
+// A block that is damaged, stale or does not fit is not used: the start is as without one
+static void test_keep_reject(void)
+{
+    sim_t x;
+    demand_moved(&x);
+    const heatctl_keep_t good = keep(&x);
+    sim_t cold;
+    start(&cold);
+    memset(&cold.s, 0, sizeof(cold.s));
+    cold.in.outdoor = -20;
+    cold.out = heatctl_step(&cold.s, &cold.p, &cold.in, cold.now);
+    run_until(&cold, HEATCTL_COLD, -1, 4000);
+    const heatctl_keep_t goodcold = keep(&cold);
+    struct {
+        const char *name;
+        int field;
+        float value;
+        uint32_t clock;
+        int cold;
+        int sealed;
+    } bad[] = {
+        {"bad checksum", 1, 1, CLOCK, 0, 0},
+        {"wrong magic", 2, 0, CLOCK, 0, 1},
+        {"wrong version", 3, 0, CLOCK, 0, 1},
+        {"too old", 0, 0, CLOCK + HEATCTL_KEEP_AGE + 1, 0, 1},
+        {"clock gone back", 0, 0, CLOCK - 1, 0, 1},
+        {"integral NAN", 1, NAN, CLOCK, 0, 1},
+        {"integral infinite", 1, INFINITY, CLOCK, 0, 1},
+        {"deficit NAN", 4, NAN, CLOCK, 0, 1},
+        {"debt infinite", 5, -INFINITY, CLOCK, 0, 1},
+        {"scale NAN", 6, NAN, CLOCK, 0, 1},
+        {"integral below the lowest level", 1, 800, CLOCK, 0, 1},
+        {"integral above the top level", 1, 7500, CLOCK, 0, 1},
+        {"scale out of range", 6, 7, CLOCK, 0, 1},
+        {"scale negative", 6, -1, CLOCK, 0, 1},
+        {"level not in the table", 7, 55, CLOCK, 0, 1},
+        {"level with QO not in the table", 8, 0, CLOCK, 0, 1},
+        {"state not kept", 9, HEATCTL_NOSENSOR, CLOCK, 0, 1},
+        {"state unknown", 9, 7, CLOCK, 0, 1},
+        {"rest to resume unknown", 10, HEATCTL_IDLE, CLOCK, 0, 1},
+        {"cold setpoint above t.max", 11, 32.5, CLOCK, 1, 1},
+        {"cold integral below t.min", 12, 15, CLOCK, 1, 1},
+        {"cold setpoint NAN", 11, NAN, CLOCK, 1, 1},
+    };
+    for (unsigned i = 0; i < sizeof(bad) / sizeof(*bad); i++) {
+        heatctl_keep_t k = bad[i].cold ? goodcold : good;
+        switch (bad[i].field) {
+        case 1:
+            k.integral = bad[i].value;
+            break;
+        case 2:
+            k.magic = 0x12345678;
+            break;
+        case 3:
+            k.version++;
+            break;
+        case 4:
+            k.deficit = bad[i].value;
+            break;
+        case 5:
+            k.debt = bad[i].value;
+            break;
+        case 6:
+            k.scale = bad[i].value;
+            break;
+        case 7:
+            k.demand = bad[i].value;
+            break;
+        case 8: // 60 is in the table, but with QO
+            k.demand = 60;
+            k.quiet = 0;
+            break;
+        case 9:
+            k.state = bad[i].value;
+            break;
+        case 10:
+            k.state = HEATCTL_IDLE;
+            k.rest = bad[i].value;
+            break;
+        case 11:
+            k.setpoint = bad[i].value;
+            break;
+        case 12:
+            k.cold_integral = bad[i].value;
+            break;
+        }
+        if (bad[i].sealed)
+            seal(&k);
+        x.in = inputs();
+        reboot(&x, &k, bad[i].clock + 60 * (bad[i].clock == CLOCK));
+        run(&x, 1);
+        char name[80];
+        snprintf(name, sizeof(name), "reject %s: fresh start", bad[i].name);
+        CHECK(name, fresh(&x));
+        snprintf(name, sizeof(name), "reject %s: reason", bad[i].name);
+        CHECK(name, bad[i].field == 2 ? !strcmp(x.out.reason, "start") : strstr(x.out.reason, "not resumed") != NULL);
+    }
+
+    // The same blocks, sealed but unchanged, resume: the rejects above are for the change alone
+    heatctl_keep_t k = good;
+    seal(&k);
+    reboot(&x, &k, CLOCK + HEATCTL_KEEP_AGE - 1);
+    run(&x, 1); // A second later: exactly HEATCTL_KEEP_AGE old
+    CHECK("reject control: demand resumes at HEATCTL_KEEP_AGE", x.out.resumed);
+    k = goodcold;
+    seal(&k);
+    reboot(&x, &k, CLOCK);
+    run(&x, 1);
+    CHECK("reject control: cold resumes", x.out.resumed && x.out.state == HEATCTL_COLD);
+}
+
+// One resume per boot, at the first start
+static void test_keep_once(void)
+{
+    sim_t x;
+    demand_moved(&x);
+    heatctl_keep_t k = keep(&x);
+    reboot(&x, &k, CLOCK + 60);
+    run(&x, 1);
+    CHECK("once: resumed", x.out.resumed);
+    x.in.heat = 0;
+    run(&x, 1);
+    x.in.heat = 1;
+    run(&x, 1);
+    CHECK("once: the next start is fresh", fresh(&x));
+    reboot(&x, &k, CLOCK + 60);
+    x.in.room = NAN;
+    run_until(&x, HEATCTL_NOSENSOR, -1, 4000);
+    x.in.room = 21;
+    run(&x, 1);
+    CHECK("once: leaving NOSENSOR is fresh", x.out.state == HEATCTL_DEMAND && NEAR(x.out.integral, 1200));
 }
 
 int main(void)
@@ -1077,11 +1693,27 @@ int main(void)
     test_room_model(-5, 0, 1);
     test_room_model(0, 0, 1);
     test_room_model(10, 0, 1);
+    test_room_model(-12, 0, 2);
+    test_room_model(-8, 0, 2);
+    test_room_model(-5, 0, 2);
+    test_room_model(0, 0, 2);
+    test_heat_deficit();
+    test_heat_deficit_defrost();
+    test_heat_deficit_jump();
+    test_heat_deficit_top();
     test_ble_env();
     test_fan_flow();
     test_fanmap();
     test_fanmap_default();
     test_fan_by_outdoor();
+    test_keep_demand();
+    test_keep_cold();
+    test_keep_idle();
+    test_keep_rest();
+    test_keep_nosensor();
+    test_keep_off();
+    test_keep_reject();
+    test_keep_once();
     printf("%d passed, %d failed\n", passed, failed);
     return failed ? 1 : 0;
 }

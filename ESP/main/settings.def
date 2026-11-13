@@ -93,13 +93,14 @@ s	auto.payload								// JSON field in payload of above topic for room temperatu
 
 u16	demand.set	30		.live	.decimal=1 .unit="℃"		// Setpoint while heating on demand
 s	demand.table	"40:270,50:340,60:400,70:465,75:500,80:530,85:570,90:605,95:640,100q:1510,100:2470"	.live	// Demand table, demand:watts,... (100q is 100 with quiet outdoor)
+u8	demand.cop	3		.live	.decimal=1			// Heat per watt of the demand table, roughly: its start, and all there is with no heat output estimate
 bit	demand.full	1		.live					// Heating on demand may use plain 100% (quiet outdoor off)
-u8	demand.start	60		.live	.unit="%"			// On start, the integral is the watts of this demand
+u8	demand.start	60		.live	.unit="%"			// On start, the integral is the heat of this demand
 u16	demand.rate	600		.live	.unit="s"			// Minimum time between demand changes
 u8	demand.minrun	30		.live	.unit="min"			// Minimum heating before heating off
 enum	demand.fan	8		.live	.enums="Leave,Auto,1,2,3,4,5,Quiet,Outdoor"	// Fan while heating on demand
 s	demand.fanmap	"-20:4,-6:3,1:2,7:1"	.live	// Fan while heating on demand by outdoor temperature (demand.fan Outdoor), outdoor:fan,... fan A, 1-5 or Q, e.g. -5:5,0:4,5:3
-u16	pid.kp		300		.live	.unit="W/℃"			// Heat wanted per degree below target
+u16	pid.kp		900		.live	.unit="W/℃"			// Heat request per degree below target (watts of heat)
 u16	pid.ti		90		.live	.unit="min"			// Integral time, 0 for none (P only)
 
 u16	idle.temp	16		.live	.decimal=1 .unit="℃"		// Setpoint while heating is off

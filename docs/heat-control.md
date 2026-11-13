@@ -25,30 +25,51 @@ Controller disabled (`auto.e` off or `auto.t` 0), unit off, or unit not in heat 
 
 On the way into OFF, for whichever reason, the controller leaves nothing behind: demand goes back to 100% and QO off, and the setpoint goes to `stop.temp` (default 22 °C), clamped to `t.min`…`t.max`. The setpoint is only replaced if it is still the one the controller sent, so a setpoint set by hand at the same time (e.g. with a switch to cool) is kept.
 
-When the controller starts (enabled, unit on in heat) it starts **fresh** in DEMAND with the integral at the watts of the `demand.start` level (default 60%). No NVS persistence.
+When the controller starts (enabled, unit on in heat) it starts **fresh** in DEMAND with the integral at the heat of the `demand.start` level (default 60%), except for the first start after a restart, which may resume (below).
+
+### After a restart
+
+After each step the controller writes a small block to RTC memory (`RTC_NOINIT_ATTR` in `Faikout.c`): plain RAM that keeps its contents over a software restart, a panic or a watchdog reset, but not a power cut. No flash or NVS is written. The first start after a boot resumes from it instead of starting fresh.
+
+- **Kept:** the state (DEMAND, COLD or IDLE, and the defrost-loop rest of IDLE with the state to resume after it); in DEMAND the integral, the demand level in use (as demand % and QO, not a table index, so a changed table cannot misplace it), the heat deficit and the defrost debt; in COLD the setpoint and its integral; and the learnt heat per watt (`scale`).
+- **Not kept:** every timer (`demand.rate`, `demand.minrun`, `idle.min`, `cold.hold` tracking, the post-defrost hold, defrost history, `fan.hold`) and every sub-state but the rest. After a resume they start as on entering the state: a resumed IDLE waits `idle.min` again, a resumed rest lasts `defrost.rest` again, and COLD needs `cold.hold` above `cold.exit` before it leaves.
+- **Not written:** OFF and NOSENSOR leave nothing kept, so a restart after the controller was switched off, or the unit turned off or out of heat, starts fresh, as does a restart in NOSENSOR (leaving NOSENSOR starts fresh anyway).
+- **Pending:** after a boot the controller is OFF until the unit's state is known. Until the kept block has been tried (at the first start) it is not written over, so a second restart in those seconds keeps it. It is given up, and written over from then on, if the controller is switched off (`auto.e` off) or the block passes 30 minutes old first.
+- **Checked:** a magic number, a version (`HEATCTL_KEEP_VERSION`, bumped whenever a field changes) and a CRC-32 over the block; all values finite; the integral, the setpoint and the scale within the limits the controller clamps them to now; the level in the current `demand.table`; and an age of at most 30 minutes (`HEATCTL_KEEP_AGE`), on the RTC timer (`esp_rtc_get_time_us()`), which runs on over a restart and needs no clock set from the network. If any check fails the start is fresh, and its reason says why, e.g. `start, not resumed: too old`.
+- A resume is logged and sent on `info/<host>/heatctl` like any change of state, e.g. `OFF -> DEMAND (resumed after restart, demand 70 QO, integral 1450 W)`. The web status line says "resumed after restart" for 10 minutes.
 
 ### IDLE ("heating off")
 - Sends setpoint `idle.temp` (default 16 °C) so the unit stops heating. Demand stays at the lowest level with QO on, so the restart is gentle.
 - Entered only from DEMAND at the lowest demand level, when room > target + `idle.over` (default 0.5 °C) **and** DEMAND has run at least `demand.minrun` (default 30 min; short runs stop defrosts working, Faikout #930). Above the lowest level an overshoot only steps demand down: IDLE restarts the integral at the lowest level, which in cold weather would take hours to recover from.
 - Exits to DEMAND when room < target − `idle.under` (default 0.0 °C) **and** IDLE has lasted at least `idle.min` (default 30 min).
-- On exit the PI integral starts at the watts of the lowest level.
+- On exit the PI integral starts at the heat of the lowest level.
 
 ### DEMAND
 - Sends the fixed setpoint `demand.set` (default 30 °C, the highest heat setpoint many units accept).
-- PI loop on room temperature error. Output is **heat wanted in electrical watts**. No D term.
-- The demand table (below) maps watts to a demand level (a demand % with or without QO): the highest level whose watts ≤ wanted.
+- PI loop on room temperature error. Output is the **heat request**, in watts of heat. No D term.
+- **Heat target:** the heat request plus the making up for defrosts (below). It is what the unit is to give now.
+- **Heat deficit:** every second the controller adds the heat target less the heat the unit gave (the estimated heat output, see `fan.flow`) to the heat deficit (Wh, negative for a surplus). Demand steps between the levels around the heat target so that the deficit stays near nothing. The mean heat given is then the heat request, whatever the gap between two levels (95% → 100q → 100 are about 2200 → 3900 → 6800 W of heat), the COP or the fan speed.
+  - A step up is due once the deficit is half of what the next level would give over the heat target in `demand.rate`, the shortest time demand may stay there; from then on the step leaves less of a deficit or surplus than staying does. A step down is the same the other way.
+  - Demand only steps up from a level that itself gives less than the heat target, and down from one that gives more. Heat still on its way after a step (the unit takes minutes to ramp up) then does not bring on the next step.
+  - One step may go over several levels: it goes on while the next level is still short of the heat target (or still over it).
+  - The heat of a level is its watts in the demand table times the heat the unit has given per watt of the table of late (smoothed over 30 minutes, kept within half to twice `demand.cop`). So the table gives the shape and the unit the scale.
+  - **Defrosts:** heat not given during a defrost and the hold after it is kept apart and added to the heat target over the next two hours or so. More defrosts then mean a higher heat target between them, without a burst after each one.
+  - At the top level the deficit is no more than that level can make up, and at the bottom level the surplus no more than that level can work off, so the deficit does not wind up.
+  - **No heat output estimate** (`fan.flow` blank, or the unit does not report what it needs): the heat given is taken as the table's watts times `demand.cop`, and nothing in a defrost.
+  - On entering DEMAND the level comes from the table times `demand.cop`, and the deficit starts at nothing.
+- `demand.cop` (default 3.0): heat per watt of the demand table, roughly. It turns the table into heat for the integral's start values and limits, and is where the scale above starts.
 - **Quiet outdoor (QO) is on for every level except plain 100%.** That includes the `100q` level, IDLE and the DEFROST sub-state; it calms defrosts and the ramp-up after them.
 - `demand.full` (bit, default on): when on, DEMAND may use plain 100% (QO off). When off, DEMAND tops out at 100 + QO.
 - Demand changes at most once per `demand.rate` (default 600 s), but one change may jump several levels.
-- Anti-windup: the integral stops growing when at the top or bottom level, during DEFROST and the post-defrost hold, and while the room reading is stale.
-- Gains: `pid.kp` (W per °C, default 300), `pid.ti` (minutes, default 90). On the heat-model PoC's two-node house these hold ±0.2 K from −12 to +10 °C outside.
+- Anti-windup: the integral stops growing when the top level gives no more than the heat request (and stops falling when the bottom level gives no less), during DEFROST, and while the room reading is stale.
+- Gains: `pid.kp` (W of heat per °C, default 900), `pid.ti` (minutes, default 90). On the heat-model PoC's two-node house these hold ±0.2 K from −12 to +10 °C outside without defrosts.
 
 ### COLD
 - Sends demand 100 with QO **always off**.
 - A second PI loop drives the **setpoint** from room temperature error. It starts at `cold.set` (default 23 °C), is clamped to `t.min`…`t.max`, rounded to 0.5 °C, and moves at most 0.5 °C per `cold.rate` (default 1800 s); big setpoint jumps are reported to cause defrost loops. Gains `cold.kp` (°C setpoint per °C error, default 2.0), `cold.ti` (minutes, default 120), not yet tested on hardware.
 - No IDLE from COLD: on overshoot the setpoint PI pulls the setpoint down and the unit thermostats off by itself.
 - Entered from DEMAND when the smoothed outdoor temperature stays below `cold.enter` (default −15 °C) for `cold.hold` (default 60 min). Exits to DEMAND when it stays above `cold.exit` (default −10 °C) for `cold.hold`.
-- On exit to DEMAND the integral starts at the watts of the 95% level (the house has just needed a lot of heat).
+- On exit to DEMAND the integral starts at the heat of the 95% level (the house has just needed a lot of heat).
 - Unknown outdoor temperature never enters COLD.
 
 ### DEFROST sub-state (of DEMAND and of COLD)
@@ -81,7 +102,7 @@ When the controller starts (enabled, unit on in heat) it starts **fresh** in DEM
 40:270,50:340,60:400,70:465,75:500,80:530,85:570,90:605,95:640,100q:1510,100:2470
 ```
 
-`demand:watts` per demand level; `100q` is 100% with QO (QO is on for every level except `100` anyway). Up to 95% the defaults follow about 6.7 W per %, from the `/graph` log on 2026-11-10 (50/60/70% measured at 353/407/460 W at −1…−2 °C outdoor) and forum data for the 4 kW Perfera Cold Region (40% ≈ 270, 70% ≈ 470, 95% ≈ 640 W). 75% and 90% are there to keep the steps even. `100q` and `100` come from the step test in `saadin-ideas.md` 1.3. Levels that add nothing are left out. The integral absorbs table error, so only the shape matters. Invalid table → fall back to the default and log it.
+`demand:watts` per demand level; `100q` is 100% with QO (QO is on for every level except `100` anyway). Up to 95% the defaults follow about 6.7 W per %, from the `/graph` log on 2026-11-10 (50/60/70% measured at 353/407/460 W at −1…−2 °C outdoor) and forum data for the 4 kW Perfera Cold Region (40% ≈ 270, 70% ≈ 470, 95% ≈ 640 W). 75% and 90% are there to keep the steps even. `100q` and `100` come from the step test in `saadin-ideas.md` 1.3. Levels that add nothing are left out. The watts are electrical; `demand.cop` and the heat the unit gives (see DEMAND) turn them into heat, so only the shape matters. Invalid table → fall back to the default and log it.
 
 ## Fan
 
@@ -108,18 +129,18 @@ If the unit reports a demand, setpoint, QO or fan that differs from what the con
 ## Visibility
 
 - **Log:** every state or sub-state change with its reason, e.g. `heatctl: DEMAND -> IDLE (room 21.6 > target 21.0+0.5)`; a status line every 10 min.
-- **MQTT:** `info/<host>/heatctl` on every transition (state, sub-state, reason, inputs). Status JSON gains `ctl` (state), `ctl_sub`, `ctl_target`, `ctl_curve`, `ctl_heatw`, `ctl_i`.
+- **MQTT:** `info/<host>/heatctl` on every transition (state, sub-state, reason, inputs). Status JSON gains `ctl` (state), `ctl_sub`, `ctl_target`, `ctl_curve`, `ctl_heatw`, `ctl_i`, and `ctl_resumed` for 10 minutes after a resume.
 - **Web:** the old auto section is replaced by an enable switch, a target slider and a status line such as "Demand 65% · target 21.3 (curve +0.30) · heat 410 W" or "Cold · setpoint 24.5 · ❄ defrost". Manual temperature, demand and QO controls are greyed out while the controller runs.
-- **Home Assistant:** an enum sensor "Control state"; `hvac_action` reports `defrosting` / `idle` / `heating`; the climate target sets `auto.t`. Tuning entities: number entities for `auto.t`, `pid.kp`, `pid.ti`; sensors for heat wanted (W), integral and effective target.
+- **Home Assistant:** an enum sensor "Control state"; `hvac_action` reports `defrosting` / `idle` / `heating`; the climate target sets `auto.t`. Tuning entities: number entities for `auto.t`, `pid.kp`, `pid.ti`; sensors for the heat request (W), integral and effective target.
 
 ## Code layout
 
-- `ESP/main/heatctl.c` / `heatctl.h`: plain C, `float`, no ESP-IDF includes. `heatctl_step(&state, &params, &in, now)` → outputs (state, sub-state, demand, QO, setpoint, fan, effective target, heat wanted W, integral, transition reason). Also parses the table and the curve. Runs as a host unit test.
+- `ESP/main/heatctl.c` / `heatctl.h`: plain C, `float`, no ESP-IDF includes. `heatctl_step(&state, &params, &in, now)` → outputs (state, sub-state, demand, QO, setpoint, fan, effective target, heat request W, heat target W, heat deficit Wh, integral, transition reason). Also parses the table and the curve. `heatctl_keep` writes the block kept over a restart and `heatctl_resume` hands it back after a boot. Runs as a host unit test.
 - `ESP/main/Faikout.c`: the old local auto block is removed. Each control tick gathers inputs, calls `heatctl_step`, applies outputs with the existing `daikin_set_*` setters (resend works because the S21 reports overwrite `daikin.*` when the unit disagrees). No S21 protocol logic changes.
 - Settings in `ESP/main/settings.def` only.
 
 ## Tests
 
-- `ESP/main/test/heatctl_test.c`, run by `make -C ESP test`: every transition with hysteresis and minimum times; defrost enter / exit / cap; post-defrost hold; watchdog; stale sensor and NOSENSOR; integral start values after each transition; anti-windup; rate limits; QO per level and `demand.full`; table and curve parsing including bad input.
+- `ESP/main/test/heatctl_test.c`, run by `make -C ESP test`: every transition with hysteresis and minimum times; defrost enter / exit / cap; post-defrost hold; watchdog; stale sensor and NOSENSOR; integral start values after each transition; anti-windup; rate limits; QO per level and `demand.full`; table and curve parsing including bad input. The heat deficit: the mean heat given is the heat request between two levels, with and without a heat output estimate, with a wrong `demand.cop`, and through defrosts at two cadences; jumps over several levels; no wind-up at the top level; and a house with hourly defrosts does not hunt. The block kept over a restart: resumes in DEMAND, COLD, IDLE and the rest; nothing kept when off or in NOSENSOR; kept while the unit's state is unknown after a boot, over a second restart too; and every reject (checksum, magic, version, age, non-finite or out-of-range values, a level gone from the table) starts fresh.
 - A small first-order room model inside the test to check the loop settles without hunting between DEMAND and IDLE.
 - Firmware builds clean with `make s3` and `make pico`. Hardware testing is done by a human.

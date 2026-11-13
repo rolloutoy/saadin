@@ -40,7 +40,7 @@ QO is *quiet outdoor*. The controller turns it on at every demand level except p
 
 ### Demand
 
-The controller sends the unit a high setpoint (`demand.set`, 30 °C), so the unit always wants to heat. It then limits the unit's power with demand. A PI loop (proportional plus integral) works out how much heat the room needs, in watts. The demand table (`demand.table`) turns those watts into a demand level.
+The controller sends the unit a high setpoint (`demand.set`, 30 °C), so the unit always wants to heat. It then limits the unit's power with demand. A PI loop (proportional plus integral) works out how much heat the room needs, in watts of heat. That is the heat request. The controller keeps count of the heat request and the heat the unit gave (see [Heat output and COP](#heat-output-and-cop)); the difference so far is the heat deficit. It steps demand between the levels around the heat request so that the deficit stays near nothing. The levels are far apart at the top (95%, 100% with quiet outdoor and plain 100% give about 2200, 3900 and 6800 W of heat), so there demand moves between two of them, for 10 minutes or more at a time. Heat lost to a defrost is made up over the next two hours or so: it is added to the heat request to give the heat target, which is what the unit is to give.
 
 So in this state the web page shows *Set* 30 °C. This is expected.
 
@@ -84,7 +84,26 @@ The Home Assistant climate target and the MQTT `temp` command set `auto.t` while
 
 ### After a restart
 
-The controller keeps no state over a restart. It starts again in demand control at `demand.start` (60%).
+The controller keeps what it has learnt over a restart of the device, so the room does not cool while it learns it all again. When heating starts for the first time after the restart, it carries on where it was:
+
+- In demand control, at the same demand level, with the same integral, the same heat per watt learnt from the heat output, and the same heat deficit, including heat a defrost cost that is still to be made up.
+- In cold-weather mode, at the same setpoint, and it stays in cold-weather mode.
+- With heating off, it stays off. Heating starts again after `idle.min` (30 minutes) at the earliest, counted from the restart.
+- In the rest after a defrost loop, the rest starts again and lasts `defrost.rest` (15 minutes).
+
+Minimum times and holds start again, as if the controller had just changed to that state. A defrost in progress at the restart is not remembered.
+
+The log and the `info/<host>/heatctl` MQTT message show a resume as the reason for the change, for example `OFF -> DEMAND (resumed after restart, demand 70 QO, integral 1450 W)`. The status line on the web page says "resumed after restart" for 10 minutes.
+
+The controller starts afresh, in demand control at `demand.start` (60%), when:
+
+- The power was cut, or something else powered the chip down, such as the reset button. Flashing firmware over USB may count as this too, depending on how the board is reset afterwards; an upgrade over the network does not.
+- The restart was more than 30 minutes ago by the time the unit is on in heat mode again.
+- Heating control was switched off, or the unit was off or not in heat mode, before the restart. It also does not resume when heating control is switched off just after the restart.
+- The controller had no room reading (the unit's own thermostat was in charge).
+- New firmware keeps it somewhere else or in another form, or a setting has changed so that it no longer fits, for example a demand table without the demand level in use. The reason in the log then says why, for example `start, not resumed: level not in demand.table`.
+
+Nothing is written to flash for this.
 
 ## Settings
 
@@ -100,7 +119,7 @@ Set these on the *Advanced* settings page, or over MQTT. While the controller is
 |`fan.flow`|see [Heat output and COP](#heat-output-and-cop)|Air flow by indoor fan speed, for the heat output estimate on the graph|
 |`auto.b`|empty|BLE sensor to use for the room temperature|
 |`auto.stale`|1800 s|No room reading for this long hands over to the unit's thermostat|
-|`auto.smooth`|0 s|Room temperature smoothing. 0 for none. Try 300 s if your sensor reports in 0.1 °C steps and heat wanted jumps with each flicker|
+|`auto.smooth`|0 s|Room temperature smoothing. 0 for none. Try 300 s if your sensor reports in 0.1 °C steps and the heat request jumps with each flicker|
 |`stop.temp`|22 °C|Setpoint left on the unit when the controller stops|
 |`t.control`|600 s|An MQTT room reading counts as lost after this long|
 
@@ -110,13 +129,14 @@ Set these on the *Advanced* settings page, or over MQTT. While the controller is
 |-------|-------|-------|
 |`demand.set`|30 °C|Setpoint sent to the unit. Many units cap the heat setpoint at 30 °C, so a higher value is resent every minute
 |`demand.table`|see below|Demand levels and their watts|
+|`demand.cop`|3.0|Heat per watt of the demand table, roughly. The controller learns the real figure from the heat output estimate; this is where it starts, and all it has without the estimate (`fan.flow` blank)|
 |`demand.full`|on|Allow plain 100% (quiet outdoor off). Off: the highest level is 100% with quiet outdoor|
 |`demand.start`|60%|Demand level to start at|
 |`demand.rate`|600 s|Minimum time between demand changes|
 |`demand.minrun`|30 min|Minimum heating time before heating off|
 |`demand.fan`|Leave|Fan speed: `Leave`, `Auto`, `1`–`5` or `Quiet`|
-|`pid.kp`|300 W/°C|Extra heat per degree below the target|
-|`pid.ti`|90 min|Integral time. Shorter corrects a steady error faster. 0 turns the integral off: it stays where it is, so heat wanted is that plus `pid.kp` times the error (P only)|
+|`pid.kp`|900 W/°C|Extra heat (watts of heat) per degree below the target|
+|`pid.ti`|90 min|Integral time. Shorter corrects a steady error faster. 0 turns the integral off: it stays where it is, so the heat request is that plus `pid.kp` times the error (P only)|
 
 ### Heating off
 
@@ -167,7 +187,7 @@ A liquid temperature drop counts as a defrost only after the coil has been hot (
 40:270,50:340,60:400,70:465,75:500,80:530,85:570,90:605,95:640,100q:1510,100:2470
 ```
 
-The watts are the power one unit drew at each level. Up to 95% they follow about 6.7 W per %: 50, 60 and 70% were measured at −1…−2 °C outside, and the other levels lie on the same line. The 75% and 90% levels make the steps more even, about 30–65 W each. The unit draws more at the same level in colder weather. The controller picks the highest level whose watts are at or below the heat it wants. The loop corrects for errors in the table, so the order of the levels matters more than the exact watts. An invalid table is reported on `error/GuestAC/heatctl` and the default is used instead.
+The watts are the power one unit drew at each level. Up to 95% they follow about 6.7 W per %: 50, 60 and 70% were measured at −1…−2 °C outside, and the other levels lie on the same line. The 75% and 90% levels make the steps more even, about 30–65 W each. The unit draws more at the same level in colder weather. The controller multiplies the watts by the heat the unit gives per watt (it starts from `demand.cop` and learns the rest from the heat output estimate) to know about how much heat each level gives. It goes by the heat the unit really gave, so the order of the levels and their spacing matter more than the exact watts. An invalid table is reported on `error/GuestAC/heatctl` and the default is used instead.
 
 ### Target curve
 
@@ -197,10 +217,22 @@ Or set `auto.topic` to a topic to follow and `auto.payload` to the JSON field in
 
 ## Watching it
 
-- **Status:** the status JSON (`state/GuestAC/status`) has `ctl` (state), `ctl_sub` (`defrost`, `hold` or `rest`), `ctl_target` (target with the curve offset), `ctl_curve` (the curve offset), `ctl_heatw` (heat wanted, W) and `ctl_i` (the integral). `ctl_i` is in watts, except in cold-weather mode, where it is the setpoint integral in °C.
+- **Status:** the status JSON (`state/GuestAC/status`) has `ctl` (state), `ctl_sub` (`defrost`, `hold` or `rest`), `ctl_target` (target with the curve offset), `ctl_curve` (the curve offset), `ctl_heatw` (heat request, W) and `ctl_i` (the integral). `ctl_i` is in watts, except in cold-weather mode, where it is the setpoint integral in °C.
 - **MQTT:** each change of state is sent to `info/GuestAC/heatctl`, with the reason and the inputs.
-- **Home Assistant:** a "Control state" sensor, "Heat wanted", "Heating integral" and "Effective target" sensors, and numbers for "Heating target", "Heating gain" (`pid.kp`) and "Heating integral time" (`pid.ti`). `hvac_action` shows heating, idle or defrosting.
-- **Graph:** the *Heating graph* link at the bottom of the main page, above *Settings*, opens `/graph`. It shows four charts for up to the last 5 days. The first has the room temperature as the sensor reads it and as the controller sees it after `auto.smooth`, the target and the effective target, plus the setpoint, the setpoint integral at full power and the outdoor temperature, which are hidden until you click them in the legend. The second has heat wanted, its integral and proportional parts, power (the unit's power consumption) and demand. The proportional part, `pid.kp` times the error, is small next to the others, so it has its own axis on the right. The third has the unit's liquid temperature, the unit's own room reading, the compressor frequency (Hz) and the indoor fan speed (rpm) as the unit reports it, which show how the unit responds to each demand level and what a defrost looks like. The fan speed is the real one, so it shows when the unit slows the fan because the coil is cool, whatever fan setting is chosen. The fourth has the estimated heat output next to the power consumption, and the COP (heat output divided by power): each sample's, and the mean over the last hour, which counts the defrosts in. See [Heat output and COP](#heat-output-and-cop) for how far to trust them. Heating off, cold weather, no room reading, defrosts, the hold after a defrost and the rest after a defrost loop are shaded. A dashed line marks each change of kp or ti (`pid.kp`/`pid.ti`, or `cold.kp`/`cold.ti` at full power), and the tooltip shows the values in use, with the fan setting and whether quiet outdoor is on. The device keeps one sample every 15 seconds, 5 days of them (about 1.3 MB of PSRAM, and never more than three quarters of the PSRAM the board has), or 1.5 hours on boards without PSRAM. The samples are lost when the device restarts. Reload the page to update it, or choose an interval under *Refresh* and the page reloads itself; it is off unless you choose one. A refresh keeps the range chosen with the buttons below, but not a zoom made by dragging. Another interval can be given in the address, for example `/graph?refresh=120` for two minutes. With a mouse, drag across a chart to zoom in on that time range, or ctrl+scroll; shift+drag pans. On a phone or tablet, pinch to zoom and drag to pan. The four charts move together. The *All* button shows the whole log, and *3 days*, *1 day*, *12 h* and *3 h* show the latest 3 days, day, 12 hours or 3 hours. A range button is hidden while the log is shorter than it. Heat wanted and power are both electrical watts, so you can check the power the unit draws at each demand level against `demand.table`. The samples are also available as JSON at `/graph.json`.
+- **Home Assistant:** a "Control state" sensor, "Heat request", "Heating integral" and "Effective target" sensors, and numbers for "Heating target", "Heating gain" (`pid.kp`) and "Heating integral time" (`pid.ti`). `hvac_action` shows heating, idle or defrosting.
+- **Graph:** the *Heating graph* link at the bottom of the main page, above *Settings*, opens `/graph`. It shows up to the last 5 days as strips stacked on one time axis, in five groups. Each strip has one scale, so a defrost lines up down the page.
+  - **Room:** the room temperature as the controller sees it (after `auto.smooth`), the target and the effective target, with the outdoor temperature in a strip below. The setpoint and, at full power, the setpoint integral are hidden until you click them in the legend.
+  - **Heat wanted and given**, in watts of heat: the heat request and its integral, the heat target, the demand level, the estimated heat output and its mean over the last 2 hours. The heat target is the heat request plus the making up for what the last defrosts cost. The demand level line is the heat the controller takes the level in use to give (its watts in `demand.table` times the heat per watt), so it shows demand stepping between the levels around the heat request. The mean heat output counts the defrosts in, so it should follow the heat request; if it stays above or below, the controller is not getting the heat it asks for. The proportional part is hidden until you click it. A strip below has the heat deficit (Wh): the heat target less the heat given so far, which demand steps up or down to bring back to nothing.
+  - **Compressor side:** a band with the name of the demand level in use (`95`, `100q`, `100`), darker for more watts in `demand.table`; the power consumption, with the level's watts in `demand.table` as a line to check it against; and the compressor frequency (Hz).
+  - **Air side:** the unit's liquid temperature and its own room reading, and the indoor fan speed (rpm) as the unit reports it. With the compressor side they show how the unit responds to each demand level and what a defrost looks like. The fan speed is the real one, so it shows when the unit slows the fan because the coil is cool, whatever fan setting is chosen.
+  - **Efficiency:** the COP (heat output divided by power): each sample's, and the mean over the last 6 hours, which counts the defrosts in. The heat per watt of the demand table, which the controller learns from the heat output (it starts at `demand.cop`), is hidden until you click it. See [Heat output and COP](#heat-output-and-cop) for how far to trust them.
+  - **The range shown, summed up:** three charts that follow the range shown. *Power at each demand level* has the median power the unit drew at each level and the 10th to 90th percentile, next to the level's watts in `demand.table`. It counts steady running only: no defrost or hold, and from two minutes into a level. *COP by outdoor temperature* has one dot for each defrost cycle, from the start of one defrost to the start of the next, with the defrost counted in. *Room temperature through a defrost* lays the defrosts over each other, from 10 minutes before each to 45 minutes after, with the median as a heavy line and its lowest point named.
+
+  Heating off, cold weather, no room reading, defrosts, the hold after a defrost and the rest after a defrost loop are shaded in every strip. A dashed line marks each change of kp or ti (`pid.kp`/`pid.ti`, or `cold.kp`/`cold.ti` at full power). Move the pointer over a strip, or tap it: a line runs down every strip, every legend shows its value at that moment, and the line above the strips shows the time, the state, the demand level, the fan setting and the kp and ti in use. While the pointer is elsewhere they show the latest sample in the range. Click a legend entry to show or hide it.
+
+  The strip at the top has the whole log: drag across it to choose the range shown, and drag the chosen range to move it. On the strips, drag to pan, ctrl+scroll or pinch to zoom, and double-click for the whole log. The *All* button shows the whole log, and *3 days*, *1 day*, *12 h* and *3 h* show the latest 3 days, day, 12 hours or 3 hours. A range button is hidden while the log is shorter than it. Each strip's scale fits what is in the range shown.
+
+  The device keeps one sample every 15 seconds, 5 days of them (about 1.4 MB of PSRAM, and never more than three quarters of the PSRAM the board has), or 1.5 hours on boards without PSRAM. The samples are lost when the device restarts. Reload the page to update it, or choose an interval under *Refresh* and the page loads the log again by itself; it is off unless you choose one. A refresh keeps the range shown, and moves it along if it reached the latest sample. Another interval can be given in the address, for example `/graph?refresh=120` for two minutes. The samples are also available as JSON at `/graph.json`, with the demand table in use as `table`. *Saved log* shows such a file, saved earlier, in place of the device's log, until the page is reloaded; a file saved by older firmware has no `table`, so it shows no demand level.
 - **Log:** each change of state with its reason, for example `heatctl: DEMAND -> IDLE (…)`, and a status line every 10 minutes.
 
 `no.faikoutauto` (*Hide heating control*) hides the heating control from Home Assistant. It also hides it from the web page, unless the controller is on and no settings password is set.
@@ -232,6 +264,6 @@ The default, `0:0,510:342,570:426,660:534,750:636,940:828,1120:1104,1400:1380`, 
 
 The fan speeds were read from one unit at each setting. The air flows are from a forum post, taken here as quiet and fan 1 to 5. Below quiet the air flow falls in a line to nothing at a stopped fan, and the last point, 1400 rpm, carries the line on above fan 5.
 
-Other models move a different amount of air at the same fan speed. To set it for your unit, set each fan speed in turn while heating, read the fan speed (rpm) at each from the graph, where the tooltip shows the fan setting, and pair it with the air flow from the data sheet. Daikin's tables give 306, 360, 600 and 1020 m³/h in heating for silent, low, medium and high on a Perfera 40 (FTXTM40A and S), and 282, 336, 462 and 702 m³/h on a Perfera 30 (FTXTM30A).
+Other models move a different amount of air at the same fan speed. To set it for your unit, set each fan speed in turn while heating, read the fan speed (rpm) at each from the graph, where the line above the strips shows the fan setting, and pair it with the air flow from the data sheet. Daikin's tables give 306, 360, 600 and 1020 m³/h in heating for silent, low, medium and high on a Perfera 40 (FTXTM40A and S), and 282, 336, 462 and 702 m³/h on a Perfera 30 (FTXTM30A).
 
 Treat the numbers as rough. The air flow is not measured, the temperatures come in 0.5 °C steps, and the liquid temperature is not exactly the outlet air temperature. A change in COP from one demand level to another on the same unit means more than the value itself. During a defrost the fan stops, so the heat the defrost takes from the room is not counted; the 1 h mean still counts the power the defrost used.
