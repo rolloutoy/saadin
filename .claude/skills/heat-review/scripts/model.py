@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """The local model of the house and the unit, kept in graph-logs/model.json and fitted from the saved logs.
 
-Usage: python3 -I model.py show | validate [log] | fit [--dry-run] [--hours 240] | holdout | residual [log]
+Usage: python3 -I model.py show | validate [log] | fit [--dry-run] [--hours N] [--weather on|off] | holdout |
+                           residual [log]
 
   show      the model as it stands
   validate  test the model AS IT STANDS against a log (default the newest), before any refit: rolling forecasts
             of the room against "no model", and the unit and defrost figures against what the log shows
-  fit       refit everything from all saved logs, print old -> new, and save (not with --dry-run)
+  fit       refit everything from all saved logs (or the latest N hours of them), print old -> new, and save
+            (not with --dry-run)
   holdout   fit the house on the earlier part of the longest stretch and score it on the part held back
   residual  heat the room got that the model does not account for, every two hours along a log: where to look
             for a heat source or a loss nobody has mentioned yet
 
 House: two nodes. The room air (air_J_K) takes the unit's heat and exchanges with a mass (air_mass_W_K, mass_J_K)
 that loses to outdoors (mass_out_W_K). On top of the unit's heat the room gets: what a defrost takes out
-(defrost.room_W), a gain by time of day relative to the night (gains.daily_W), and heat sources the user has told
-of, listed in graph-logs/events.json (gains.sources_W, per source and hours since its start).
+(defrost.room_W), a gain by time of day relative to the night (gains.daily_W), heat sources the user has told
+of, listed in graph-logs/events.json (gains.sources_W, per source and hours since its start), and, where weather.py
+has the hours on record, the sun and the wind (gains.weather). Outdoors is the unit's own sensor throughout.
 Unit: heat and power per watt of the demand table up to 95%, and the two 100% levels, each as a + b * outdoor.
 Defrost: one comes once frost_Wh of heat has been given since the last, and lasts `seconds`.
 See references/model.md for what this can and cannot tell.
@@ -30,12 +33,13 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.dont_write_bytecode = True  # Keep the skill folder to its sources
 import heatlog  # noqa: E402
+import weather  # noqa: E402
 from heatlog import stamp  # noqa: E402
 
 DT = 60.0
 START = {  # Round figures to start the first fit from; the fit replaces them all
     "house": {"air_J_K": 4.0e6, "air_mass_W_K": 1000.0, "mass_J_K": 5.0e7, "mass_out_W_K": 90.0},
-    "defrost": {"room_W": -2500.0, "seconds": 500.0, "lead_s": 60.0, "frost_Wh": 3000.0},
+    "defrost": {"room_W": -2500.0, "seconds": 500.0, "lead_s": 60.0, "frost_Wh": 3000.0, "power_W": 800.0},
     "unit": {"heat_per_table": {"a": 3.5, "b": 0.0}, "power_per_table": 1.0,
              "q100q": {"a": 5000.0, "b": 0.0}, "p100q": {"a": 1500.0, "b": 0.0},
              "q100": {"a": 7000.0, "b": 0.0}, "p100": {"a": 2500.0, "b": 0.0},
@@ -48,6 +52,9 @@ DAY_BINS = ((6, 12), (12, 18), (18, 24))  # Gain by time of day, against 00-06 a
 SOURCE_BINS = ((0, 2), (2, 4), (4, 7))    # A told-of heat source, by hours since its start
 LEAD, AHEAD = 240, 720                    # Rolling forecasts: 4 h to set the mass temperature, then 12 h unaided
 HORIZONS = (60, 180, 360, 720)
+MOST_DEFROSTS, MOST_FORECASTS = 240, 100  # More than this many are thinned out evenly, to keep a fit to a minute
+STAGES = (("fast", "air and air to mass (it takes 8 defrosts)"),
+          ("slow", "mass and mass to outdoors (it takes about a day in one stretch)"))
 
 
 def model_path():
@@ -113,6 +120,8 @@ def segments(series_list, since=None):
             if not room or not heat or gap or (since and s.t[i] < since):
                 cur = None
                 continue
+            if cur is not None and s.t[i] - cur["t"][-1] > 2 * DT:  # A gap that falls between two minutes
+                cur = None
             if cur is None:
                 cur = {"name": s.name, "t": [], "R": [], "Q": [], "D": [], "O": [], "F": {}}
                 out.append(cur)
@@ -191,6 +200,34 @@ def ch_source(starts, lo, hi):
     return f
 
 
+def attach_weather(segs, w):
+    """Sun (W/m2) and wind (m/s) for every minute of the segments, None where none is on record"""
+    for g in segs:
+        if "S" not in g:
+            g["S"] = [w.at(t, "sun") if w else None for t in g["t"]]
+            g["V"] = [w.at(t, "wind") if w else None for t in g["t"]]
+    return segs
+
+
+def covered(segs, key):
+    """Share of the minutes that have a value from the weather"""
+    n = sum(len(g[key]) for g in segs)
+    return sum(1 for g in segs for x in g[key] if x is not None) / float(n) if n else 0.0
+
+
+def ch_sun(g):
+    """Global radiation, W/m2: its amplitude is W into the room per W/m2"""
+    return [x or 0.0 for x in g["S"]]
+
+
+def ch_wind(ref):
+    """Extra loss in wind: per m/s over `ref` (the mean wind of the fit) and per degree between room and outdoors.
+    Its amplitude is W/K per m/s, positive when wind cools the house"""
+    def f(g):
+        return [-((v if v is not None else ref) - ref) * (r - o) for v, r, o in zip(g["V"], g["R"], g["O"])]
+    return f
+
+
 def fast_channels(segs):
     """The defrost, and a scale on the heat estimate for each fan setting but the commonest"""
     total = {}
@@ -201,10 +238,12 @@ def fast_channels(segs):
     return [("defrost", ch_defrost)] + [("fan %s" % f, ch_fan(f)) for f in sorted(total) if f != ref and total[f] >= 600], ref
 
 
-def slow_channels(sources):
+def slow_channels(sources, wind_ref=None):
     ch = [("gain %02d-%02d" % b, ch_day(*b)) for b in DAY_BINS]
     for name, starts in sorted(sources.items()):
         ch += [("%s %d-%d h" % (name, lo, hi), ch_source(starts, lo, hi)) for lo, hi in SOURCE_BINS]
+    if wind_ref is not None:  # The segments have the weather attached
+        ch += [("sun", ch_sun), ("wind", ch_wind(wind_ref))]
     return ch
 
 
@@ -225,7 +264,21 @@ def model_channels(m, segs):
         for (lo, hi), a in zip(SOURCE_BINS, amps):
             chans.append(("%s %d-%d h" % (name, lo, hi), ch_source(sources.get(name, []), lo, hi)))
             amp["%s %d-%d h" % (name, lo, hi)] = a
+    wg = g.get("weather")
+    if wg:
+        attach_weather(segs, weather.load())
+        chans += [("sun", ch_sun), ("wind", ch_wind(wg["wind_ref_ms"]))]
+        amp.update({"sun": wg["sun_W_per_Wm2"], "wind": wg["wind_W_K_per_ms"]})
     return chans, amp
+
+
+def weather_note(m, segs):
+    """A line to print when the model has sun and wind but the weather on record does not cover this data"""
+    if (m.get("gains") or {}).get("weather") and segs and min(covered(segs, "S"), covered(segs, "V")) < 0.9:
+        return ("  NOTE: the model has sun and wind, but the weather on record covers %.0f%% of this data, so they "
+                "count for little here. Run weather.py and do this again." % (
+                    100 * min(covered(segs, "S"), covered(segs, "V"))))
+    return None
 
 
 # --- the house
@@ -327,7 +380,7 @@ def rolling(h, wins, chans, amp):
                 acc[z][0] += e * e
                 acc[z][1] += e
                 acc[z][2] += 1
-    return ({z: (math.sqrt(v[0] / v[2]), v[1] / v[2], v[2]) if v[2] else (0.0, 0.0, 0) for z, v in acc.items()},
+    return ({z: (math.sqrt(v[0] / v[2]), v[1] / v[2], v[2]) if v[2] else (None, None, 0) for z, v in acc.items()},
             ss, cnt)
 
 
@@ -336,16 +389,24 @@ def no_model(wins):
     out = {}
     for z in HORIZONS:
         e = [g["R"][LEAD - 1] - g["R"][LEAD + z - 1] for g in wins if LEAD + z - 1 < len(g["R"])]
-        out[z] = math.sqrt(sum(x * x for x in e) / len(e)) if e else 0.0
+        out[z] = math.sqrt(sum(x * x for x in e) / len(e)) if e else None
     return out
 
 
 def score_lines(label, score, base=None):
-    line = "  %-40s " % label + "  ".join("%2d h: %.2f (%+.2f)" % (z // 60, score[z][0], score[z][1]) for z in HORIZONS)
+    """A horizon that no forecast reached shows as a dash, not as a perfect score"""
+    line = "  %-40s " % label + "  ".join("%2d h: %s" % (z // 60, "%.2f (%+.2f)" % score[z][:2] if score[z][2] else
+                                                         "  -         ") for z in HORIZONS)
     if base:
         line += "\n  %-40s " % "  no model, the same forecasts" + "  ".join(
-            "%2d h: %.2f        " % (z // 60, base[z]) for z in HORIZONS)
+            "%2d h: %s" % (z // 60, "%.2f        " % base[z] if base[z] is not None else "  -         ")
+            for z in HORIZONS)
     return line
+
+
+def thin(v, most):
+    """About `most` of v at most, evenly spread"""
+    return v[::(len(v) - 1) // most + 1] if v else v
 
 
 def nelder_mead(f, x0, step, iters):
@@ -379,15 +440,16 @@ def nelder_mead(f, x0, step, iters):
     return S[i], F[i]
 
 
-def fit_house(segs, start, sources, quiet=False):
-    """Two stages, each fitted on what it is for.
+def fit_house(segs, start, sources, w=None, quiet=False):
+    """Two stages, each fitted on what it is for. `w` is the weather on record, or None to leave sun and wind out.
 
     Fast (air, air to mass; with them the heat a defrost takes and a scale on the heat estimate per fan setting):
     on the defrosts as step tests, each window with its own mass temperature. This sets the room's swing in a
     defrost cycle, which is what the controller reacts to.
     Slow (mass, mass to outdoors; with them the gain by time of day and the told-of heat sources): on rolling
     forecasts, the mass temperature set from four hours and the room then forecast twelve hours on. Scoring a
-    forecast and not one long run keeps heat nobody logged from being soaked up by the mass.
+    forecast and not one long run keeps heat nobody logged from being soaked up by the mass. The sun and the wind
+    go in here too when the weather on record covers the data.
     """
     def say(text):
         if not quiet:
@@ -414,19 +476,34 @@ def fit_house(segs, start, sources, quiet=False):
         h.update({k: math.exp(v) for k, v in zip(keys, best[1])})
         return h, math.sqrt(best[0])
 
-    h, info = dict(start), {}
-    dw = defrost_windows(segs)
+    def some(v, most, what):
+        if len(v) > most:
+            say("  %d %s: %d of them used, evenly spread" % (len(v), what, len(thin(v, most))))
+        return thin(v, most)
+
+    h, info = dict(start), {"fitted": [], "wind_ref": None}
+    if w:
+        attach_weather(segs, w)
+        cover = min(covered(segs, "S"), covered(segs, "V"))
+        wind = [x for g in segs for x in g["V"] if x is not None]
+        if cover >= 0.9:
+            info["wind_ref"] = sum(wind) / len(wind)
+        else:
+            say("  the weather on record covers %.0f%% of this data: sun and wind left out (run weather.py)" % (
+                100 * cover))
+    dw = some(defrost_windows(segs), MOST_DEFROSTS, "defrosts")
     fchans, ref = fast_channels(dw)
     amp = {"defrost": None}
     if len(dw) >= 8:
         h, info["rms_through_defrosts"] = run(("air_J_K", "air_mass_W_K"), h, lambda hh: (
             lambda r: r[0] / r[1])(solve(hh, dw, fchans)), 150, 3, "fast, %d defrosts" % len(dw))
         amp = solve(h, dw, fchans)[2]
+        info["fitted"].append("fast")
     else:
         say("  fast: only %d defrosts with room around them, air figures kept" % len(dw))
         fchans, amp = [("defrost", ch_defrost)], {}
-    schans = slow_channels(sources)
-    rw = rolling_windows(segs, stride=180)
+    schans = slow_channels(sources, info["wind_ref"])
+    rw = some(rolling_windows(segs, stride=180), MOST_FORECASTS, "forecasts")
 
     def amps(hh):
         return solve(hh, rw, fchans + schans, fixed=amp)[2]
@@ -437,16 +514,34 @@ def fit_house(segs, start, sources, quiet=False):
     if len(rw) >= 6:
         h, info["rms_forecast"] = run(("mass_J_K", "mass_out_W_K"), h, cost, 60, 2, "slow, %d forecasts" % len(rw))
         amp = amps(h)
+        info["fitted"].append("slow")
     else:
-        say("  slow: under a day of data, mass figures kept")
-        if amp.get("defrost") is None:
-            amp["defrost"] = None
+        say("  slow: under a day of data in one stretch, mass figures kept")
+        amp.setdefault("defrost", None)
     info["reference_fan"] = ref
     return h, amp, fchans + schans, info
 
 
-def gains_from(amp, sources, ref):
+def house_fitted(fit):
+    """Which stages of the house fit have ever run on enough data: of ("fast", "slow")"""
+    if "house_fitted" in fit:
+        return fit["house_fitted"]
+    # A model saved before this was kept
+    return (["fast"] if fit.get("rms_through_defrosts") else []) + (["slow"] if fit.get("hours", 0) >= 20 else [])
+
+
+def fit_label(m):
+    f = m.get("fit")
+    if not f:
+        return "STARTING VALUES, never fitted"
+    return "fitted %s%s" % (f["date"], "" if len(house_fitted(f)) == len(STAGES) else
+                            ", HOUSE PARTLY AT STARTING VALUES for want of data")
+
+
+def gains_from(amp, sources, ref, wind_ref=None):
     g = {"daily_W": {}, "sources_W": {}, "heat_scale_by_fan": {}, "reference_fan": ref}
+    if wind_ref is not None and "sun" in amp:
+        g["weather"] = {"sun_W_per_Wm2": amp["sun"], "wind_W_K_per_ms": amp["wind"], "wind_ref_ms": wind_ref}
     for b in DAY_BINS:
         name = "gain %02d-%02d" % b
         if name in amp:
@@ -540,8 +635,11 @@ def fit_unit(series_list, old):
         if not s.has("heatout"):
             continue
         out = s.col("heatout")
+        names = [r[0] for r in s.table]
+        top = names.index("100q") if "100q" in names else 0
+        below = names[top - 1] if top else None  # The level under 100q, whatever this table calls it
         for i in range(1, s.n - int(900 / s.interval)):
-            if s.level(i) == "100q" and s.level(i - 1) == "95" and s.col("sub")[i] == 0 and out[i] is not None:
+            if s.level(i) == "100q" and s.level(i - 1) == below and s.col("sub")[i] == 0 and out[i] is not None:
                 top = [x for x in out[i + int(480 / s.interval):i + int(720 / s.interval)] if x is not None]
                 if not top or s.level(i + int(700 / s.interval)) != "100q":
                     continue
@@ -558,7 +656,7 @@ def fit_unit(series_list, old):
 
 def fit_defrost(series_list, old):
     d = dict(old)
-    dur, lead, frost, short = [], [], [], []
+    dur, lead, frost, short, power = [], [], [], [], []
     for s in series_list:
         if not s.has("heatout"):
             continue
@@ -566,6 +664,9 @@ def fit_defrost(series_list, old):
         for a, b in s.defrosts():
             if b < s.n and a > int(900 / s.interval):
                 dur.append((b - a) * s.interval)
+                pw = [x for x in s.col("power")[a:b] if x is not None]
+                if pw:
+                    power.append(sum(pw) / len(pw))
                 before = [x for x in out[a - int(900 / s.interval):a - int(300 / s.interval)] if x is not None]
                 if before:
                     normal, j = st.median(before), a - 1
@@ -580,6 +681,8 @@ def fit_defrost(series_list, old):
         d["seconds"] = st.median(dur)
     if lead:
         d["lead_s"] = st.median(lead)
+    if power:
+        d["power_W"] = st.median(power)
     if len(frost) >= 4:
         d.update({"frost_Wh": st.median(frost), "frost_Wh_p10": heatlog.pct(frost, 0.1),
                   "frost_Wh_p90": heatlog.pct(frost, 0.9), "cycles": len(frost)})
@@ -590,8 +693,6 @@ def fit_defrost(series_list, old):
     return d
 
 
-
-
 def show(m, title="Model"):
     h, d, u, f, g = m["house"], m["defrost"], m["unit"], m.get("fit") or {}, m.get("gains") or {}
     print("%s%s" % (title, " (fitted %s on %.0f h)" % (f["date"], f["hours"]) if f else
@@ -600,6 +701,9 @@ def show(m, title="Model"):
         h["air_J_K"] / 1e6, h["air_mass_W_K"], h["mass_J_K"] / 1e6, h["mass_out_W_K"]))
     print("          overall loss %.0f W/K, fast time constant %.0f min, slow %.0f h" % (
         ua(h), h["air_J_K"] / h["air_mass_W_K"] / 60, h["mass_J_K"] / (h["mass_out_W_K"]) / 3600))
+    for stage, what in STAGES:
+        if f and stage not in house_fitted(f):
+            print("          NOT FITTED YET, still at their starting values: %s" % what)
     if f.get("rms_through_defrosts"):
         print("          through the defrosts (15 min before to 60 min after each) the room is followed to %.3f degC "
               "rms" % f["rms_through_defrosts"])
@@ -607,12 +711,15 @@ def show(m, title="Model"):
         print("  gains   by time of day against 00-06: " + ", ".join("%s %+.0f W" % kv for kv in sorted(g["daily_W"].items())))
     for name, a in sorted((g.get("sources_W") or {}).items()):
         print("          %s: " % name + ", ".join("%d-%d h %+.0f W" % (lo, hi, x) for (lo, hi), x in zip(SOURCE_BINS, a)))
+    if g.get("weather"):
+        print("          sun %+.1f W per W/m2 of global radiation; wind %+.1f W/K more loss per m/s over %.1f m/s" % (
+            g["weather"]["sun_W_per_Wm2"], g["weather"]["wind_W_K_per_ms"], g["weather"]["wind_ref_ms"]))
     if g.get("heat_scale_by_fan"):
         print("          heat estimate against fan %s: " % g.get("reference_fan") + ", ".join(
             "fan %s %+.0f%%" % (k, 100 * v) for k, v in sorted(g["heat_scale_by_fan"].items())))
     print("  defrost every %.0f Wh of heat%s, %.0f s long, takes %.0f W from the room, output falls %.0f s before" % (
         d["frost_Wh"], " (%.0f..%.0f over %d cycles)" % (d["frost_Wh_p10"], d["frost_Wh_p90"], d["cycles"])
-        if "cycles" in d else "", d["seconds"], -d["room_W"], d["lead_s"]))
+        if "cycles" in d else "", d["seconds"], -(d["room_W"] or 0), d["lead_s"]))
     if d.get("short_cycles"):
         print("          NOT MODELLED: %.0f%% of the cycles in the logs were short ones (a defrost again after about "
               "%.0f Wh): the plant has no defrost loops" % (100 * d["short_share"], d.get("short_Wh", 0)))
@@ -626,7 +733,7 @@ def show(m, title="Model"):
 
 def usable_series(hours=None):
     series = heatlog.runs()
-    if hours:
+    if hours and series:
         end = max(s.t[-1] for s in series)
         series = [s.slice(s.index_at(end - hours * 3600), s.n) for s in series if s.t[-1] > end - hours * 3600]
     return [s for s in series if s.has("heatout")]
@@ -641,6 +748,7 @@ def cmd_validate(args):
     # The forecasts need four hours before their start, so the new part is taken with that much of the old
     segs = segments([log], since - LEAD * 60 if new_only else None)
     chans, amp = model_channels(m, segs)
+    note = weather_note(m, segs)
     print("\nHouse, rolling forecasts on %s%s:" % (log.name, " (only the part after the last fit, %s)" % stamp(since)
                                                   if new_only else (" (IN the last fit: not an independent test)"
                                                                     if since and log.t[-1] <= since + 6 * 3600 else "")))
@@ -651,9 +759,11 @@ def cmd_validate(args):
         score, _, _ = rolling(m["house"], wins, chans, amp)
         base = no_model(wins)
         print(score_lines("model, %d forecasts: rms (mean) degC" % len(wins), score, base))
-        verdict = [z // 60 for z in HORIZONS if score[z][0] < base[z]]
+        verdict = [z // 60 for z in HORIZONS if score[z][2] and score[z][0] < base[z]]
         print("  The model beats \"the room stays as it was\" at: %s. Positive mean: the model runs warm." % (
             ", ".join("%d h" % z for z in verdict) or "no horizon"))
+        if note:
+            print(note)
         if load_sources():
             print("  Heat sources in events.json are counted where the model has figures for them; one that is new "
                   "since the fit is not.")
@@ -692,12 +802,24 @@ def cmd_validate(args):
         row("power at %s, fan %s, %+.0f degC" % (g["level"], g["fan"], T), mp, g["power"], 10, "W")
 
 
+def use_weather(args, m):
+    """(weather to fit with or None, whether it is wanted): as --weather says, else as the last fit had it"""
+    use = args.weather == "on" if args.weather else (m.get("gains") or {}).get("weather_use", True)
+    w = weather.load() if use else None
+    print("Weather: %s" % ("sun and wind go in the fit where weather.json covers the data" if w else
+                           "left out (--weather off, now or at the last fit)" if not use else
+                           "none on record (weather.py), so no sun or wind in the fit"))
+    return w, use
+
+
 def cmd_holdout(args):
     m = load_model()
     segs = segments(usable_series(args.hours))
     if not segs:
-        raise SystemExit("no log has a heat output estimate")
+        raise SystemExit("no log has three hours with a heat output estimate in one stretch: nothing to hold back")
     sources = load_sources()
+    w, _ = use_weather(args, m)
+    attach_weather(segs, w)
     longest = max(segs, key=lambda g: len(g["R"]))
     rest = [g for g in segs if g is not longest]
     n = len(longest["R"])
@@ -706,16 +828,24 @@ def cmd_holdout(args):
     print("rms (mean) of forecast minus measured, degC. A model worth having beats \"no model\" on data it has not "
           "seen.\n")
     for label, c in (("second half held back", n // 2), ("last third held back", 2 * n // 3)):
-        h, amp, chans, info = fit_house(rest + [cut(longest, 0, c)], m["house"], sources, quiet=True)
+        h, amp, chans, info = fit_house(rest + [cut(longest, 0, c)], m["house"], sources, w, quiet=True)
         test = [cut(longest, c, n)]
-        print("%s (from %s): fitted mass %.0f MJ/K, to outdoors %.0f W/K, overall %.0f W/K" % (
-            label, stamp(longest["t"][c]), h["mass_J_K"] / 1e6, h["mass_out_W_K"], ua(h)))
+        print("%s (from %s): fitted mass %.0f MJ/K, to outdoors %.0f W/K, overall %.0f W/K%s" % (
+            label, stamp(longest["t"][c]), h["mass_J_K"] / 1e6, h["mass_out_W_K"], ua(h),
+            "; sun %+.1f W per W/m2, wind %+.1f W/K per m/s" % (amp["sun"], amp["wind"]) if "sun" in amp else ""))
+        for stage, what in STAGES:
+            if stage not in info["fitted"]:
+                print("  too little data before the cut to fit %s: those are the figures the model had" % what)
         dw = defrost_windows(test)
-        if dw:
+        if dw and amp.get("defrost") is not None:
             ss, cnt, _, _, _ = solve(h, dw, chans, fixed=amp)
             print("  %d unseen defrosts followed to %.3f degC rms (air %.2f MJ/K, air to mass %.0f W/K, defrost takes "
                   "%.0f W)" % (len(dw), math.sqrt(ss / cnt), h["air_J_K"] / 1e6, h["air_mass_W_K"], -amp["defrost"]))
         wins = rolling_windows(test)
+        if not wins:
+            print("  too little data held back to forecast (four hours set the start, then at least one to "
+                  "forecast): no score\n")
+            continue
         score, _, _ = rolling(h, wins, chans, amp)
         print(score_lines("%d forecasts of unseen data" % len(wins), score, no_model(wins)) + "\n")
 
@@ -725,13 +855,19 @@ def cmd_residual(args):
     log = heatlog.find_log(args.log)
     segs = segments([log])
     chans, amp = model_channels(m, segs)
+    w = weather.load()
     print("Heat the room got beyond what the model accounts for, every two hours of %s." % log.name)
     print("A run of hours well above zero is a heat source nobody mentioned; well below, a loss (a window, wind) or")
-    print("the heat estimate reading high. Told-of sources and the daily gain are already taken out.\n")
+    print("the heat estimate reading high. Told-of sources and the daily gain are already taken out%s.\n" % (
+        ", and the sun and the wind" if "sun" in amp else ""))
+    if weather_note(m, segs):
+        print(weather_note(m, segs) + "\n")
     for r in unexplained(m["house"], chans, amp, segs):
         bar = ("+" if r["W"] > 0 else "-") * min(30, int(abs(r["W"]) / 50))
-        print("  %s  %+5.0f W  %-30s room %.2f  outdoor %+5.1f  unit %4.0f W%s" % (
+        wx = [w.mean(k, r["t"], r["t"] + 7199) if w else None for k in ("sun", "wind", "rh")]
+        print("  %s  %+5.0f W  %-30s room %.2f  outdoor %+5.1f  unit %4.0f W%s%s" % (
             time.strftime("%a %m-%d %H:%M", time.localtime(r["t"])), r["W"], bar, r["room"], r["outdoor"], r["heat"],
+            "  sun %3.0f W/m2  wind %4.1f m/s  humidity %3.0f%%" % tuple(wx) if None not in wx else "",
             "  (few samples)" if r["n"] < 4 else ""))
 
 
@@ -741,7 +877,10 @@ def cmd_fit(args):
     if not usable:
         raise SystemExit("no log has a heat output estimate: nothing to fit")
     segs = segments(usable)
+    if not segs:
+        raise SystemExit("no log has three hours with a heat output estimate in one stretch: nothing to fit yet")
     sources = load_sources()
+    w, use = use_weather(args, old)
     hours = sum(len(g["R"]) for g in segs) / 60.0
     print("Fitting on %.0f h in %d stretches from %d boots" % (hours, len(segs), len(usable)))
     for g in segs:
@@ -749,16 +888,18 @@ def cmd_fit(args):
     print("Heat sources told of (events.json): %s" % (", ".join("%s x%d" % (k, len(v)) for k, v in sorted(
         sources.items())) or "none"))
     print("House (the spread between starts shows how well a figure is pinned down):")
-    house, amp, chans, info = fit_house(segs, old["house"], sources)
+    house, amp, chans, info = fit_house(segs, old["house"], sources, w)
     new = {"house": house, "defrost": fit_defrost(usable, old["defrost"]), "unit": fit_unit(usable, old["unit"])}
     if amp.get("defrost") is not None:
         new["defrost"]["room_W"] = amp["defrost"]
     amp["defrost"] = new["defrost"]["room_W"]
-    new["gains"] = gains_from(amp, sources, info.get("reference_fan"))
-    wins = rolling_windows(segs)
+    new["gains"] = gains_from(amp, sources, info.get("reference_fan"), info["wind_ref"])
+    new["gains"]["weather_use"] = use
+    wins = thin(rolling_windows(segs), 2 * MOST_FORECASTS)
     score, _, _ = rolling(house, wins, chans, amp)
     base = no_model(wins)
     new["fit"] = {"date": time.strftime("%Y-%m-%d"), "hours": hours,
+                  "house_fitted": [s for s, _ in STAGES if s in info["fitted"] + house_fitted(old.get("fit") or {})],
                   "rms_through_defrosts": info.get("rms_through_defrosts"),
                   "forecast_rms": {str(z // 60): score[z][0] for z in HORIZONS},
                   "no_model_rms": {str(z // 60): base[z] for z in HORIZONS},
@@ -779,7 +920,11 @@ def cmd_fit(args):
         moved(k, old["house"][k], house[k])
     moved("overall loss W/K", ua(old["house"]), ua(house))
     for k in ("room_W", "seconds", "frost_Wh", "lead_s"):
-        moved("defrost " + k, old["defrost"][k], new["defrost"][k])
+        moved("defrost " + k, old["defrost"][k] or 0, new["defrost"][k] or 0)
+    ow, nw = (old.get("gains") or {}).get("weather") or {}, new["gains"].get("weather") or {}
+    for k, unit in (("sun_W_per_Wm2", "W per W/m2"), ("wind_W_K_per_ms", "W/K per m/s")):
+        if k in ow or k in nw:
+            moved("weather " + k.split("_")[0], ow.get(k, 0), nw.get(k, 0), unit)
     for k in ("heat_per_table", "q100q", "p100q", "q100", "p100"):
         moved("unit %s at 0 degC" % k, at(old["unit"][k], 0), at(new["unit"][k], 0))
         if abs(new["unit"][k].get("b", 0) - old["unit"][k].get("b", 0)) > 1e-9:
@@ -800,7 +945,9 @@ def main():
     ap.add_argument("command", choices=["show", "validate", "fit", "holdout", "residual"])
     ap.add_argument("log", nargs="?")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--hours", type=float, default=240, help="fit, holdout: use only the latest this many hours")
+    ap.add_argument("--hours", type=float, help="fit, holdout: use only the latest this many hours (default: all)")
+    ap.add_argument("--weather", choices=["on", "off"], help="fit, holdout: with or without sun and wind from "
+                    "weather.json (default: as the last fit, which starts as on); fit remembers it")
     args = ap.parse_args()
     {"show": lambda a: show(load_model()), "validate": cmd_validate, "fit": cmd_fit, "holdout": cmd_holdout,
      "residual": cmd_residual}[args.command](args)

@@ -3,10 +3,11 @@
 
 Usage: python3 -I pull.py [--host saadin.local]
 
-Only GET requests are made: /graph.json (the log), /graph (firmware id in the footer) and /revk-settings (the first
-settings page, from which a fixed list of heating settings is read; nothing else on that page is kept).
+Only GET requests are made: /graph.json (the log), /graph (firmware id in the footer) and /revk-settings (the page
+that lists the firmware's own settings, as the web interface opens it; the heating settings in a fixed list are read
+from it and nothing else on it is kept).
 Writes graph-logs/graph-<local time>.json unchanged from the device, and notes the pull in graph-logs/index.json
-and what is known of the device's settings in graph-logs/device.json.
+and the heating settings the device is running on in graph-logs/device.json.
 """
 import argparse
 import html
@@ -22,14 +23,51 @@ sys.dont_write_bytecode = True  # Keep the skill folder to its sources
 import heatlog  # noqa: E402
 import report  # noqa: E402
 
-# Heating settings on the first settings page, by the page's field id -> setting name
-PAGE_SETTINGS = {"autocurve": "auto.curve", "demandtable": "demand.table", "demandcop": "demand.cop",
-                 "fanflow": "fan.flow", "demandfanmap": "demand.fanmap", "fanhold": "fan.hold"}
+# The settings the heating controller runs on (heatctl_settings() in Faikout.c) and those behind the heat estimate,
+# as the settings page names its fields (the setting's name without the dot). A new heating setting goes here
+PAGE_SETTINGS = {f.replace(".", ""): f for f in (
+    "auto.e", "auto.t", "auto.curve", "auto.stale", "auto.smooth",
+    "demand.set", "demand.table", "demand.cop", "demand.full", "demand.start", "demand.rate", "demand.minrun",
+    "demand.fan", "demand.fanmap", "pid.kp", "pid.ti",
+    "idle.temp", "idle.over", "idle.under", "idle.min", "idle.fan", "idle.fanmap",
+    "cold.enter", "cold.exit", "cold.hold", "cold.set", "cold.rate", "cold.kp", "cold.ti", "cold.fan", "cold.fanmap",
+    "defrost.enter", "defrost.exit", "defrost.max", "defrost.hold", "defrost.holdmax", "defrost.watchdog",
+    "defrost.loops", "defrost.window", "defrost.rest", "fan.flow", "fan.hold")}
+SETTINGS_PAGES = (-2, 0)  # All the firmware's own settings; the heating page, for firmware that lacks the first
 
 
 def get(url, timeout):
     with urllib.request.urlopen(url, timeout=timeout) as r:
         return r.read()
+
+
+def num(text):
+    for conv in (int, float):
+        try:
+            return conv(text)
+        except ValueError:
+            pass
+    return text
+
+
+def heating_settings(page):
+    """{setting: value} for the heating settings on a settings page of the device, in the units the page shows:
+    a number where it is one, else the text, 1 or 0 for a switch, the chosen name for a choice"""
+    out = {}
+    for tag in re.findall(r"<input\b[^>]*>", page):
+        field = re.search(r'\sid="([^"]+)"', tag)
+        if not field or field.group(1) not in PAGE_SETTINGS:
+            continue
+        value = re.search(r'\svalue="([^"]*)"', tag)
+        if "type=checkbox" in tag:
+            out[PAGE_SETTINGS[field.group(1)]] = 1 if re.search(r"\schecked\b", tag) else 0
+        elif value:
+            out[PAGE_SETTINGS[field.group(1)]] = num(html.unescape(value.group(1)))
+    for field, options in re.findall(r'<select name="_([^"]+)"[^>]*>(.*?)</select>', page, re.S):
+        chosen = re.search(r"<option[^>]*\sselected[^>]*>([^<]*)<", options)
+        if field in PAGE_SETTINGS and chosen:
+            out[PAGE_SETTINGS[field]] = html.unescape(chosen.group(1))
+    return out
 
 
 def main():
@@ -68,40 +106,44 @@ def main():
     except Exception:
         pass
 
-    seen = {}
-    try:
-        page = get("http://%s/revk-settings?_page=0" % host, 20).decode("utf-8", "replace")
-        for field, setting in PAGE_SETTINGS.items():
-            m = re.search(r'<input id="%s"[^>]*\svalue="([^"]*)"' % field, page)
-            if m:
-                seen[setting] = html.unescape(m.group(1))
-    except Exception:
-        pass
+    # The settings the device is running on, from its own settings page
+    seen, locked = {}, False
+    for number in SETTINGS_PAGES:
+        try:
+            page = get("http://%s/revk-settings?_page=%d" % (host, number), 20).decode("utf-8", "replace")
+        except Exception:
+            continue
+        locked = locked or bool(re.search(r"<input name=password[^>]*type=password", page))
+        for k, v in heating_settings(page).items():
+            seen.setdefault(k, v)
+    if raw.get("table"):
+        seen["demand.table"] = raw["table"]  # As the firmware parsed it: the page is empty for the default
+    read = len(seen)
+    # Where the page did not give them (a password on it, older firmware): what the log itself gives away
     for col, setting in (("kp", "pid.kp"), ("ti", "pid.ti")):  # As in use at the last sample (in demand control)
         v = [x for x in raw.get(col) or [] if x is not None]
         if v and raw.get("state") and raw["state"][-1] == heatlog.DEMAND:
-            seen[setting] = v[-1]
-    if raw.get("table"):
-        seen["demand.table"] = raw["table"]
-    # Settings the device does not show without a POST, as far as the log itself gives them away
+            seen.setdefault(setting, v[-1])
     log = heatlog.Log(path, {name: {"pulled": pulled}})
     shown = report.inferred(log)
     if "defrost.hold" in shown:
-        seen["defrost.hold"] = int(round(shown["defrost.hold"]))  # Minutes; a hold reads a sample short
+        seen.setdefault("defrost.hold", int(round(shown["defrost.hold"])))  # Minutes; a hold reads a sample short
     if "demand.rate" in shown:
-        seen["demand.rate"] = int(round(shown["demand.rate"] / 10.0)) * 10
+        seen.setdefault("demand.rate", int(round(shown["demand.rate"] / 10.0)) * 10)
     if log.has("smoothed") and all(a == b for a, b in zip(log.col("room"), log.col("smoothed"))):
-        seen["auto.smooth"] = 0
+        seen.setdefault("auto.smooth", 0)
+    target = [x for x in log.col("target") if x is not None]
+    if target:
+        seen.setdefault("auto.t", target[-1])
     settings = device.setdefault("settings", {})
     source = device.setdefault("source", {})
     changed = []
-    for k, v in seen.items():
+    for i, (k, v) in enumerate(seen.items()):
         old = settings.get(k)
         if old is not None and str(old) != str(v):
             changed.append("%s: %s -> %s" % (k, old, v))
         settings[k] = v
-        source[k] = ("log " if k in ("defrost.hold", "demand.rate", "auto.smooth") else "device ") + time.strftime(
-            "%Y-%m-%d", time.localtime(pulled))
+        source[k] = ("device " if i < read else "log ") + time.strftime("%Y-%m-%d", time.localtime(pulled))
     eff = [x for x in raw.get("effective") or [] if x is not None]
     if eff:
         device["target"] = eff[-1] / 100.0  # Effective target at the last sample, for the plant to run at
@@ -120,13 +162,21 @@ def main():
     print("  %d samples every %s s, %s to %s (%.1f h)" % (n, raw.get("interval"), heatlog.stamp(start),
                                                          heatlog.stamp(end), (end - start) / 3600.0))
     print("  firmware %s built %s" % (firmware or "unknown", build or "unknown"))
+    if read > 1:
+        print("  %d heating settings read from the device (device.json)" % read)
+    else:
+        print("  HEATING SETTINGS NOT READ from the device (%s): %d are from the log, the rest are as last recorded. Ask "
+              "the user for any that a conclusion depends on." % (
+                  "its settings page asks for a password" if locked else "its settings page did not answer",
+                  len(seen) - read))
     if prev:
         p = prev[-1]
         pf = (index.get(p.name) or {}).get("firmware")
         if start <= p.t[-1]:
             print("  continues %s (same boot): %.1f h of new data" % (p.name, (end - p.t[-1]) / 3600.0))
         else:
-            print("  the device restarted since %s: %.1f h between the logs is lost" % (p.name, (start - p.t[-1]) / 3600.0))
+            print("  does not continue %s: the device restarted, or more time has passed than its log holds. %.1f h "
+                  "between the logs is lost" % (p.name, (start - p.t[-1]) / 3600.0))
         if firmware and pf and firmware != pf:
             print("  FIRMWARE CHANGED since the last pull: %s -> %s" % (pf, firmware))
     for c in changed:

@@ -8,6 +8,7 @@ tomorrow's room temperature.
 
 - What is in it and where each figure comes from
 - Heat the log does not record
+- The weather
 - What it leaves out
 - Judging it
 - When it is off
@@ -24,6 +25,7 @@ tomorrow's room temperature.
 | `mass_J_K`, `mass_out_W_K` | Rolling forecasts: the mass temperature set from four hours, the room then forecast twelve hours on | Poorly until there are many days in varied weather; see "Judging it" |
 | `gains.daily_W` | With the slow fit. Extra heat in the house by time of day, against 00-06 as zero | Plausible after a few days; better with more |
 | `gains.sources_W` | With the slow fit. Each heat source told of in `events.json`, by hours since its start | As good as the times given |
+| `gains.weather` | With the slow fit, when `weather.json` covers the data. Heat from the sun per W/m2 of global radiation, and extra loss per m/s of wind | Not until `holdout` is better with them than without; see "The weather" |
 
 The fit is in two stages because one fit of everything lets the slow drift over days decide the fast figures too,
 and then the plant's swing per defrost cycle comes out too small. The slow stage scores forecasts and not one long
@@ -35,7 +37,7 @@ refitted when its data spans 4 degC, and a line is held flat beyond 3 degC outsi
 steps up to 100q.
 
 **Defrost.** One comes once `frost_Wh` of heat has been given since the last (the median over normal cycles),
-lasts `seconds`, and the output falls `lead_s` before the controller can see it.
+lasts `seconds` at `power_W` of electricity, and the output falls `lead_s` before the controller can see it.
 
 ## Heat the log does not record
 
@@ -44,19 +46,53 @@ told. `graph-logs/events.json` holds what the user has said:
 
 ```json
 {"sources": [{"name": "fireplace", "start": "2026-01-10 18:30", "told": "user 2026-01-12: lit about half past six"}],
- "noted":   [{"what": "strong wind", "when": "2026-01-08 and 09", "result": "no extra loss found"}]}
+ "asked":   [{"span": "2026-01-09 08:00 to 2026-01-12 09:00", "on": "2026-01-12",
+              "answer": "fireplace on Saturday evening, otherwise nothing unusual"}],
+ "noted":   [{"what": "strong wind", "when": "2026-01-08 and 09", "result": "no extra loss found"},
+             {"what": "no sauna in the house", "when": "standing", "result": "do not ask"}]}
 ```
 
 - A **source** gets three amplitudes (0-2 h, 2-4 h, 4-7 h after its start), shared by all events of the same name.
   Give the start to the half hour; when the user is unsure, try a few and keep the one the fit likes (lowest rms).
+  A loss (a window left open, airing) is a source too, under its own name: its amplitudes come out negative. A
+  source needs a few events before its figure means much, and `validate` counts a new event only if the model
+  already has a figure for that name.
+- **Asked** is the record of the questions of step 3 of the skill: which span, when, and what the user said, also
+  when that was "nothing". The fit does not read it. It is there so that no span is asked about twice, and so
+  that a later reader can tell "nothing happened" from "nobody asked".
 - **Noted** is for things told that turned out not to show (so they are not asked about or tried again), and for
   standing facts ("no sun to speak of in November").
 - `model.py residual` lays the heat the model cannot explain along the log in two-hour steps. A run of hours well
   off zero is the cue to ask the user what happened then. Ask about specific times; people remember "Sunday
   evening" better than "any heat sources?".
 
-To try a new kind of term (wind as extra loss, a scale on the estimate at some level), add a channel next to
-`ch_day` and `ch_source` in `model.py` and judge it with `holdout`.
+To try a new kind of term (rain, a scale on the estimate at some level), add a channel next to `ch_day`,
+`ch_source` and `ch_sun` in `model.py` and judge it with `holdout`.
+
+## The weather
+
+`scripts/weather.py` keeps, in `graph-logs/weather.json`, what the device cannot measure, by the hour, from the
+Finnish Meteorological Institute's open data: global solar radiation from the nearest radiation station, and wind
+and humidity from the nearest weather station (`graph-logs/location.json` says which, and how far they are). The
+outdoor temperature in the model stays the unit's own sensor; the station's temperature is kept only because its
+humidity is relative to it.
+
+- **Sun** is a term of the slow fit: watts into the room per W/m2 of global radiation. Without it the sun sits in
+  the gain by time of day, which then differs between a clear day and a grey one.
+- **Wind** is a term of the slow fit: extra loss per m/s over the mean wind of the fit, per degree between room and
+  outdoors.
+- **Humidity** is not in the model. `report.py defrost` sets it beside every defrost cycle and counts the short
+  cycles by it, because frost is the one thing here that humidity could explain.
+
+Both terms are in a fit only when the weather on record covers nine tenths of its data, and each is one more thing
+that can soak up heat nobody logged. Keep them only when `model.py holdout --weather on` forecasts the held-back
+data better than `--weather off`; `fit --weather off` leaves them out until `fit --weather on`. Expect the sun to
+show from late winter on and hardly at all around midwinter, and expect a few days of data to say little either
+way.
+
+A station is not the house. There are few radiation stations, so the nearest may be far enough to have other
+clouds: its days are worth more than its hours. Wind is measured on open ground, ten metres up, and a house among
+trees or other houses gets less of it. The values are hourly means, stamped by the end of the hour.
 
 ## What it leaves out
 
@@ -73,6 +109,9 @@ Be explicit about these whenever a conclusion leans on them.
   has. Results below about -13 degC mean little.
 - **Sensor placement and lags**, except through the `--robust` variants.
 - **Heating off (idle).** It happens in the plant, but the unit's behaviour at restart is not fitted.
+- **The sun and the wind, hour by hour.** They are in the fit of the house, so that they do not bend its figures,
+  but the plant runs in still, dark weather: a scenario's gain stands for all of it, and a `,day` scenario carries
+  the gain by time of day only.
 
 ## Judging it
 
@@ -119,6 +158,14 @@ the journal. More terms always fit the data in hand better; only held-back data 
 `sim.py sweep --var "label:SRC=<dir with heatctl.c and heatctl.h>"` builds the plant against another source tree,
 so a change on a branch can be judged before it is flashed. `DEFS="-DNAME"` passes compiler flags, for a scratch copy
 with the change behind an `#ifdef`. Builds are cached in `graph-logs/.build/`.
+
+The plant's controller runs on the device's own settings: `pull.py` reads them from the device into `device.json`,
+and `sim.py` passes on those that do something in the plant (`SETTING_ENV` there), the target and its curve
+(`auto.t`, `auto.curve`) among them, so the target moves with the weather of a scenario as it does on the device. A
+variant overrides them, and nothing comes from the shell's environment. A setting that `device.json` lacks is at the
+firmware's default, and `demand.start` is always the plant's own (see `plant.c`). In `compare` the target is the
+one set in each stretch of the log; the other settings are those of the last pull, so a setting changed since the
+log was recorded makes that comparison one of two different controllers.
 
 A scenario ending in `,day` (for example `-1,-900,day`) adds the fitted gain by time of day. That is the
 disturbance the house really has, so prefer it to made-up ramps when judging how settings track a change in need.

@@ -1,12 +1,14 @@
 // Closed-loop plant for the heating controller: the firmware's own heatctl.c against the model of the house and the
-// unit in graph-logs/model.json. Built and run by sim.py, which passes everything in the environment; see
+// unit in graph-logs/model.json. Built and run by sim.py, which passes the model and the device's own settings (as
+// pull.py read them from it, in the settings' units) in the environment; see
 // references/model.md. One second per step, 72 h: a day to settle, then hours 24-48 are scored as "steady", and a
 // change of heat need or of weather that starts at hour 48 and takes 2 h is scored over hours 48-60 as "change".
 //
 //   plant <outdoor> <gain W> [<outdoor2> <gain2 W>] [<trace from min> <trace to min>]
 //
 // If heatctl_params_t or heatctl_in_t changes in the firmware this file must follow: it is a test harness, so fix
-// it here, never by bending the firmware.
+// it here, never by bending the firmware. A new setting does not stop it building by itself (it would just be 0
+// here), so the sizes are checked below; `make -C ESP test` builds this file to show it at the time of the change.
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +29,11 @@ static const char *envs(const char *n, const char *d)
 
 #define TABLE_DEFAULT "40:270,50:340,60:400,70:465,75:500,80:530,85:570,90:605,95:640,100q:1510,100:2470"
 
+// The controller's settings or inputs changed: give every new field its value in main() below (a setting's default
+// is in settings.def, and sim.py's SETTING_ENV passes the device's own), then put the new sizes here
+_Static_assert(sizeof(heatctl_params_t) == 428 && sizeof(heatctl_in_t) == 20,
+               "heatctl_params_t or heatctl_in_t changed: plant.c must follow, see the comment above this line");
+
 int main(int argc, char **argv)
 {
     float out1 = argc > 1 ? atof(argv[1]) : -1, gain1 = argc > 2 ? atof(argv[2]) : 0;
@@ -43,7 +50,7 @@ int main(int argc, char **argv)
     float pulse = envf("PULSE_W", 0), pulsemin = envf("PULSE_MIN", 120);
     // Defrost
     float frostmax = envf("FROST_WH", 3000), dsec = envf("DEFROST_S", 500), dq = envf("DEFROST_ROOM_W", -2500),
-          dlead = envf("DEFROST_LEAD_S", 60);
+          dlead = envf("DEFROST_LEAD_S", 60), dpower = envf("DEFROST_POWER_W", 800);
     // Unit: what it really gives at each level, whatever the controller's table says
     float hpt = envf("HEAT_PER_TABLE", 3.5), ppt = envf("POWER_PER_TABLE", 1);
     float q100q = envf("Q100Q", 5000), p100q = envf("P100Q", 1500), q100 = envf("Q100", 7000),
@@ -56,8 +63,10 @@ int main(int argc, char **argv)
     for (int r = 0; r < unit.n; r++)
         if (unit.level[r].demand < 100 && unit.level[r].watts * hpt > q95)
             q95 = unit.level[r].watts * hpt, p95 = unit.level[r].watts * ppt;
-    // Controller, as the device has it
-    float T = envf("TARGET", 21);
+    // Controller, as the device has it: what sim.py passes from device.json, else the default in settings.def.
+    // Left out are settings that do nothing here: the setpoints sent to the unit, the fans, the defrost thresholds
+    // on a liquid temperature the plant makes up, and cold mode's own loop
+    float T = envf("TARGET", 21); // auto.t, before the curve
     heatctl_params_t p = {
         .target = T,
         .stale = 1800,
@@ -71,14 +80,14 @@ int main(int argc, char **argv)
         .demand_minrun = envf("MINRUN", 30) * 60,
         .cop = envf("COP", 3),
         .kp = envf("KP", 900),
-        .ti = envf("TI", 60) * 60,
+        .ti = envf("TI", 90) * 60,
         .idle_temp = 16,
         .idle_over = envf("IDLE_OVER", 0.5),
         .idle_under = envf("IDLE_UNDER", 0),
         .idle_min = envf("IDLE_MIN", 30) * 60,
         .cold_enter = envf("COLD_ENTER", -15),
         .cold_exit = envf("COLD_EXIT", -10),
-        .cold_hold = 3600,
+        .cold_hold = envf("COLD_HOLD", 60) * 60,
         .cold_set = 23,
         .cold_rate = 1800,
         .cold_kp = 2,
@@ -88,6 +97,10 @@ int main(int argc, char **argv)
         .defrost_max = 1800,
         .defrost_hold = envf("HOLD", 10) * 60,
         .defrost_holdmax = envf("HOLDMAX", 100),
+        .defrost_watchdog = envf("WATCHDOG", 0),
+        .defrost_loops = envf("LOOPS", 3),
+        .defrost_window = envf("WINDOW", 90) * 60,
+        .defrost_rest = envf("REST", 15) * 60,
         .idle_fan = HEATCTL_FAN_LEAVE,
         .demand_fan = HEATCTL_FAN_LEAVE,
         .cold_fan = HEATCTL_FAN_LEAVE,
@@ -95,7 +108,11 @@ int main(int argc, char **argv)
     const char *e = heatctl_parse_table(&p.table, envs("TABLE", TABLE_DEFAULT), TABLE_DEFAULT);
     if (e)
         return fprintf(stderr, "TABLE: %s\n", e), 1;
+    e = heatctl_parse_curve(&p.curve, envs("CURVE", "")); // auto.curve: the target offset by outdoor temperature
+    if (e)
+        return fprintf(stderr, "CURVE: %s\n", e), 1;
     heatctl_t s = {0};
+    T += heatctl_curve_offset(&p.curve, out1); // From here on the target in force at the start, for where to begin
     heatctl_in_t in = {.enabled = 1, .power = 1, .heat = 1, .room = T, .outdoor = out1, .liquid = 35, .heatout = 0};
     uint32_t now = 1000;
     heatctl_out_t o = heatctl_step(&s, &p, &in, now);
@@ -107,7 +124,7 @@ int main(int argc, char **argv)
     long n[2] = {0}, chg[2] = {0}, big[2] = {0}, nd[2] = {0}, t100q[2] = {0}, t100[2] = {0}, tlow[2] = {0},
          tidle[2] = {0}, tcold[2] = {0};
     float lo[2] = {99, 99}, hi[2] = {-99, -99};
-    double ws = 0, worst = 0, wsum = 0, cyc = 0, ppsum = 0;
+    double ws = 0, worst = 0, wsum = 0, ppsum = 0;
     long wn = 0, cycn = 0, ppn = 0;
     float clo = 99, chi = -99;
     for (uint32_t i = 0; i < 72 * 3600; i++) {
@@ -146,7 +163,7 @@ int main(int argc, char **argv)
         else
             q += fminf(h - q, q < q95 ? ramplo : ramphi);
         // Power follows the heat being given: as up to 95% while under that level's heat, then on a line to the top
-        float pel = defrost    ? 760
+        float pel = defrost    ? dpower
                     : q <= q95 ? fmaxf(q * p95 / q95, 100)
                                : p95 + (pw - p95) * (q - q95) / fmaxf(h - q95, 1);
         if (!defrost && pel > pw)
@@ -193,8 +210,8 @@ int main(int argc, char **argv)
                 wsum += fabs(m), ws = 0, wn = 0;
             }
         }
-        (void)cyc;
-        if (to && (int)(i / 60) >= from && (int)(i / 60) < to && (s.level != level || o.sub != sub || i % 300 == 0))
+        if (to && (int)(i / 60) >= from && (int)(i / 60) < to &&
+            (s.level != level || (int)o.sub != sub || i % 300 == 0))
             printf(
                 "t %6.1f %s %-7s dem %3d%s room %.2f P %+5.0f I %5.0f req %5.0f tgt %5.0f heat %5.0f deficit %5.0f\n",
                 i / 60.0 - from, heatctl_state_name(o.state), o.sub ? heatctl_sub_name(o.sub) : "-", o.demand,

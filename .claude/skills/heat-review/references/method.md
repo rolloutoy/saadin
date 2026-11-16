@@ -18,7 +18,7 @@ fix this file.
 | `room`, `effective` | Room reading and the target in force (`target` plus the `auto.curve` offset by outdoor temperature) |
 | `heatw` | Heat request, W of heat: `pid.kp` x (effective - room) + `integral` |
 | `integral` | The slow part of the request. Settled, it is the house's mean heat need |
-| `heattarget` | Request plus the make-up for defrosts. The make-up is the heat lost in defrosts and the hold, paid back over about two hours, so with regular defrosts it is a nearly constant 400-500 W |
+| `heattarget` | Request plus the make-up for defrosts. The make-up is the heat lost in defrosts and the hold, paid back over about two hours, so with regular defrosts it is a nearly constant few hundred watts |
 | `deficit` | Running total of target minus estimated output, Wh. Demand steps to keep it near zero. It has no time window and never fades |
 | `heatout` | Estimated heat output: air flow at the fan speed (`fan.flow`) warmed from intake to liquid temperature. An estimate, never checked against a meter |
 | `scale` | The one learnt figure for heat per watt of `demand.table`, smoothed over 30 min at the level in use |
@@ -27,7 +27,7 @@ fix this file.
 
 A demand step is due once the deficit reaches half of what the next level would over-give in `demand.rate`, and
 only from a level that itself gives too little (up) or too much (down). `report.py steps` rebuilds this for every
-step.
+step, with the `demand.rate` on record in `device.json`.
 
 ## Mechanisms seen so far
 
@@ -62,7 +62,8 @@ figures"), with the dates they were established.
   before the state was kept over restarts.
 - **Short defrost cycles.** Around 0 degC the unit can defrost again soon after a defrost, after a fraction of the
   usual heat, at a much lower cycle COP. `report.py defrost` counts them and sets them against the load after the
-  defrost, the weather and the length of the defrost. The cause is not established.
+  defrost, the weather (humidity and wind too, once `weather.py` has pulled) and the length of the defrost. The
+  cause is not established.
 
 ## Checks worth making every time
 
@@ -70,7 +71,8 @@ figures"), with the dates they were established.
    cycles off one way is a change in need being tracked, or a limit being hit.
 2. Delivery (`check`): output against request per cycle. More than a few percent off in settled running means the
    account could not deliver (a table end, a burst quantum) or the estimate moved (fan speed change).
-3. Defrosts (`defrost`): interval, heat per cycle, short cycles and what preceded them.
+3. Defrosts (`defrost`): interval, heat per cycle, short cycles and what preceded them, and whether they keep to
+   humid hours (the humidity column is there once `weather.py` has pulled).
 4. Efficiency: COP per cycle with the defrost counted in, by weather and by time at 100q.
 5. Levels (`levels`): settled power and heat against the table, and whether the heat per table watt is the same
    across levels, fan speeds and outdoor temperatures.
@@ -95,6 +97,10 @@ figures"), with the dates they were established.
   was doing: the two largest "unexplained" stretches so far were the hours after it had under-heated (an integral
   reset), where the model's response over hours is at its weakest. Trace the stretch before asking the user about
   windows and weather.
+- **The weather is a station's, not the house's.** Sun, wind and humidity come from FMI stations that may be tens
+  of kilometres away (`weather.py show` says how far). Humidity near 100% with the outdoor reading around zero is
+  frost weather anywhere nearby; one hour of sun or a gust is not evidence of anything at the house. Compare days
+  and runs of hours.
 - **In simulation, differences under about 0.04 degC rms are noise**: the plant settles into a limit cycle, and
   which phase it locks to moves the figures by that much.
 - **The plant flatters strong, fast settings**, because it has little lag. That is what `--robust` is for.

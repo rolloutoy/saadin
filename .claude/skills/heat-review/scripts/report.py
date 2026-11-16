@@ -7,7 +7,8 @@ Usage: python3 -I report.py <command> [log] [options]     (log: a file in graph-
   cycles    one row per defrost cycle: room error, heat, COP, time at 100%
   levels    settled power and heat at each demand level, over ALL saved logs, against demand.table
   steps     every demand step: the deficit, the rule's threshold, the room, and predicted against actual heat
-  defrost   the unit and the room through the minutes after a defrost, by the level held, and frost per cycle
+  defrost   the unit and the room through the minutes after a defrost, by the level held, and frost per cycle,
+            with the humidity and wind of each cycle where weather.py has them on record
   trace     samples between two times:  trace [log] --from "01-13 07:18" --to "01-13 09:00" [--every 8]
 """
 import argparse
@@ -19,6 +20,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.dont_write_bytecode = True  # Keep the skill folder to its sources
 import heatlog  # noqa: E402
+import weather  # noqa: E402
 from heatlog import DEFROST, HOLD, stamp  # noqa: E402
 
 OK, WARN, FAIL = "ok  ", "WARN", "FAIL"
@@ -50,10 +52,20 @@ def books(s):
     return rows
 
 
+def demand_rate():
+    """demand.rate as on record in device.json (s), the firmware's default when it is not"""
+    device = heatlog.read_json(os.path.join(heatlog.logdir(), "device.json"), {}) or {}
+    try:
+        return float((device.get("settings") or {}).get("demand.rate") or 600)
+    except ValueError:
+        return 600.0
+
+
 def step_rows(s):
     """Every demand step outside a defrost, with the rule's own numbers rebuilt from the log"""
     if not s.has("deficit"):
         return []
+    rate = demand_rate()
     tw = s.table_watts()
     names = [r[0] for r in s.table]
     out, rows = s.col("heatout"), []
@@ -69,8 +81,8 @@ def step_rows(s):
         up = tw[nx] > tw[lv]
         j = names.index(lv) + (1 if up else -1)
         adj = names[j] if 0 <= j < len(names) else nx
-        rate = 600  # Threshold as the firmware works it out for demand.rate 600; scaled by the caller if not
-        th = max(tw[adj] * scale - tgt, 0) / 12 if up else -max(tgt - tw[adj] * scale, 0) / 12
+        # Half of what the next level would over-give (or under-give) in demand.rate, as the firmware has it
+        th = (max(tw[adj] * scale - tgt, 0) if up else -max(tgt - tw[adj] * scale, 0)) * rate / 7200.0
         act = [x for x in out[i + k2:i + k8] if x is not None]
         nxt = min([a for a in starts if a >= i] or [s.n])
         rows.append({"i": i, "t": s.t[i], "from": lv, "to": nx, "up": up, "deficit": s.col("deficit")[i - 1],
@@ -158,8 +170,8 @@ def cmd_check(s, args):
         if rec is None:
             add(WARN, "%s is %.4g by the log, nothing on record in device.json" % (name, value))
         elif abs(float(rec) - value) > 0.1 * max(abs(value), 1):
-            add(WARN, "%s is %.4g by the log, device.json says %s: update device.json, or the setting changed" % (
-                name, value, rec))
+            add(WARN, "%s is %.4g by the log, device.json says %s: the setting was changed during or after this "
+                "log (device.json is what the device runs on now)" % (name, value, rec))
         else:
             add(OK, "%s is %.4g by the log, as on record" % (name, value))
     for col, label in (("kp", "pid.kp"), ("ti", "pid.ti"), ("target", "target")):
@@ -306,8 +318,8 @@ def cmd_steps(s, args):
             stamp(r["t"], True), r["from"], r["to"], r["deficit"], r["threshold"], r["target"], r["roomerr"], r["pred"],
             "%5.0f (%+3.0f%%)" % (r["actual"], 100 * (r["actual"] / r["pred"] - 1)) if r["actual"] else "    -        ",
             "%.0f min" % r["to_defrost"] if r["to_defrost"] is not None else "-"))
-    print("\nThreshold is for demand.rate 600 s. Actual is the mean estimated heat 2 to 8 min after the step, so a "
-          "step up to 100% reads low while the unit ramps.")
+    print("\nThreshold is for demand.rate %.0f s (device.json, or the default). Actual is the mean estimated heat 2 "
+          "to 8 min after the step, so a step up to 100%% reads low while the unit ramps." % rows[0]["rate"])
 
 
 def cmd_defrost(s, args):
@@ -344,11 +356,17 @@ def cmd_defrost(s, args):
             print("  room lowest %.1f min after the defrost ends, %.2f degC below where the defrost began\n" % (
                 st.median(low), st.median(drop)))
     cs = [c for c in heatlog.cycle_stats(s) if c["frost_wh"]]
+    w = weather.load()
+    for c in cs:  # Humidity and wind at the weather station through the cycle, None where not on record
+        c["rh"], c["wind"] = (w.mean(k, c["t"], c["t"] + c["minutes"] * 60) if w else None for k in ("rh", "wind"))
     if cs:
         print("Heat given per cycle against the cycle's length and outdoor temperature (does frost follow heat?):")
         for c in cs:
-            print("  %s  %3.0f min  outdoor %+5.1f  %5.0f Wh  mean %4.0f W  at 100q %2.0f%%" % (
-                stamp(c["t"]), c["minutes"], c["outdoor"], c["frost_wh"], c["heat"], 100 * c["at100q"]))
+            print("  %s  %3.0f min  outdoor %+5.1f  %5.0f Wh  mean %4.0f W  at 100q %2.0f%%%s" % (
+                stamp(c["t"]), c["minutes"], c["outdoor"], c["frost_wh"], c["heat"], 100 * c["at100q"],
+                "  humidity %3.0f%%  wind %4.1f m/s" % (c["rh"], c["wind"]) if None not in (c["rh"], c["wind"]) else ""))
+        if not w:
+            print("  (no humidity or wind: weather.py has nothing on record)")
         normal = [c for c in cs if c["minutes"] >= heatlog.SHORT_CYCLE]
         if len(normal) >= 3:
             iv, fw = [c["minutes"] for c in normal], [c["frost_wh"] for c in normal]
@@ -384,6 +402,13 @@ def loops(s, cs):
     print("  by outdoor temperature:      " + "  ".join("%+d..%+d: %d short, %d normal" % (
         b, b + 2, sum(1 for c in short if b <= c["outdoor"] < b + 2), sum(1 for c in normal if b <= c["outdoor"] < b + 2))
         for b in range(-12, 12, 2) if any(b <= c["outdoor"] < b + 2 for c in cs)))
+    wet = [c for c in cs if c.get("rh") is not None]
+    if wet:
+        st_ = (weather.load().stations or {}).get("weather") or {}
+        print("  by humidity at %s (%s km away): " % (st_.get("name", "the weather station"), st_.get("km", "?")) + "  ".join(
+            "%d-%d%%: %d short, %d normal" % (lo, min(hi, 100), sum(1 for c in wet if lo <= c["rh"] < hi and c in short),
+                                             sum(1 for c in wet if lo <= c["rh"] < hi and c in normal))
+            for lo, hi in ((0, 80), (80, 90), (90, 95), (95, 101)) if any(lo <= c["rh"] < hi for c in wet)))
     # Load just after the defrost against whether the cycle turned out short
     k = lambda sec: int(sec / s.interval)
     rows_ = []

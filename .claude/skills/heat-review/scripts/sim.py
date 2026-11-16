@@ -8,10 +8,12 @@ Usage: python3 -I sim.py compare [log]
   compare   closed loop against a log: for each stretch of the log, run the plant in the same weather with the
             device's settings and set the two side by side. This is the test of whether the model may be trusted
             for a sweep.
-  sweep     scenarios x variants. A variant sets controller settings (KP TI RATE HOLD HOLDMAX SMOOTH TABLE COP FULL
-            MINRUN IDLE_OVER) or plant figures; SRC=<dir with heatctl.c> runs another source tree (a worktree with
-            a code change), DEFS="-DX" passes compiler flags; PULSE_W=900 PULSE_MIN=120 adds a burst of other heat
-            (a sauna) after two settled days and scores the 12 h from it. The first row is always the device as it is.
+  sweep     scenarios x variants. A variant sets controller settings in the settings' own units (TARGET CURVE KP TI
+            RATE HOLD HOLDMAX SMOOTH TABLE COP FULL MINRUN IDLE_OVER IDLE_UNDER IDLE_MIN COLD_ENTER COLD_EXIT
+            COLD_HOLD WATCHDOG LOOPS WINDOW REST) or plant figures; SRC=<dir with heatctl.c> runs another source
+            tree (a worktree with a code change), DEFS="-DX" passes compiler flags; PULSE_W=900 PULSE_MIN=120 adds a
+            burst of other heat (a sauna) after two settled days and scores the 12 h from it. The first row is
+            always the device as it is: the settings pull.py read from it, kept in device.json.
   trace     what the plant does minute by minute.
 
 A scenario is OUTDOOR[,GAIN][>OUTDOOR2[,GAIN2]]: outdoor degC and extra heat in the house in W (negative for a
@@ -23,6 +25,7 @@ import argparse
 import hashlib
 import itertools
 import os
+import shlex
 import statistics as st
 import subprocess
 import sys
@@ -34,10 +37,14 @@ import model as modelmod  # noqa: E402
 from heatlog import stamp  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SETTING_ENV = {"pid.kp": "KP", "pid.ti": "TI", "demand.rate": "RATE", "defrost.hold": "HOLD",
-               "defrost.holdmax": "HOLDMAX", "auto.smooth": "SMOOTH", "demand.table": "TABLE", "demand.cop": "COP",
-               "demand.full": "FULL", "demand.minrun": "MINRUN", "idle.over": "IDLE_OVER", "idle.under": "IDLE_UNDER",
-               "cold.enter": "COLD_ENTER", "cold.exit": "COLD_EXIT"}
+# The settings the plant's controller takes from device.json, in the settings' own units (plant.c converts)
+SETTING_ENV = {"auto.t": "TARGET", "auto.curve": "CURVE", "auto.smooth": "SMOOTH",
+               "pid.kp": "KP", "pid.ti": "TI", "demand.rate": "RATE", "demand.table": "TABLE", "demand.cop": "COP",
+               "demand.full": "FULL", "demand.minrun": "MINRUN",
+               "idle.over": "IDLE_OVER", "idle.under": "IDLE_UNDER", "idle.min": "IDLE_MIN",
+               "cold.enter": "COLD_ENTER", "cold.exit": "COLD_EXIT", "cold.hold": "COLD_HOLD",
+               "defrost.hold": "HOLD", "defrost.holdmax": "HOLDMAX", "defrost.watchdog": "WATCHDOG",
+               "defrost.loops": "LOOPS", "defrost.window": "WINDOW", "defrost.rest": "REST"}
 DEFAULT_SCEN = ["-11", "-6", "-1", "4", "-1,0,day", "-1,0>-1,500", "4,0>4,-500", "-6,0>-6,-700"]
 ROBUST = [("sensor lag 5 min", {"SENSLAG": 300}), ("sensor lag 10 min", {"SENSLAG": 600}),
           ("heat reaches the room over 10 min", {"HEATLAG": 600}),
@@ -55,7 +62,7 @@ def build(src=None, defs=""):
     os.makedirs(out, exist_ok=True)
     exe = os.path.join(out, "plant-" + key)
     if not os.path.exists(exe):
-        cmd = ["gcc", "-O2", "-std=gnu99", "-w", "-I", src, "-o", exe, files[0], files[1], "-lm"] + defs.split()
+        cmd = ["gcc", "-O2", "-std=gnu99", "-I", src, "-o", exe, files[0], files[1], "-lm"] + defs.split()
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode:
             raise SystemExit("the plant does not build against %s:\n%s\nIf the firmware's controller interface changed,"
@@ -68,7 +75,7 @@ def plant_env(m, outdoor):
     at = modelmod.at
     return {"AIR_J_K": h["air_J_K"], "AIR_MASS_W_K": h["air_mass_W_K"], "MASS_J_K": h["mass_J_K"],
             "MASS_OUT_W_K": h["mass_out_W_K"], "FROST_WH": d["frost_Wh"], "DEFROST_S": d["seconds"],
-            "DEFROST_ROOM_W": d["room_W"], "DEFROST_LEAD_S": d["lead_s"],
+            "DEFROST_ROOM_W": d["room_W"], "DEFROST_LEAD_S": d["lead_s"], "DEFROST_POWER_W": d.get("power_W", 800),
             "HEAT_PER_TABLE": at(u["heat_per_table"], outdoor), "POWER_PER_TABLE": u["power_per_table"],
             "Q100Q": at(u["q100q"], outdoor), "P100Q": at(u["p100q"], outdoor), "Q100": at(u["q100"], outdoor),
             "P100": at(u["p100"], outdoor), "RAMP_LOW": u["ramp_low_W_min"], "RAMP_HIGH": u["ramp_high_W_min"],
@@ -78,8 +85,10 @@ def plant_env(m, outdoor):
 def device_env():
     device = heatlog.read_json(os.path.join(heatlog.logdir(), "device.json"), {}) or {}
     env = {SETTING_ENV[k]: v for k, v in (device.get("settings") or {}).items() if k in SETTING_ENV}
-    if device.get("target"):
+    if not env.get("TARGET") and device.get("target"):
+        # No auto.t on record, only the effective target at the last pull: the curve's offset is in that already
         env["TARGET"] = device["target"]
+        env.pop("CURVE", None)
     return env
 
 
@@ -100,7 +109,6 @@ def parse_scen(text):
 
 def run(m, scen, env, src=None, defs="", trace=None):
     o1, g1, o2, g2 = scen[:4]
-    e = dict(os.environ)
     full = plant_env(m, (o1 + o2) / 2)
     if len(scen) > 4 and scen[4]:  # The fitted gain by time of day, as the disturbance
         daily = (m.get("gains") or {}).get("daily_W") or {}
@@ -111,7 +119,8 @@ def run(m, scen, env, src=None, defs="", trace=None):
         full["AIR_J_K"] = float(full["AIR_J_K"]) * float(full.pop("AIR_SCALE"))
     src = full.pop("SRC", src)
     defs = full.pop("DEFS", defs)
-    e.update({k: str(v) for k, v in full.items()})
+    # The plant gets these and nothing else: its names are plain ones (TARGET, COP) that a shell may well have set
+    e = {k: str(v) for k, v in full.items()}
     args = [build(src, defs), str(o1), str(g1), str(o2), str(g2)] + ([str(trace[0]), str(trace[1])] if trace else [])
     r = subprocess.run(args, capture_output=True, text=True, env=e)
     if r.returncode:
@@ -129,7 +138,7 @@ def run(m, scen, env, src=None, defs="", trace=None):
 def parse_var(text):
     label, _, rest = text.partition(":")
     env = {}
-    for part in __import__("shlex").split(rest):
+    for part in shlex.split(rest):
         k, _, v = part.partition("=")
         env[k] = v
     return label, env
@@ -161,7 +170,7 @@ def cmd_sweep(args):
     scens = args.scen or DEFAULT_SCEN
     width = max(len(v[0]) for v in variants) + 1
     print("Model: %s. Device settings: %s" % (
-        "fitted %s" % m["fit"]["date"] if m.get("fit") else "STARTING VALUES, never fitted",
+        modelmod.fit_label(m),
         " ".join("%s=%s" % kv for kv in sorted(device_env().items()) if kv[0] != "TABLE") or "defaults"))
     print("big = steps to or from 100q/100. low = more than 0.3 degC under target. Differences under about 0.04 degC "
           "rms are within what the phase of the defrost cycle alone moves.\n")
@@ -176,7 +185,7 @@ def cmd_sweep(args):
             pulsed = "change" in r and not changing  # A variant with PULSE_W: the 12 h from the burst
             print("%-*s %s" % (width, label, fmt_change(r["change"]) if changing or pulsed else fmt_steady(r["steady"])))
             if args.robust:
-                key = "change" if changing else "steady"
+                key = "change" if changing or pulsed else "steady"
                 rows = [(name, run(m, scen, dict(env, **extra), args.src, args.defs or "")[key]) for name, extra in ROBUST]
                 worst = max(rows, key=lambda x: x[1]["rms"])
                 print("%-*s   harsher plants: rms %s; worst is \"%s\": room %.2f..%.2f, big %.1f/h" % (
@@ -207,8 +216,7 @@ def blocks(s):
 def cmd_compare(args):
     m = modelmod.load_model()
     s = heatlog.find_log(args.log)
-    print("Closed loop, model against %s (model %s)" % (s.name, "fitted %s" % m["fit"]["date"] if m.get("fit")
-                                                        else "STARTING VALUES"))
+    print("Closed loop, model against %s (model %s)" % (s.name, modelmod.fit_label(m)))
     print("For each stretch the plant runs steady in the same weather, with extra heat in the house (\"gain\") set "
           "so that it needs the heat the log shows.\n")
     eff = s.col("effective")
@@ -218,14 +226,18 @@ def cmd_compare(args):
 
         def wmean(k):
             return sum(c[k] * c["minutes"] for c in b) / W
-        target = st.mean([x for x in eff[b[0]["a"]:b[-1]["b"]] if x is not None])
+        # The target as set in the stretch, for the plant to add the curve to; a log without it gives only the
+        # effective target, with the curve's offset in it
+        base = [x for x in s.col("target")[b[0]["a"]:b[-1]["b"]] if x is not None]
+        target = {"TARGET": st.mean(base)} if base else {
+            "TARGET": st.mean([x for x in eff[b[0]["a"]:b[-1]["b"]] if x is not None]), "CURVE": ""}
         log = {"outdoor": wmean("outdoor"), "heat": wmean("heat"), "defrost_min": st.median([c["minutes"] for c in b]),
                "at100q": wmean("at100q"), "at100": wmean("at100"), "swing": st.median([c["hi"] - c["lo"] for c in b]),
                "rms": (sum(c["rms"] ** 2 * c["minutes"] for c in b) / W) ** 0.5, "cop": wmean("heat") / wmean("power"),
                "chg_h": sum(c["changes"] for c in b) / (W / 60.0), "err": wmean("err")}
         gain, r = 0.0, None
         for _ in range(4):  # The plant's heat falls one for one with the gain, near enough
-            r = run(m, (log["outdoor"], gain, log["outdoor"], gain), {"TARGET": target})["steady"]
+            r = run(m, (log["outdoor"], gain, log["outdoor"], gain), target)["steady"]
             if abs(r["heat"] - log["heat"]) < 0.01 * log["heat"]:
                 break
             gain += r["heat"] - log["heat"]

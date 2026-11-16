@@ -89,7 +89,7 @@ menuconfig:
 	idf.py menuconfig
 
 .PHONY: test
-test:	main/test/heatctl_test main/test/heatlog_test
+test:	main/test/heatctl_test main/test/heatlog_test main/test/plant_check
 	./main/test/heatctl_test
 	./main/test/heatlog_test
 	node main/test/graph_test.js
@@ -104,6 +104,12 @@ main/test/heatctl_test: main/test/heatctl_test.c main/heatctl.c main/heatctl.h m
 
 main/test/heatlog_test: main/test/heatlog_test.c main/heatlog.c main/heatlog.h main/heatctl.h
 	gcc -O -o $@ main/test/heatlog_test.c main/heatlog.c -g -Wall -Wextra --std=gnu99 -lm
+
+# The heat-review skill's plant runs heatctl.c against a model of the house. It is only built here, not run: it
+# checks the sizes of heatctl_params_t and heatctl_in_t, so a change it has to follow shows with the change
+PLANT := ../.claude/skills/heat-review/scripts/plant.c
+main/test/plant_check: $(PLANT) main/heatctl.c main/heatctl.h
+	gcc -O -o $@ $(PLANT) main/heatctl.c -Imain -g -Wall -Wextra --std=gnu99 -lm
 
 pull:
 	git pull
