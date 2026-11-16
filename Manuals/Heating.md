@@ -50,7 +50,7 @@ Demand changes at most once every 10 minutes (`demand.rate`), but one change can
 
 When the room is more than `idle.over` (0.5 °C) above the target, demand is already at its lowest level, and heating has run for at least `demand.minrun` (30 minutes), the controller sets the setpoint to `idle.temp` (16 °C). The unit stops heating. At a higher demand level a room that is too warm only brings demand down, so heating goes off when even the lowest level is too much, not on a short overshoot in cold weather.
 
-Heating starts again when the room falls below the target, after at least `idle.min` (30 minutes) off. It restarts at the lowest demand level.
+Heating starts again when the room falls below the target, after at least `idle.min` (30 minutes) off. Demand control carries on with the integral it had when heating went off, at the demand level which that calls for. Heat from elsewhere (an oven, a sauna, guests) can turn heating off for a while; once it is gone the house needs the heat it needed before.
 
 ### Cold weather
 
@@ -64,7 +64,7 @@ When the liquid temperature drops below `defrost.enter` (5 °C), the controller 
 
 For `defrost.hold` (10 minutes) after a defrost, demand stays at `defrost.holdmax` or below and does not go up, so the unit settles after the defrost. The default 100% means 100% with quiet outdoor: plain 100% is never used in the hold, because without a limit the unit surges to full power after a defrost. Set 95% to hold it down further. In cold-weather mode the setpoint does not go up either. The integral keeps running, so it learns the heat the defrost cost, and demand can step up when the hold ends. The status line shows "after defrost". If a fan speed is set for the state, it is sent again, because the unit does not restore it after a defrost.
 
-With `defrost.watchdog` on (it is off by default), if there are more than `defrost.loops` (3) defrosts within `defrost.window` (90 minutes), the controller turns heating off for `defrost.rest` (15 minutes). The fan is on auto for that time, whatever `idle.fan` is, and the fan for the state is set again when heating resumes. The status line shows "rest after defrost loop". This stops the unit from defrosting over and over.
+With `defrost.watchdog` on (it is off by default), if there are more than `defrost.loops` (3) defrosts within `defrost.window` (90 minutes), the controller turns heating off for `defrost.rest` (15 minutes). The fan is on auto for that time, whatever `idle.fan` is, and the fan for the state is set again when heating resumes. Demand control carries on with the integral it had. The status line shows "rest after defrost loop". This stops the unit from defrosting over and over.
 
 ### No room reading
 
@@ -88,7 +88,7 @@ The controller keeps what it has learnt over a restart of the device, so the roo
 
 - In demand control, at the same demand level, with the same integral, the same heat per watt learnt from the heat output, and the same heat deficit, including heat a defrost cost that is still to be made up.
 - In cold-weather mode, at the same setpoint, and it stays in cold-weather mode.
-- With heating off, it stays off. Heating starts again after `idle.min` (30 minutes) at the earliest, counted from the restart.
+- With heating off, it stays off. Heating starts again after `idle.min` (30 minutes) at the earliest, counted from the restart, with the integral it had when heating went off.
 - In the rest after a defrost loop, the rest starts again and lasts `defrost.rest` (15 minutes).
 
 Minimum times and holds start again, as if the controller had just changed to that state. A defrost in progress at the restart is not remembered.

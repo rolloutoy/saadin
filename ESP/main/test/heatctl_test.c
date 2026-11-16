@@ -116,6 +116,16 @@ static int run_until(sim_t *x, heatctl_state_t st, int sub, uint32_t secs)
     return -1;
 }
 
+// Demand (%) of the highest level, plain 100 left out, whose watts times heat per watt are at or below the heat request
+static uint8_t level_for_heat(const sim_t *x, float per_watt)
+{
+    uint8_t demand = x->p.table.level[0].demand;
+    for (int i = 1; i < x->p.table.n; i++)
+        if (x->p.table.level[i].quiet && x->p.table.level[i].watts * per_watt <= x->out.heatw)
+            demand = x->p.table.level[i].demand;
+    return demand;
+}
+
 static void test_table(void)
 {
     heatctl_table_t t;
@@ -258,10 +268,15 @@ static void test_demand_idle(void)
     start(&x);
     x.in.room = 21.6;
     run_until(&x, HEATCTL_IDLE, -1, 4000);
+    float integral = x.out.integral; // As it was when heating went off: not yet down at the lowest level's heat
+    CHECK("IDLE: integral above the lowest level's heat", integral > 900);
     x.in.room = 20.9;
     t = run_until(&x, HEATCTL_DEMAND, -1, 4000);
     CHECK("IDLE -> DEMAND after idle.min", t == 1800);
-    CHECK("after IDLE: integral at the heat of the lowest level", NEAR(x.out.integral, 810));
+    CHECK("after IDLE: integral as it was when heating went off", NEAR(x.out.integral, integral));
+    CHECK("after IDLE: at the level for that heat request, not the lowest", x.out.demand == level_for_heat(&x, 3));
+    CHECK("after IDLE: above the lowest level", x.out.demand > 40);
+    CHECK("after IDLE: heat deficit starts from nothing", fabsf(x.out.deficit) < 1);
     CHECK("after IDLE: setpoint demand.set", NEAR(x.out.setpoint, 30));
 
     start(&x);
@@ -647,6 +662,7 @@ static void test_watchdog(int defrosts)
         return;
     }
     CHECK("4 defrosts in window: IDLE rest", x.out.state == HEATCTL_IDLE && x.out.sub == HEATCTL_SUB_REST);
+    float integral = x.out.integral;
     CHECK("rest reason", strstr(x.out.reason, "defrost") != NULL);
     CHECK("rest: setpoint idle.temp", NEAR(x.out.setpoint, 16));
     CHECK("rest: fan auto, whatever idle.fan is", x.out.fan == 0 && x.out.resend_fan);
@@ -655,7 +671,8 @@ static void test_watchdog(int defrosts)
     int t = 899 + run_until(&x, HEATCTL_DEMAND, -1, 4000);
     CHECK("rest lasts defrost.rest", t == 900);
     CHECK("after rest: the fan of the state", x.out.fan == 3);
-    CHECK("after rest: integral at lowest level", NEAR(x.out.integral, 810));
+    CHECK("after rest: integral as before the rest", integral > 900 && NEAR(x.out.integral, integral));
+    CHECK("after rest: at the level for that heat request", x.out.demand == level_for_heat(&x, 3) && x.out.demand > 40);
 }
 
 // defrost.watchdog off (the default): no rest however many defrosts
@@ -1000,6 +1017,45 @@ static void test_room_model(float outdoor, float capacity, int two_node)
     printf("%s\n", name);
 }
 
+// A burst of other heat (an oven, a sauna, guests) takes heating off. Once the room has cooled again the house needs
+// what it needed before, so the room is not to sit under the target for hours while the integral climbs back from
+// the lowest level. The two-node house of test_room_model at 0 C, the burst 3 kW for two hours.
+static void test_idle_burst(void)
+{
+    sim_t x;
+    start(&x);
+    x.in.outdoor = 0;
+    float outdoor = 0, room = 21, mass = 19.5, q = 0, cop = 3.3f;
+    float before = 0, resumed = 0, later = 0;
+    uint32_t off = 0, on = 0;
+    for (uint32_t i = 0; i < 60 * 3600; i++) {
+        float burst = (i >= 36 * 3600 && i < 38 * 3600) ? 3000 : 0;
+        q += (model_watts(&x) * cop - q) / 600;
+        float droom = (500 * (mass - room) + 40 * (outdoor - room) + q + burst) / 2e6f;
+        mass += (500 * (room - mass) + 60 * (outdoor - mass)) / 40e6f;
+        room += droom;
+        x.in.room = roundf(room * 10) / 10;
+        if (i == 36 * 3600)
+            before = x.out.integral;
+        run(&x, 1);
+        if (!off && i >= 36 * 3600 && x.out.state == HEATCTL_IDLE)
+            off = i;
+        if (off && !on && x.out.state == HEATCTL_DEMAND) {
+            on = i;
+            resumed = x.out.integral;
+        }
+        if (on && i == on + 2 * 3600)
+            later = room;
+    }
+    printf("burst of other heat: heating off %.1f h, integral %.0f W before and %.0f W as heating came on, room %.2f "
+           "two hours later\n",
+           on ? (on - off) / 3600.0 : 0, before, resumed, later);
+    CHECK("burst: settled in DEMAND before it", before > 1500);
+    CHECK("burst: heating goes off, and comes on again", off && on);
+    CHECK("burst: integral not far from what it was before", resumed > 0.8f * before);
+    CHECK("burst: room back at the target two hours after heating came on", later > 20.95f);
+}
+
 // Heat (W) the unit gives for the controller's outputs. Not the table times demand.cop: the controller is to go by
 // the heat it is told of
 static float model_heat(const sim_t *x)
@@ -1061,6 +1117,30 @@ static void start_heat(sim_t *x, float room)
     x->p.ti = 0;
     x->p.smooth = 0;
     x->in.room = room;
+}
+
+// Heating on again after it was off, with the heat output known: the level is by the heat the levels have been giving
+// (here 3.4 W per W of the table), which is what the integral is in, not by demand.cop
+static void test_idle_heat_known(void)
+{
+    sim_t x;
+    start(&x);
+    x.in.room = 20.7; // A little under for two hours: the integral rises, the heat per watt is learnt
+    run_heat(&x, 2 * 3600, 1, 0, 0);
+    x.in.room = 23; // Far over: down to the lowest level, then off
+    for (int i = 0; i < 3600 && x.out.state != HEATCTL_IDLE; i++)
+        run_heat(&x, 1, 1, 0, 0);
+    float integral = x.out.integral;
+    CHECK("IDLE with the heat known: off, integral well above the lowest level's heat",
+          x.out.state == HEATCTL_IDLE && integral > 1200);
+    x.in.room = 20.9;
+    for (int i = 0; i < 4000 && x.out.state != HEATCTL_DEMAND; i++)
+        run_heat(&x, 1, 1, 0, 0);
+    CHECK("after IDLE with the heat known: integral kept", NEAR(x.out.integral, integral));
+    CHECK("after IDLE with the heat known: heat per watt as learnt", x.out.scale > 3.3f && x.out.scale < 3.5f);
+    CHECK("after IDLE with the heat known: level by the learnt heat per watt",
+          x.out.demand == level_for_heat(&x, x.out.scale));
+    CHECK("after IDLE with the heat known: lower than demand.cop would put it", x.out.demand < level_for_heat(&x, 3));
 }
 
 // Heat deficit: demand steps between the levels around the heat request, so the heat given is the heat request
@@ -1372,6 +1452,7 @@ static void test_keep_idle(void)
     x.in.room = 21.6;
     run_until(&x, HEATCTL_IDLE, -1, 4000);
     run(&x, 1500);
+    float integral = x.out.integral;
     heatctl_keep_t k = keep(&x);
     reboot(&x, &k, CLOCK + 60);
     x.in.room = 19;
@@ -1382,7 +1463,8 @@ static void test_keep_idle(void)
     run(&x, 1799);
     CHECK("resume idle: idle.min counts from the resume", x.out.state == HEATCTL_IDLE);
     run(&x, 1);
-    CHECK("resume idle: then DEMAND at the lowest level", x.out.state == HEATCTL_DEMAND && NEAR(x.out.integral, 810));
+    CHECK("resume idle: then DEMAND", x.out.state == HEATCTL_DEMAND);
+    CHECK("resume idle: with the integral from before the restart", integral > 900 && x.out.integral == integral);
 }
 
 // The defrost-loop watchdog rest is kept, and lasts defrost.rest from the resume
@@ -1400,6 +1482,7 @@ static void test_keep_rest(void)
     }
     run(&x, 600);
     CHECK("keep rest: resting", x.out.state == HEATCTL_IDLE && x.out.sub == HEATCTL_SUB_REST);
+    float integral = x.out.integral;
     heatctl_keep_t k = keep(&x);
     reboot(&x, &k, CLOCK + 60);
     run(&x, 1);
@@ -1407,7 +1490,8 @@ static void test_keep_rest(void)
     run(&x, 899);
     CHECK("resume rest: defrost.rest from the resume", x.out.sub == HEATCTL_SUB_REST);
     run(&x, 1);
-    CHECK("resume rest: then DEMAND at the lowest level", x.out.state == HEATCTL_DEMAND && NEAR(x.out.integral, 810));
+    CHECK("resume rest: then DEMAND", x.out.state == HEATCTL_DEMAND);
+    CHECK("resume rest: with the integral from before the restart", integral > 900 && x.out.integral == integral);
 }
 
 // NOSENSOR is not kept: a restart starts afresh, as leaving NOSENSOR does
@@ -1662,6 +1746,8 @@ int main(void)
     test_curve();
     test_off_and_start();
     test_demand_idle();
+    test_idle_burst();
+    test_idle_heat_known();
     test_idle_only_from_lowest();
     test_cold();
     test_defrost();
