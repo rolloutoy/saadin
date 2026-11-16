@@ -5,3 +5,6 @@ build
 *.exe
 *.o
 .vscode
+# Heat logs pulled from a device, and what the heat-review skill fits from them and notes about them: data from
+# someone's own device and home, never for the repo
+graph-logs/
