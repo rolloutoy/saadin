@@ -1,3 +1,4 @@
 *.dSYM
 heatctl_test
 heatlog_test
+plant_check

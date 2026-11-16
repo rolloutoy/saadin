@@ -33,4 +33,10 @@ Säädin is a fork of Faikout (by RevK / Andrews & Arnold). Firmware only.
 - Run logic on the host where possible instead of on hardware:
   - Use the air-con simulators in `Tools/Simulators` (`faikin-s21`, `faikin-x50`, `s21-control`) to exercise protocol and control behaviour without a board. `make` there builds them; they need `popt`.
   - Where it makes sense, factor control logic (for example the demand PI loop and defrost inference) so it compiles and runs as a plain host unit test, separate from the on-device build.
-  - `make -C ESP test` runs the host tests. It needs `gcc`, and `node` for the test of the graph page's data logic (`ESP/main/graph.js`).
+  - `make -C ESP test` runs the host tests. It needs `gcc`, and `node` for the test of the graph page's data logic (`ESP/main/graph.js`). It also builds the heat-review skill's `plant.c`, which runs `heatctl.c` against a model of the house and checks the size of `heatctl_params_t` and `heatctl_in_t`: when a change to either breaks that build, make `plant.c` follow in the same PR.
+
+## Heating data from a device
+
+- Use the `heat-review` skill (`.claude/skills/heat-review`) to pull a device's heat log, check it, fit the model of the house and the unit, and try a settings or firmware change in simulation before it goes on a device.
+- Logs pulled from a device, and everything fitted from them or noted about them, live in `graph-logs/`, which is git-ignored. They are data from someone's own device and home: never commit them. The same goes for where the house is and the weather fetched for it.
+- After changing one of the skill's scripts, run `python3 -I .claude/skills/heat-review/scripts/selftest.py`. It makes up its own logs and touches neither `graph-logs/` nor the network.
