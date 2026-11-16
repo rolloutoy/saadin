@@ -143,7 +143,7 @@ typedef struct {         // Controller state kept over a restart (in RTC memory)
     uint8_t rest;        // IDLE: in the defrost-loop watchdog rest, and the state to resume after it, else 0
     uint8_t demand;      // DEMAND: the level in use, by its demand (%)...
     uint8_t quiet;       // ...and quiet outdoor
-    float integral;      // DEMAND integral (W of heat)
+    float integral;      // DEMAND integral (W of heat), in IDLE the one DEMAND carries on with
     float scale;         // Heat per watt of the demand table, 0 if not learnt yet
     float deficit;       // DEMAND heat deficit (Wh)
     float debt;          // DEMAND defrost debt (Wh)

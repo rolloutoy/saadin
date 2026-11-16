@@ -2,6 +2,14 @@
 
 Every user-visible change in Säädin since it was forked from upstream Faikout, newest first. As required by GPL-3.0 §5(a), this is the dated record of how Säädin differs from Faikout. [README.md](README.md#changes-from-faikout) has a summary.
 
+## 2026-11-16
+
+- When heating comes on again after it was off, demand control now carries on with the integral it had when heating went off, in place of starting from the heat of the lowest demand level. Heat from elsewhere (an oven, a sauna, guests) can turn heating off for a while. Once that heat was gone the house needed what it needed before, but the integral had to climb back from the lowest level, and the room could sit under the target for hours meanwhile.
+  - Demand starts at the level which that integral calls for, by the heat per watt the controller has learnt, where it used to start at the lowest level. The heat deficit starts from nothing, as before.
+  - The same goes for the rest after a defrost loop (`defrost.watchdog`).
+  - The integral is also kept over a restart of the device while heating is off.
+  - In mild weather, where heating goes off because even the lowest level is too much, the integral is already low when heating goes off, so little changes.
+
 ## 2026-11-12
 
 - The heating controller now carries on where it was after a restart of the device, in place of starting again in demand control at `demand.start` (60%). It keeps its state (demand control, cold-weather mode or heating off), the demand level, the integral, the learnt heat per watt, the heat deficit and, in cold-weather mode, the setpoint, in memory that survives a restart but not a power cut. Minimum times and holds start again. It starts afresh as before after a power cut, after more than 30 minutes, when it was off or had no room reading before the restart, or when what it kept no longer fits the settings. The reason for the change says "resumed after restart", or why it did not resume; the web status line shows "resumed after restart" for 10 minutes, and the status JSON has `ctl_resumed`. Nothing is written to flash.

@@ -325,6 +325,17 @@ static void enter_demand(heatctl_t *s, const heatctl_params_t *p, heatctl_out_t 
     s->level = -1; // Set at once
 }
 
+// DEMAND again after heating was off, with the integral as it was when heating went off: the house needs what it
+// needed then, and from the heat of the lowest level the integral takes hours to climb back
+static void resume_demand(heatctl_t *s, const heatctl_params_t *p, heatctl_out_t *out, uint32_t now)
+{
+    float integral = s->integral;
+    enter_demand(s, p, out, now, p->table.level[0].demand);
+    if (isfinite(integral))
+        s->integral = clampf(integral, s->integral, p->table.level[level_top(p, 0)].watts * table_cop(p));
+    s->level = -2; // Set at once, by the heat the levels have been giving: that is what this integral is in
+}
+
 static void enter_cold(heatctl_t *s, const heatctl_params_t *p, heatctl_out_t *out, uint32_t now)
 {
     enter(s, out, now, HEATCTL_COLD, keep_hold(s));
@@ -482,6 +493,7 @@ static void keep_resume(heatctl_t *s, heatctl_out_t *out, uint32_t now, int leve
         reason(out, "resumed after restart, setpoint %.1f, integral %.1f", k->setpoint, k->cold_integral);
     } else {
         enter(s, out, now, HEATCTL_IDLE, k->rest ? HEATCTL_SUB_REST : HEATCTL_SUB_NONE);
+        s->integral = k->integral; // To carry on with when heating comes on again
         s->resume = k->rest;
         reason(out, "resumed after restart%s", k->rest ? ", rest after defrost loop" : "");
     }
@@ -634,11 +646,11 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
                     if (s->resume == HEATCTL_COLD)
                         enter_cold(s, p, &out, now);
                     else
-                        enter_demand(s, p, &out, now, p->table.level[0].demand);
+                        resume_demand(s, p, &out, now);
                     reason(&out, "defrost rest over");
                 }
             } else if (room < target - p->idle_under && now - s->since >= p->idle_min) {
-                enter_demand(s, p, &out, now, p->table.level[0].demand);
+                resume_demand(s, p, &out, now);
                 reason(&out, "room %.2f < target %.2f-%.1f", room, target, p->idle_under);
             }
             break;
@@ -711,8 +723,8 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
             if (s->level <= 0 && s->deficit < -fmaxf(heattarget - heat, 0) * pulse)
                 s->deficit = -fmaxf(heattarget - heat, 0) * pulse;
         }
-        if (s->level < 0) // Just entered: by the table
-            s->level = level_wanted(t, top, s->heatw / cop);
+        if (s->level < 0) // Just entered: by the table, or after heating was off (-2) by the learnt heat per watt
+            s->level = level_wanted(t, top, s->heatw / (s->level == -2 ? scale : cop));
         else if (s->level > top)
             s->level = top; // Cap at once, also in defrost (e.g. a shorter table)
         else if (s->sub == HEATCTL_SUB_DEFROST)
