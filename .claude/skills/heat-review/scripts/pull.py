@@ -10,6 +10,7 @@ Writes graph-logs/graph-<local time>.json unchanged from the device, and notes t
 and the heating settings the device is running on in graph-logs/device.json.
 """
 import argparse
+import gzip
 import html
 import json
 import os
@@ -37,8 +38,11 @@ SETTINGS_PAGES = (-2, 0)  # All the firmware's own settings; the heating page, f
 
 
 def get(url, timeout):
-    with urllib.request.urlopen(url, timeout=timeout) as r:
-        return r.read()
+    # The device gzips the log when asked, which makes a pull several times shorter
+    req = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        body = r.read()
+        return gzip.decompress(body) if r.headers.get("Content-Encoding") == "gzip" else body
 
 
 def num(text):
