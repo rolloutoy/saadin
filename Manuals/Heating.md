@@ -62,7 +62,7 @@ It goes back to demand control when it stays above `cold.exit` (−10 °C) for 6
 
 When the liquid temperature drops below `defrost.enter` (5 °C), the controller treats it as a defrost. It keeps its outputs as they are until the liquid temperature is back to `defrost.exit` (25 °C), or for at most `defrost.max` (30 minutes). The web status line shows "❄ defrost".
 
-With `defrost.push` set (it is 0, no push, by default), the controller runs the unit at 100% with quiet outdoor for that many minutes right after a defrost, and then puts demand back where it was before the defrost. This is for short defrost cycles: at a low demand level the compressor stays slow after a defrost, and the next defrost can come in under an hour. The push happens only when demand was at `defrost.pushmax` (85%) or below before the defrost, and not in cold-weather mode. Its heat counts as heat given, so demand runs a little lower afterwards. The status line shows "push after defrost". With `defrost.pushalt` on, only every second defrost gets a push, so you can compare the two on the heating graph.
+With `defrost.push` set (it is 0, no push, by default), the controller runs the unit at `defrost.pushto` (100%, which means 100% with quiet outdoor) for that many minutes right after a defrost, and then puts demand back where it was before the defrost. This is for short defrost cycles: at a low demand level the compressor stays slow after a defrost, and the next defrost can come in under an hour. The push happens only when demand was at `defrost.pushmax` (85%) or below before the defrost, and not in cold-weather mode. Its heat counts as heat given, so demand runs a little lower afterwards. The status line shows "push after defrost". With `defrost.pushalt` on, only every second defrost gets a push, so you can compare the two on the heating graph.
 
 For `defrost.hold` (10 minutes) after a defrost, or after the push when there is one, demand stays at `defrost.holdmax` or below and does not go up, so the unit settles after the defrost. The default 100% means 100% with quiet outdoor: plain 100% is never used in the hold, because without a limit the unit surges to full power after a defrost. Set 95% to hold it down further. In cold-weather mode the setpoint does not go up either. The integral keeps running, so it learns the heat the defrost cost, and demand can step up when the hold ends. The status line shows "after defrost". If a fan speed is set for the state, it is sent again, because the unit does not restore it after a defrost.
 
@@ -174,7 +174,8 @@ The cold-weather gains have not been tested on a real unit yet.
 |`defrost.max`|30 min|The defrost is over after this long anyway|
 |`defrost.hold`|10 min|After a defrost, demand does not go up for this long. 0 for no hold|
 |`defrost.holdmax`|100%|Highest demand in the hold. 100 is 100% with quiet outdoor; plain 100% is never used in the hold|
-|`defrost.push`|0 min|After a defrost, 100% with quiet outdoor for this long, then the hold. 0 for no push|
+|`defrost.push`|0 min|After a defrost, demand at `defrost.pushto` for this long, then the hold. 0 for no push|
+|`defrost.pushto`|100%|Demand in the push. 100 is 100% with quiet outdoor; plain 100% is never used. Set 95% for a gentler push|
 |`defrost.pushmax`|85%|Push only when demand was at most this before the defrost|
 |`defrost.pushalt`|off|Push after every second defrost only, to compare cycles with and without a push|
 |`defrost.watchdog`|off|Turn heating off for a while after a defrost loop (more defrosts than `defrost.loops` within `defrost.window`)|

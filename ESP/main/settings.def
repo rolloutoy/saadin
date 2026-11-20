@@ -125,7 +125,8 @@ u8	defrost.exit	25		.live	.unit="℃"			// Defrost over when liquid is back to t
 u8	defrost.max	30		.live	.unit="min"			// Defrost over after this long anyway
 u8	defrost.hold	10		.live	.unit="min"			// After a defrost, hold demand down for this long (0 for no hold)
 u8	defrost.holdmax	100		.live	.unit="%"			// In the hold, demand at most this (100 is 100% with quiet outdoor)
-u8	defrost.push	0		.live	.unit="min"			// After a defrost, and before the hold, 100% with quiet outdoor for this long (0 for no push)
+u8	defrost.push	0		.live	.unit="min"			// After a defrost, and before the hold, demand at defrost.pushto for this long (0 for no push)
+u8	defrost.pushto	100		.live	.unit="%"			// Demand in the push (100 is 100% with quiet outdoor)
 u8	defrost.pushmax	85		.live	.unit="%"			// Push only when demand was at most this before the defrost
 bit	defrost.pushalt	0		.live					// Push after every second defrost only, to compare the two in the heat log
 bit	defrost.watchdog	0		.live					// Defrost-loop watchdog: turn heating off for a while after a defrost loop

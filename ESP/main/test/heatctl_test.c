@@ -60,6 +60,7 @@ static heatctl_params_t params(void)
         .defrost_holdmax = 100,
         .defrost_push = 0,
         .defrost_pushmax = 85,
+        .defrost_pushto = 100,
         .defrost_watchdog = 0,
         .defrost_loops = 3,
         .defrost_window = 90 * 60,
@@ -683,6 +684,28 @@ static void test_push(void)
     CHECK("push: demand not raised in the hold", x.out.demand <= 60);
     run(&x, 1);
     CHECK("push: hold over", x.out.sub == HEATCTL_SUB_NONE && x.out.changed);
+
+    // defrost.pushto: the level of the push
+    start(&x);
+    x.p.defrost_push = 360;
+    x.p.defrost_pushto = 95;
+    run(&x, 100);
+    defrost_once(&x);
+    CHECK("push to 95: at 95", x.out.sub == HEATCTL_SUB_PUSH && x.out.demand == 95 && x.out.quiet);
+    run(&x, 360);
+    CHECK("push to 95: and back", x.out.sub == HEATCTL_SUB_HOLD && x.out.demand == 60);
+    start(&x);
+    x.p.defrost_push = 360;
+    x.p.defrost_pushto = 72; // Not a level of the table: the highest below it
+    run(&x, 100);
+    defrost_once(&x);
+    CHECK("push to 72: at 70", x.out.sub == HEATCTL_SUB_PUSH && x.out.demand == 70);
+    start(&x);
+    x.p.defrost_push = 360;
+    x.p.defrost_pushto = 60; // Where demand is already
+    run(&x, 100);
+    defrost_once(&x);
+    CHECK("push to the level in use: no push", x.out.sub == HEATCTL_SUB_HOLD && x.out.demand == 60);
 
     // The push is not a demand change for demand.rate: the hold after it decides, so demand may go down at once
     start(&x);

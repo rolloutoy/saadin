@@ -93,8 +93,9 @@ typedef struct {
     float defrost_exit;       // Liquid at or above this ends it
     uint32_t defrost_max;     // Safety cap on a defrost (s)
     uint32_t defrost_hold;    // Post-defrost hold (s)
-    uint32_t defrost_push;    // Post-defrost push: 100q for this long (s) before the hold, 0 for none
+    uint32_t defrost_push;    // Post-defrost push: for this long (s) before the hold, 0 for none
     uint8_t defrost_pushmax;  // Push only from a level with demand (%) at most this
+    uint8_t defrost_pushto;   // Demand (%) of the push, 100 is 100q (never plain 100)
     uint8_t defrost_pushalt;  // Push after every second defrost only (to compare the two in a log)
     uint8_t defrost_holdmax;  // Demand (%) at most in the hold, 100 is 100q (never plain 100)
     uint8_t defrost_watchdog; // Defrost-loop watchdog on

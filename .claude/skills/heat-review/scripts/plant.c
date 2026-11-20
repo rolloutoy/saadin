@@ -99,6 +99,7 @@ int main(int argc, char **argv)
         .defrost_holdmax = envf("HOLDMAX", 100),
         .defrost_push = envf("PUSH", 0) * 60,
         .defrost_pushmax = envf("PUSHMAX", 85),
+        .defrost_pushto = envf("PUSHTO", 100),
         .defrost_pushalt = envf("PUSHALT", 0),
         .defrost_watchdog = envf("WATCHDOG", 0),
         .defrost_loops = envf("LOOPS", 3),

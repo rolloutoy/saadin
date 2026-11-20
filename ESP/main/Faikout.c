@@ -3571,6 +3571,7 @@ static void heatctl_settings(heatctl_params_t *p)
     p->defrost_holdmax = defrostholdmax;
     p->defrost_push = defrostpush * 60;
     p->defrost_pushmax = defrostpushmax;
+    p->defrost_pushto = defrostpushto;
     p->defrost_pushalt = defrostpushalt;
     p->defrost_watchdog = defrostwatchdog;
     p->defrost_loops = defrostloops;

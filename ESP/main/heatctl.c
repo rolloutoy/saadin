@@ -257,11 +257,11 @@ static int level_top(const heatctl_params_t *p, uint8_t hold)
     return top;
 }
 
-// Level of the post-defrost push: the highest with quiet outdoor (100q)
-static int level_push(const heatctl_table_t *t)
+// Level of the post-defrost push: the highest at or below defrost.pushto, no plain 100
+static int level_push(const heatctl_params_t *p)
 {
-    int top = t->n - 1;
-    while (top > 0 && !t->level[top].quiet)
+    int top = p->table.n - 1;
+    while (top > 0 && (p->table.level[top].demand > p->defrost_pushto || !p->table.level[top].quiet))
         top--;
     return top;
 }
@@ -515,7 +515,7 @@ static void keep_resume(heatctl_t *s, heatctl_out_t *out, uint32_t now, int leve
 // defrost.pushalt after every second such defrost
 static int push_due(heatctl_t *s, const heatctl_params_t *p)
 {
-    if (!p->defrost_push || s->state != HEATCTL_DEMAND || s->level < 0 || s->level >= level_push(&p->table) ||
+    if (!p->defrost_push || s->state != HEATCTL_DEMAND || s->level < 0 || s->level >= level_push(p) ||
         p->table.level[s->level].demand > p->defrost_pushmax)
         return 0;
     s->pushed = !(p->defrost_pushalt && s->pushed);
@@ -561,9 +561,9 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
                 out.resend_fan = 1;
                 if (p->defrost_watchdog && n > p->defrost_loops)
                     defrost_rest = n;
-                else if (push_due(s, p)) { // 100q for a while first, whatever the heat account asks
+                else if (push_due(s, p)) { // Up for a while first, whatever the heat account asks
                     s->push_from = s->level;
-                    s->level = level_push(&p->table); // Not a demand change for demand.rate, nor is its end
+                    s->level = level_push(p); // Not a demand change for demand.rate, nor is its end
                     enter_sub(s, &out, now, HEATCTL_SUB_PUSH);
                 } else
                     enter_sub(s, &out, now, p->defrost_hold ? HEATCTL_SUB_HOLD : HEATCTL_SUB_NONE);
