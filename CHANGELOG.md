@@ -2,6 +2,13 @@
 
 Every user-visible change in Säädin since it was forked from upstream Faikout, newest first. As required by GPL-3.0 §5(a), this is the dated record of how Säädin differs from Faikout. [README.md](README.md#changes-from-faikout) has a summary.
 
+## 2026-11-20
+
+- The heating graph page opens much sooner. It loads the last 12 hours of the log at first, in place of all 5 days (about 3 MB, which took half a minute), and *Refresh* now fetches only the samples kept since the last one loaded, in place of the whole log each time.
+  - *All*, or a range longer than is loaded (*1 day*, *3 days*), loads that much of the log. The page opens showing the last 12 hours; `/graph?span=all` opens it on the whole log.
+  - `/graph.json` still gives the whole log. New: `/graph.json?span=S` gives the last S seconds and `/graph.json?since=N` the samples from number N on. A reply has three new fields: `seq`, the number of its first sample, `begin`, the number of the oldest sample the device holds, and `boot`, which changes when the device restarts.
+  - `/graph.json` is gzipped when the client accepts that (browsers do, `curl --compressed`), on boards with PSRAM. The log is about a tenth the size that way.
+
 ## 2026-11-16
 
 - When heating comes on again after it was off, demand control now carries on with the integral it had when heating went off, in place of starting from the heat of the lowest demand level. Heat from elsewhere (an oven, a sauna, guests) can turn heating off for a while. Once that heat was gone the house needed what it needed before, but the integral had to climb back from the lowest level, and the room could sit under the target for hours meanwhile.

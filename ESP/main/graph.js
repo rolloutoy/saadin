@@ -56,6 +56,26 @@ var Graph = (function () {
         return i + 1 < sorted.length ? sorted[i] + (sorted[i + 1] - sorted[i]) * (h - i) : sorted[i];
     }
 
+    function merge(d, at, e, at2, span) {
+        // The log d, read at time at (ms), and the samples e kept since, read at at2: one log, as if read at at2.
+        // Samples older than span (s, 0 for any age) and ones the device no longer holds are left out.
+        var add = (at2 - at) / 1000,
+            ago = d.ago.map(function (a) {
+                return a + add;
+            }),
+            drop = Math.min(ago.length, Math.max(0, e.begin - d.seq)),
+            o = {},
+            c;
+        while (span && drop < ago.length && ago[drop] > span) drop++;
+        for (c in e)
+            o[c] =
+                Array.isArray(e[c]) && c != 'states' && c != 'subs'
+                    ? (c == 'ago' ? ago : d[c]).slice(drop).concat(e[c])
+                    : e[c];
+        o.seq = d.seq + drop;
+        return o;
+    }
+
     function prep(d, at, F) {
         // The log d, read at time at (ms), as series in the units shown (F for Fahrenheit)
         var k = d.ago.length,
@@ -335,6 +355,7 @@ var Graph = (function () {
     }
 
     return {
+        merge: merge,
         prep: prep,
         levelPower: levelPower,
         defrostStarts: defrostStarts,
@@ -399,10 +420,11 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
         var FONT = 'sans-serif',
             L = 46,
             R = 12,
-            MINSPAN = 6e5; // Plot margins (px), least range shown (ms)
+            MINSPAN = 6e5, // Plot margins (px), least range shown (ms)
+            LOAD = 43200; // Least of the log loaded (s), and the range shown unless another is chosen
         var Q = new URLSearchParams(location.search),
             RF = +Q.get('refresh') || 0,
-            SP = +Q.get('span') || 0;
+            SP = Q.get('span') == 'all' ? 0 : +Q.get('span') || LOAD;
         var M,
             W,
             pw,
@@ -419,6 +441,10 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
             anT = 0,
             rfT = 0,
             rzT = 0;
+        var D, // The device's log as loaded so far, when it was last read (ms), the span (s) asked for, 0 for all
+            AT,
+            LS,
+            ldN = 0;
         var xFull,
             zoom,
             brush,
@@ -522,7 +548,7 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
         var bar = root.append('div').attr('class', 'bar');
         var ovS = root.append('section').attr('class', 'g'),
             ovH = ovS.append('div').attr('class', 'hd');
-        ovH.append('span').attr('class', 'un').text('Whole log, room temperature');
+        ovH.append('span').attr('class', 'un').text('Log loaded, room temperature');
         ovH.append('span').attr('class', 'hint').text('drag across it to choose the range shown below');
         var ov = ovS.append('svg').attr('font-family', FONT);
         var charts = root.append('div');
@@ -537,8 +563,9 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
                 'Every strip has one scale and all share the time axis, so a defrost lines up down the page.',
                 'Move the pointer over a strip, or tap it, and every legend shows its value at that moment.',
                 'Click a legend entry to show or hide it.',
-                'Drag to pan, ctrl+scroll or pinch to zoom, double-click for the whole log.',
-                'Refresh loads the log again at the chosen interval and keeps the range shown.',
+                'Drag to pan, ctrl+scroll or pinch to zoom, double-click for all that is loaded.',
+                'The last 12 hours are loaded at first. All, or a longer range, loads that much of the log.',
+                'Refresh adds the new samples at the chosen interval and keeps the range shown.',
                 'A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint.',
                 'Heat request and its integral are watts of heat.',
                 'Heat target is the heat request and the making up, over some hours, for what defrosts cost.',
@@ -554,7 +581,8 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
 
         function address() {
             // Keep the refresh and the range chosen with the buttons in the address, for a reload or a bookmark
-            var q = (RF ? 'refresh=' + RF : '') + (RF && SP ? '&' : '') + (SP ? 'span=' + SP : '');
+            var sp = SP == LOAD ? '' : 'span=' + (SP || 'all'),
+                q = (RF ? 'refresh=' + RF : '') + (RF && sp ? '&' : '') + sp;
             history.replaceState(null, '', location.pathname + (q ? '?' + q : ''));
         }
 
@@ -1447,7 +1475,8 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
                 msg.text('No samples yet, the first comes after 15 s.');
                 return;
             }
-            var was = M && { dom: dom, all: dom[0] == T0 && dom[1] == T1, latest: dom[1] == T1 };
+            var was = M && { dom: dom, all: dom[0] == T0 && dom[1] == T1, latest: dom[1] == T1 },
+                all = saved || whole();
             M = Graph.prep(d, at, F);
             T0 = M.t[0] - M.iv;
             T1 = M.t[M.k - 1];
@@ -1485,29 +1514,53 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
                 .selectAll('button')
                 .each(function () {
                     var s = +this.dataset.s;
-                    this.hidden = s > 0 && s * 1000 >= T1 - T0;
+                    this.hidden = s > 0 && all && s * 1000 >= T1 - T0;
                     this.onclick = function () {
                         SP = s;
                         address();
-                        setDom(s ? T1 - s * 1000 : T0, T1);
+                        if (all || (s && s <= LS)) setDom(s ? T1 - s * 1000 : T0, T1);
+                        else load(); // More of the log than is loaded
                     };
                 });
             layout();
         }
+        function whole() {
+            // All the device holds is loaded
+            return !LS || D.seq <= D.begin;
+        }
         function load() {
-            fetch('/graph.json')
+            // Load as much of the log as the range chosen needs, or just the samples since the last one loaded if
+            // that much is loaded already
+            var id = ++ldN,
+                want = SP ? Math.max(SP, LOAD) : 0,
+                next = D && (whole() || (want && want <= LS)) ? D.seq + D.ago.length : null;
+            clearTimeout(rfT);
+            fetch('/graph.json' + (next != null ? '?since=' + next : want ? '?span=' + want : ''))
                 .then(function (r) {
                     return r.json();
                 })
                 .then(function (d) {
-                    if (!saved) show(d, Date.now());
+                    var at = Date.now();
+                    if (saved || id != ldN) return;
+                    if (next == null) {
+                        LS = want;
+                        M = null; // Show the range chosen
+                    } else if (d.boot != D.boot || d.seq != next) {
+                        D = null; // The device restarted, or no longer holds the next sample: load it all again
+                        return load();
+                    } else d = Graph.merge(D, AT, d, at, LS);
+                    D = d;
+                    AT = at;
+                    show(d, at);
                 })
                 .catch(function (e) {
                     if (!M) msg.text('Could not load the log: ' + e);
                 })
                 .finally(function () {
-                    clearTimeout(rfT);
-                    if (RF && !saved) rfT = setTimeout(load, RF * 1000);
+                    if (RF && !saved && id == ldN) {
+                        clearTimeout(rfT);
+                        rfT = setTimeout(load, RF * 1000);
+                    }
                 });
         }
         function resized() {

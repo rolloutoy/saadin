@@ -270,5 +270,36 @@ function log(n, f, table) {
     check('many samples: a gap is kept', p.split('M').length == 3);
 }
 
+// The samples since the log held, added to it
+{
+    // A reply as the device gives it: n samples from number seq, the last kept ago s before it was read
+    const reply = (n, seq, begin, ago, f) => {
+        const d = log(n, f);
+        d.ago = d.ago.map(a => a + ago);
+        return Object.assign(d, { boot: 7, begin: begin, seq: seq });
+    };
+    const d = reply(4, 100, 0, 5, i => ({ room: 2000 + i, demand: 40 }));
+    const e = reply(2, 104, 0, 2, i => ({ room: 3000 + i, demand: 95 }));
+    e.table = '40:300';
+    const at2 = AT + 27000; // Read 27 s later: two more samples, the last kept 2 s before
+    const m = G.merge(d, AT, e, at2, 0);
+    check('merge: the new samples follow the ones held', m.room.join() == '2000,2001,2002,2003,3000,3001');
+    check('merge: every column grows', m.demand.length == 6 && m.state.length == 6 && m.sub.length == 6);
+    check('merge: ages are as at the later read', m.ago.join() == '77,62,47,32,17,2');
+    check('merge: the first sample keeps its number', m.seq == 100 && m.boot == 7);
+    check('merge: the table is the later one', m.table == '40:300' && m.interval == 15 && m.states.length == 5);
+    check('merge: the log held is not changed', d.room.length == 4 && d.ago[0] == 50);
+    const p = G.prep(m, at2, 0);
+    check('merge: a sample held keeps its time', p.t[3] == AT - 5000 && p.t[5] == at2 - 2000);
+    const none = G.merge(d, AT, reply(0, 104, 0, 0), AT + 3000, 0);
+    check('merge: no new samples', none.room.length == 4 && none.ago.join() == '53,38,23,8' && none.seq == 100);
+    const s = G.merge(d, AT, e, at2, 50);
+    check('merge: samples older than the span are left out', s.ago.join() == '47,32,17,2' && s.seq == 102);
+    check('merge: in every column', s.room.join() == '2002,2003,3000,3001' && s.state.length == 4);
+    e.begin = 103;
+    const b = G.merge(d, AT, e, at2, 0);
+    check('merge: samples the device no longer holds are left out', b.room.join() == '2003,3000,3001' && b.seq == 103);
+}
+
 console.log(passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

@@ -12,6 +12,9 @@ static const char TAG[] = "Saadin";
 #include <driver/gpio.h>
 #include <driver/uart.h>
 #include "esp_http_server.h"
+#include "esp_random.h"
+#include "esp_rom_crc.h"
+#include "miniz.h"
 #include <math.h>
 #include "mdns.h"
 #include "faikout_i2c.h"
@@ -334,6 +337,7 @@ static heatctl_t heatctl;                          // Controller state, main loo
 static RTC_NOINIT_ATTR heatctl_keep_t heatkeep;    // Controller state kept over a restart, main loop only
 static heatctl_out_t ctl = {.state = HEATCTL_OFF}; // Last outputs, for status
 static heatlog_t heatlog;                          // One sample every 15 s for the graph page, under daikin.mutex
+static uint32_t heatlogboot;                       // Tells this run's log from the one before a restart
 static heatctl_curve_t heatflow;                   // Air flow (m3/h) by fan speed (rpm), fan.flow, main loop only
 
 static void heatctl_status_json(jo_t j)
@@ -1738,9 +1742,78 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     xSemaphoreGive(daikin.mutex);
     if (end - begin > spare && end - begin == heatlog.n)
         begin += spare;
+    // All of that is sent unless the query asks for less: span=S for the last S seconds, since=N for the samples from
+    // number N on (the page asks for the ones it has not got yet, see graph.js)
+    uint32_t oldest = begin;
+    {
+        char query[64], value[16];
+        if (!httpd_req_get_url_query_str(req, query, sizeof(query))) {
+            if (!httpd_query_key_value(query, "span", value, sizeof(value))) {
+                uint32_t span = strtoul(value, NULL, 10) / HEATLOG_INTERVAL;
+                if (span < end - begin)
+                    begin = end - span;
+            }
+            if (!httpd_query_key_value(query, "since", value, sizeof(value))) {
+                uint32_t since = strtoul(value, NULL, 10);
+                if (since > end)
+                    since = end;
+                if (since > begin)
+                    begin = since;
+            }
+        }
+    }
     uint32_t n = end - begin, at = n, got = 0; // s holds got samples from sample at of the n
     uint32_t now = uptime();
     size_t len = 0;
+    // Gzipped if the client takes that and there is PSRAM for it: the log is long and much the same all through
+    tdefl_compressor *z = NULL;
+    char *zbuf = NULL;
+    size_t zlen = 0;
+    uint32_t crc = 0, plain = 0;
+    {
+        char accept[64] = "";
+        httpd_req_get_hdr_value_str(req, "Accept-Encoding", accept, sizeof(accept));
+        if (strstr(accept, "gzip") && (z = heap_caps_malloc(sizeof(*z), MALLOC_CAP_SPIRAM)) &&
+            (zbuf = mallocspi(size)) && tdefl_init(z, NULL, NULL, 1 | TDEFL_GREEDY_PARSING_FLAG) == TDEFL_STATUS_OKAY) {
+            static const uint8_t head[] = {0x1F, 0x8B, 8, 0, 0, 0, 0, 0, 0, 0xFF}; // gzip, deflate, no name or time
+            memcpy(zbuf, head, zlen = sizeof(head));
+            httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+        } else {
+            free(z);
+            z = NULL;
+        }
+    }
+    void flush(int last)
+    { // Send what is in the buffer. When gzipping it goes through the compressor, which sends as zbuf fills
+        if (!z) {
+            if (len)
+                httpd_resp_send_chunk(req, buf, len);
+            len = 0;
+            return;
+        }
+        crc = esp_rom_crc32_le(crc, (uint8_t *)buf, len);
+        plain += len;
+        const char *in = buf;
+        while (len || last) {
+            size_t i = len, o = size - zlen;
+            tdefl_status st = tdefl_compress(z, in, &i, zbuf + zlen, &o, last ? TDEFL_FINISH : TDEFL_NO_FLUSH);
+            in += i;
+            len -= i;
+            zlen += o;
+            if (zlen == size || st != TDEFL_STATUS_OKAY) {
+                if (zlen)
+                    httpd_resp_send_chunk(req, zbuf, zlen);
+                zlen = 0;
+            }
+            if (st != TDEFL_STATUS_OKAY)
+                break; // Done, or it failed and the reply is cut short
+        }
+        len = 0;
+        if (last) {
+            uint32_t tail[2] = {crc, plain}; // Little endian, as gzip has them
+            httpd_resp_send_chunk(req, (char *)tail, sizeof(tail));
+        }
+    }
     const heatlog_sample_t *get(uint32_t i)
     { // Sample i of the n, NULL if it has been overwritten after all
         if (i < at || i >= at + part) {
@@ -1753,10 +1826,8 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     }
     void out(const char *f, ...)
     { // Each item is short, send when the buffer is nearly full
-        if (len > size - 64) {
-            httpd_resp_send_chunk(req, buf, len);
-            len = 0;
-        }
+        if (len > size - 64)
+            flush(0);
         va_list ap;
         va_start(ap, f);
         len += vsnprintf(buf + len, size - len, f, ap);
@@ -1783,7 +1854,8 @@ static esp_err_t web_graph_json(httpd_req_t *req)
         char text[HEATCTL_LEVELS_MAX * 20];
         heatctl_parse_table(&table, demandtable ?: "", revk_settings_find("demandtable", NULL)->def);
         heatctl_format_table(&table, text, sizeof(text));
-        out("{\"interval\":%d,\"table\":\"%s\",\"ago\":[", HEATLOG_INTERVAL, text);
+        out("{\"interval\":%d,\"table\":\"%s\",\"boot\":%lu,\"begin\":%lu,\"seq\":%lu,\"ago\":[", HEATLOG_INTERVAL,
+            text, (unsigned long)heatlogboot, (unsigned long)oldest, (unsigned long)begin);
     }
     for (uint32_t i = 0, ago = 0; i < n; i++) {
         const heatlog_sample_t *p = get(i);
@@ -1835,8 +1907,10 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     for (int i = 0; i <= HEATCTL_SUB_REST; i++)
         out("%s\"%s\"", i ? "," : "", heatctl_sub_name(i));
     out("]}");
-    httpd_resp_send_chunk(req, buf, len);
+    flush(1);
     httpd_resp_send_chunk(req, NULL, 0);
+    free(z);
+    free(zbuf);
     free(buf);
     free(s);
     return ESP_OK;
@@ -3735,6 +3809,7 @@ void app_main()
         if (spi && n > spi / 4 * 3 / sizeof(heatlog_sample_t))
             n = spi / 4 * 3 / sizeof(heatlog_sample_t); // At most three quarters of the PSRAM
         heatlog_init(&heatlog, mallocspi(n * sizeof(heatlog_sample_t)), n);
+        heatlogboot = esp_random();
     }
     b.startup = 1;
     daikin.status_known = CONTROL_online;
