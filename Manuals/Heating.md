@@ -62,7 +62,9 @@ It goes back to demand control when it stays above `cold.exit` (−10 °C) for 6
 
 When the liquid temperature drops below `defrost.enter` (5 °C), the controller treats it as a defrost. It keeps its outputs as they are until the liquid temperature is back to `defrost.exit` (25 °C), or for at most `defrost.max` (30 minutes). The web status line shows "❄ defrost".
 
-For `defrost.hold` (10 minutes) after a defrost, demand stays at `defrost.holdmax` or below and does not go up, so the unit settles after the defrost. The default 100% means 100% with quiet outdoor: plain 100% is never used in the hold, because without a limit the unit surges to full power after a defrost. Set 95% to hold it down further. In cold-weather mode the setpoint does not go up either. The integral keeps running, so it learns the heat the defrost cost, and demand can step up when the hold ends. The status line shows "after defrost". If a fan speed is set for the state, it is sent again, because the unit does not restore it after a defrost.
+With `defrost.push` set (it is 0, no push, by default), the controller runs the unit at `defrost.pushto` (100%, which means 100% with quiet outdoor) for that many minutes right after a defrost, and then puts demand back where it was before the defrost. This is for short defrost cycles: at a low demand level the compressor stays slow after a defrost, and the next defrost can come in under an hour. The push happens only when demand was at `defrost.pushmax` (85%) or below before the defrost, and not in cold-weather mode. Its heat counts as heat given, so demand runs a little lower afterwards. The status line shows "push after defrost". With `defrost.pushalt` on, only every second defrost gets a push, so you can compare the two on the heating graph.
+
+For `defrost.hold` (10 minutes) after a defrost, or after the push when there is one, demand stays at `defrost.holdmax` or below and does not go up, so the unit settles after the defrost. The default 100% means 100% with quiet outdoor: plain 100% is never used in the hold, because without a limit the unit surges to full power after a defrost. Set 95% to hold it down further. In cold-weather mode the setpoint does not go up either. The integral keeps running, so it learns the heat the defrost cost, and demand can step up when the hold ends. The status line shows "after defrost". If a fan speed is set for the state, it is sent again, because the unit does not restore it after a defrost.
 
 With `defrost.watchdog` on (it is off by default), if there are more than `defrost.loops` (3) defrosts within `defrost.window` (90 minutes), the controller turns heating off for `defrost.rest` (15 minutes). The fan is on auto for that time, whatever `idle.fan` is, and the fan for the state is set again when heating resumes. Demand control carries on with the integral it had. The status line shows "rest after defrost loop". This stops the unit from defrosting over and over.
 
@@ -91,7 +93,7 @@ The controller keeps what it has learnt over a restart of the device, so the roo
 - With heating off, it stays off. Heating starts again after `idle.min` (30 minutes) at the earliest, counted from the restart, with the integral it had when heating went off.
 - In the rest after a defrost loop, the rest starts again and lasts `defrost.rest` (15 minutes).
 
-Minimum times and holds start again, as if the controller had just changed to that state. A defrost in progress at the restart is not remembered.
+Minimum times and holds start again, as if the controller had just changed to that state. A defrost in progress at the restart is not remembered, and a push after a defrost does not go on: demand is back at the level before it.
 
 The log and the `info/<host>/heatctl` MQTT message show a resume as the reason for the change, for example `OFF -> DEMAND (resumed after restart, demand 70 QO, integral 1450 W)`. The status line on the web page says "resumed after restart" for 10 minutes.
 
@@ -172,6 +174,10 @@ The cold-weather gains have not been tested on a real unit yet.
 |`defrost.max`|30 min|The defrost is over after this long anyway|
 |`defrost.hold`|10 min|After a defrost, demand does not go up for this long. 0 for no hold|
 |`defrost.holdmax`|100%|Highest demand in the hold. 100 is 100% with quiet outdoor; plain 100% is never used in the hold|
+|`defrost.push`|0 min|After a defrost, demand at `defrost.pushto` for this long, then the hold. 0 for no push|
+|`defrost.pushto`|100%|Demand in the push. 100 is 100% with quiet outdoor; plain 100% is never used. Set 95% for a gentler push|
+|`defrost.pushmax`|85%|Push only when demand was at most this before the defrost|
+|`defrost.pushalt`|off|Push after every second defrost only, to compare cycles with and without a push|
 |`defrost.watchdog`|off|Turn heating off for a while after a defrost loop (more defrosts than `defrost.loops` within `defrost.window`)|
 |`defrost.loops`|3|More defrosts than this…|
 |`defrost.window`|90 min|…within this long…|
@@ -217,7 +223,7 @@ Or set `auto.topic` to a topic to follow and `auto.payload` to the JSON field in
 
 ## Watching it
 
-- **Status:** the status JSON (`state/GuestAC/status`) has `ctl` (state), `ctl_sub` (`defrost`, `hold` or `rest`), `ctl_target` (target with the curve offset), `ctl_curve` (the curve offset), `ctl_heatw` (heat request, W) and `ctl_i` (the integral). `ctl_i` is in watts, except in cold-weather mode, where it is the setpoint integral in °C.
+- **Status:** the status JSON (`state/GuestAC/status`) has `ctl` (state), `ctl_sub` (`defrost`, `push`, `hold` or `rest`), `ctl_target` (target with the curve offset), `ctl_curve` (the curve offset), `ctl_heatw` (heat request, W) and `ctl_i` (the integral). `ctl_i` is in watts, except in cold-weather mode, where it is the setpoint integral in °C.
 - **MQTT:** each change of state is sent to `info/GuestAC/heatctl`, with the reason and the inputs.
 - **Home Assistant:** a "Control state" sensor, "Heat request", "Heating integral" and "Effective target" sensors, and numbers for "Heating target", "Heating gain" (`pid.kp`) and "Heating integral time" (`pid.ti`). `hvac_action` shows heating, idle or defrosting.
 - **Graph:** the *Heating graph* link at the bottom of the main page, above *Settings*, opens `/graph`. It shows up to the last 5 days as strips stacked on one time axis, in five groups. Each strip has one scale, so a defrost lines up down the page.
@@ -228,7 +234,7 @@ Or set `auto.topic` to a topic to follow and `auto.payload` to the JSON field in
   - **Efficiency:** the COP (heat output divided by power): each sample's, and the mean over the last 6 hours, which counts the defrosts in. The heat per watt of the demand table, which the controller learns from the heat output (it starts at `demand.cop`), is hidden until you click it. See [Heat output and COP](#heat-output-and-cop) for how far to trust them.
   - **The range shown, summed up:** three charts that follow the range shown. *Power at each demand level* has the median power the unit drew at each level and the 10th to 90th percentile, next to the level's watts in `demand.table`. It counts steady running only: no defrost or hold, and from two minutes into a level. *COP by outdoor temperature* has one dot for each defrost cycle, from the start of one defrost to the start of the next, with the defrost counted in. *Room temperature through a defrost* lays the defrosts over each other, from 10 minutes before each to 45 minutes after, with the median as a heavy line and its lowest point named.
 
-  Heating off, cold weather, no room reading, defrosts, the hold after a defrost and the rest after a defrost loop are shaded in every strip. A dashed line marks each change of kp or ti (`pid.kp`/`pid.ti`, or `cold.kp`/`cold.ti` at full power). Move the pointer over a strip, or tap it: a line runs down every strip, every legend shows its value at that moment, and the line above the strips shows the time, the state, the demand level, the fan setting and the kp and ti in use. While the pointer is elsewhere they show the latest sample in the range. Click a legend entry to show or hide it.
+  Heating off, cold weather, no room reading, defrosts, the push and the hold after a defrost and the rest after a defrost loop are shaded in every strip. A dashed line marks each change of kp or ti (`pid.kp`/`pid.ti`, or `cold.kp`/`cold.ti` at full power). Move the pointer over a strip, or tap it: a line runs down every strip, every legend shows its value at that moment, and the line above the strips shows the time, the state, the demand level, the fan setting and the kp and ti in use. While the pointer is elsewhere they show the latest sample in the range. Click a legend entry to show or hide it.
 
   The strip at the top has the whole log: drag across it to choose the range shown, and drag the chosen range to move it. On the strips, drag to pan, ctrl+scroll or pinch to zoom, and double-click for the whole log. The *All* button shows the whole log, and *3 days*, *1 day*, *12 h* and *3 h* show the latest 3 days, day, 12 hours or 3 hours. A range button is hidden while the log is shorter than it. Each strip's scale fits what is in the range shown.
 

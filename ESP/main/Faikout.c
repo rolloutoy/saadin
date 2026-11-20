@@ -1904,7 +1904,7 @@ static esp_err_t web_graph_json(httpd_req_t *req)
     for (int i = 0; i <= HEATCTL_NOSENSOR; i++)
         out("%s\"%s\"", i ? "," : "", heatctl_state_name(i));
     out("],\"subs\":[");
-    for (int i = 0; i <= HEATCTL_SUB_REST; i++)
+    for (int i = 0; i <= HEATCTL_SUB_PUSH; i++)
         out("%s\"%s\"", i ? "," : "", heatctl_sub_name(i));
     out("]}");
     flush(1);
@@ -2189,6 +2189,7 @@ static esp_err_t web_control(httpd_req_t *req)
         "o.ctl=='idle'?'Heating off'+tg:"                                                                   //
         "o.ctl=='nosensor'?'No room reading · unit thermostat at '+cf(o.temp):o.ctl;"                       //
         "if(o.ctl_sub=='defrost')r+=' · ❄ defrost';"                                                        //
+        "else if(o.ctl_sub=='push')r+=' · push after defrost';"                                             //
         "else if(o.ctl_sub=='hold')r+=' · after defrost';"                                                  //
         "else if(o.ctl_sub=='rest')r+=' · rest after defrost loop';"                                        //
         "if(o.ctl_resumed)r+=' · resumed after restart';"                                                   //
@@ -3568,6 +3569,10 @@ static void heatctl_settings(heatctl_params_t *p)
     p->defrost_max = defrostmax * 60;
     p->defrost_hold = defrosthold * 60;
     p->defrost_holdmax = defrostholdmax;
+    p->defrost_push = defrostpush * 60;
+    p->defrost_pushmax = defrostpushmax;
+    p->defrost_pushto = defrostpushto;
+    p->defrost_pushalt = defrostpushalt;
     p->defrost_watchdog = defrostwatchdog;
     p->defrost_loops = defrostloops;
     p->defrost_window = defrostwindow * 60;
@@ -3871,6 +3876,8 @@ void app_main()
     if (webcontrol || websettings) {
         // Web interface
         httpd_config_t config = revk_httpd_config(19);
+        if (heap_caps_get_total_size(MALLOC_CAP_SPIRAM))
+            config.stack_size = 12 * 1024; // /graph.json is gzipped by the ROM's deflate, which takes some 5K of stack
         ESP_LOGE(TAG, "HTTPD stack %u sockets %u handlers %u", config.stack_size, config.max_open_sockets,
                  config.max_uri_handlers);
         if (!httpd_start(&webserver, &config)) {

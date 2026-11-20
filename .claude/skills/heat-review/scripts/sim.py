@@ -9,8 +9,8 @@ Usage: python3 -I sim.py compare [log]
             device's settings and set the two side by side. This is the test of whether the model may be trusted
             for a sweep.
   sweep     scenarios x variants. A variant sets controller settings in the settings' own units (TARGET CURVE KP TI
-            RATE HOLD HOLDMAX SMOOTH TABLE COP FULL MINRUN IDLE_OVER IDLE_UNDER IDLE_MIN COLD_ENTER COLD_EXIT
-            COLD_HOLD WATCHDOG LOOPS WINDOW REST) or plant figures; SRC=<dir with heatctl.c> runs another source
+            RATE HOLD HOLDMAX PUSH PUSHTO PUSHMAX PUSHALT SMOOTH TABLE COP FULL MINRUN IDLE_OVER IDLE_UNDER IDLE_MIN
+            COLD_ENTER COLD_EXIT COLD_HOLD WATCHDOG LOOPS WINDOW REST) or plant figures; SRC=<dir with heatctl.c> runs another source
             tree (a worktree with a code change), DEFS="-DX" passes compiler flags; PULSE_W=900 PULSE_MIN=120 adds a
             burst of other heat (a sauna) after two settled days and scores the 12 h from it. The first row is
             always the device as it is: the settings pull.py read from it, kept in device.json.
@@ -43,7 +43,9 @@ SETTING_ENV = {"auto.t": "TARGET", "auto.curve": "CURVE", "auto.smooth": "SMOOTH
                "demand.full": "FULL", "demand.minrun": "MINRUN",
                "idle.over": "IDLE_OVER", "idle.under": "IDLE_UNDER", "idle.min": "IDLE_MIN",
                "cold.enter": "COLD_ENTER", "cold.exit": "COLD_EXIT", "cold.hold": "COLD_HOLD",
-               "defrost.hold": "HOLD", "defrost.holdmax": "HOLDMAX", "defrost.watchdog": "WATCHDOG",
+               "defrost.hold": "HOLD", "defrost.holdmax": "HOLDMAX", "defrost.push": "PUSH",
+               "defrost.pushto": "PUSHTO", "defrost.pushmax": "PUSHMAX", "defrost.pushalt": "PUSHALT",
+               "defrost.watchdog": "WATCHDOG",
                "defrost.loops": "LOOPS", "defrost.window": "WINDOW", "defrost.rest": "REST"}
 DEFAULT_SCEN = ["-11", "-6", "-1", "4", "-1,0,day", "-1,0>-1,500", "4,0>4,-500", "-6,0>-6,-700"]
 ROBUST = [("sensor lag 5 min", {"SENSLAG": 300}), ("sensor lag 10 min", {"SENSLAG": 600}),

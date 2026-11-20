@@ -31,7 +31,7 @@ static const char *envs(const char *n, const char *d)
 
 // The controller's settings or inputs changed: give every new field its value in main() below (a setting's default
 // is in settings.def, and sim.py's SETTING_ENV passes the device's own), then put the new sizes here
-_Static_assert(sizeof(heatctl_params_t) == 428 && sizeof(heatctl_in_t) == 20,
+_Static_assert(sizeof(heatctl_params_t) == 436 && sizeof(heatctl_in_t) == 20,
                "heatctl_params_t or heatctl_in_t changed: plant.c must follow, see the comment above this line");
 
 int main(int argc, char **argv)
@@ -97,6 +97,10 @@ int main(int argc, char **argv)
         .defrost_max = 1800,
         .defrost_hold = envf("HOLD", 10) * 60,
         .defrost_holdmax = envf("HOLDMAX", 100),
+        .defrost_push = envf("PUSH", 0) * 60,
+        .defrost_pushmax = envf("PUSHMAX", 85),
+        .defrost_pushto = envf("PUSHTO", 100),
+        .defrost_pushalt = envf("PUSHALT", 0),
         .defrost_watchdog = envf("WATCHDOG", 0),
         .defrost_loops = envf("LOOPS", 3),
         .defrost_window = envf("WINDOW", 90) * 60,
