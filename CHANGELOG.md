@@ -4,6 +4,10 @@ Every user-visible change in Säädin since it was forked from upstream Faikout,
 
 ## 2026-11-20
 
+- New setting `defrost.push` (default 0, no push): after a defrost, run the unit at 100% with quiet outdoor for that many minutes, then put demand back where it was and start the hold (`defrost.hold`). It is meant for short defrost cycles, where the unit defrosts again within the hour after it was left at a low demand level. Whether it prevents them is not yet tested on a unit.
+  - `defrost.pushmax` (default 85%): the push happens only when demand was at most this before the defrost. There is no push in cold-weather mode.
+  - `defrost.pushalt` (default off): push after every second defrost only, so cycles with and without a push can be compared in the same weather.
+  - The heat of the push counts as heat given, so demand runs lower afterwards. The status line shows "push after defrost", `ctl_sub` is `push`, and the heating graph shades the push in its own colour.
 - The heating graph page opens much sooner. It loads the last 12 hours of the log at first, in place of all 5 days (about 3 MB, which took half a minute), and *Refresh* now fetches only the samples kept since the last one loaded, in place of the whole log each time.
   - *All*, or a range longer than is loaded (*1 day*, *3 days*), loads that much of the log. The page opens showing the last 12 hours; `/graph?span=all` opens it on the whole log.
   - `/graph.json` still gives the whole log. New: `/graph.json?span=S` gives the last S seconds and `/graph.json?since=N` the samples from number N on. A reply has three new fields: `seq`, the number of its first sample, `begin`, the number of the oldest sample the device holds, and `boot`, which changes when the device restarts.

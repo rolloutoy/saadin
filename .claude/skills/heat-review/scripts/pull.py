@@ -32,7 +32,8 @@ PAGE_SETTINGS = {f.replace(".", ""): f for f in (
     "demand.fan", "demand.fanmap", "pid.kp", "pid.ti",
     "idle.temp", "idle.over", "idle.under", "idle.min", "idle.fan", "idle.fanmap",
     "cold.enter", "cold.exit", "cold.hold", "cold.set", "cold.rate", "cold.kp", "cold.ti", "cold.fan", "cold.fanmap",
-    "defrost.enter", "defrost.exit", "defrost.max", "defrost.hold", "defrost.holdmax", "defrost.watchdog",
+    "defrost.enter", "defrost.exit", "defrost.max", "defrost.hold", "defrost.holdmax", "defrost.push", "defrost.pushmax", "defrost.pushalt",
+    "defrost.watchdog",
     "defrost.loops", "defrost.window", "defrost.rest", "fan.flow", "fan.hold")}
 SETTINGS_PAGES = (-2, 0)  # All the firmware's own settings; the heating page, for firmware that lacks the first
 

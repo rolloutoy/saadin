@@ -175,7 +175,7 @@ class Log(Series):
                     cols[new] = cols[old]
         super().__init__(name, [pulled - a for a in ago], interval, cols, parse_table(raw.get("table")),
                          raw.get("states") or ["off", "idle", "demand", "cold", "nosensor"],
-                         raw.get("subs") or ["", "defrost", "hold", "rest"])
+                         raw.get("subs") or ["", "defrost", "hold", "rest", "push"])
         self.path, self.pulled, self.raw = path, pulled, raw
 
 

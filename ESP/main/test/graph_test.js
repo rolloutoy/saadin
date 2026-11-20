@@ -52,7 +52,7 @@ function log(n, f, table) {
         state: [],
         sub: [],
         states: ['off', 'idle', 'demand', 'cold', 'nosensor'],
-        subs: ['', 'defrost', 'hold', 'rest']
+        subs: ['', 'defrost', 'hold', 'rest', 'push']
     };
     COLS.forEach(c => {
         d[c] = [];
@@ -174,6 +174,12 @@ function log(n, f, table) {
     );
     check('shaded runs', m.runs.map(r => r.v).join() == 'defrost,hold,idle');
     check('a run covers its samples', m.runs[0].a == m.t[1] && m.runs[0].b == m.t[3]);
+    const push = G.prep(
+        log(6, i => ({ sub: i == 1 ? 'defrost' : i == 2 ? 'push' : i == 3 ? 'hold' : '', state: 'demand' })),
+        AT,
+        0
+    );
+    check('the push after a defrost is shaded', push.runs.map(r => r.v).join() == 'defrost,push,hold');
     check(
         'one mark, where kp changes',
         m.marks.length == 1 && m.marks[0].t == m.t[4] && m.marks[0].s == 'kp 600 W/℃, ti 60 min'

@@ -56,6 +56,7 @@ typedef enum {
     HEATCTL_SUB_DEFROST, // Unit is defrosting (DEMAND or COLD)
     HEATCTL_SUB_HOLD,    // Post-defrost hold (DEMAND or COLD)
     HEATCTL_SUB_REST,    // Defrost-loop watchdog rest (IDLE)
+    HEATCTL_SUB_PUSH,    // Post-defrost push, before the hold (DEMAND)
 } heatctl_sub_t;
 
 typedef struct {
@@ -92,6 +93,9 @@ typedef struct {
     float defrost_exit;       // Liquid at or above this ends it
     uint32_t defrost_max;     // Safety cap on a defrost (s)
     uint32_t defrost_hold;    // Post-defrost hold (s)
+    uint32_t defrost_push;    // Post-defrost push: 100q for this long (s) before the hold, 0 for none
+    uint8_t defrost_pushmax;  // Push only from a level with demand (%) at most this
+    uint8_t defrost_pushalt;  // Push after every second defrost only (to compare the two in a log)
     uint8_t defrost_holdmax;  // Demand (%) at most in the hold, 100 is 100q (never plain 100)
     uint8_t defrost_watchdog; // Defrost-loop watchdog on
     uint8_t defrost_loops;    // More defrosts than this within defrost_window...
@@ -179,6 +183,8 @@ typedef struct {
     float heatw;               // Last heat request (W of heat)
     int level;                 // Current level (DEMAND)
     uint32_t level_at;         // Time of the last demand change
+    int push_from;             // Level before the post-defrost push, set again after it
+    uint8_t pushed;            // The last defrost that could have a push had one (defrost.pushalt)
     float setpoint;            // Current setpoint (COLD)
     uint32_t setpoint_at;      // Time of the last setpoint change (COLD)
     heatctl_state_t fan_state; // State the fan from a map was set in, HEATCTL_OFF if none

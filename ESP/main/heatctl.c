@@ -217,7 +217,7 @@ const char *heatctl_state_name(heatctl_state_t state)
 
 const char *heatctl_sub_name(heatctl_sub_t sub)
 {
-    static const char *const names[] = {"", "defrost", "hold", "rest"};
+    static const char *const names[] = {"", "defrost", "hold", "rest", "push"};
     return sub < sizeof(names) / sizeof(*names) ? names[sub] : "?";
 }
 
@@ -254,6 +254,15 @@ static int level_top(const heatctl_params_t *p, uint8_t hold)
     if (hold) // Capped at defrost.holdmax, no plain 100
         while (top > 0 && (p->table.level[top].demand > p->defrost_holdmax || !p->table.level[top].quiet))
             top--;
+    return top;
+}
+
+// Level of the post-defrost push: the highest with quiet outdoor (100q)
+static int level_push(const heatctl_table_t *t)
+{
+    int top = t->n - 1;
+    while (top > 0 && !t->level[top].quiet)
+        top--;
     return top;
 }
 
@@ -307,8 +316,8 @@ static void enter_sub(heatctl_t *s, heatctl_out_t *out, uint32_t now, heatctl_su
 }
 
 static heatctl_sub_t keep_hold(const heatctl_t *s)
-{ // The post-defrost hold carries over between DEMAND and COLD
-    return s->sub == HEATCTL_SUB_HOLD ? HEATCTL_SUB_HOLD : HEATCTL_SUB_NONE;
+{ // The post-defrost hold carries over between DEMAND and COLD, and a push left for COLD goes on as the hold
+    return s->sub == HEATCTL_SUB_HOLD || s->sub == HEATCTL_SUB_PUSH ? HEATCTL_SUB_HOLD : HEATCTL_SUB_NONE;
 }
 
 // Heat per electrical watt of the table, roughly (demand.cop)
@@ -363,8 +372,7 @@ static int8_t state_fan(heatctl_t *s, const heatctl_params_t *p, int8_t fan, con
     int8_t want = heatctl_fanmap_fan(map, outdoor);
     if (want == HEATCTL_FAN_LEAVE) // No map, or outdoor unknown: keep what there is
         return s->fan_state == s->state ? s->fan : HEATCTL_FAN_LEAVE;
-    if (s->fan_state != s->state || (want != s->fan && now - s->fan_at >= p->fan_hold &&
-                                     s->sub != HEATCTL_SUB_DEFROST && s->sub != HEATCTL_SUB_HOLD)) {
+    if (s->fan_state != s->state || (want != s->fan && now - s->fan_at >= p->fan_hold && s->sub == HEATCTL_SUB_NONE)) {
         s->fan = want;
         s->fan_at = now;
         s->fan_state = s->state;
@@ -415,8 +423,11 @@ void heatctl_keep(const heatctl_t *s, const heatctl_params_t *p, heatctl_keep_t 
     if (s->state == HEATCTL_IDLE && s->sub == HEATCTL_SUB_REST)
         k->rest = s->resume;
     if (s->state == HEATCTL_DEMAND) {
-        k->demand = p->table.level[s->level].demand; // Not the index, which a changed table would misplace
-        k->quiet = p->table.level[s->level].quiet;
+        int level = s->level;
+        if (s->sub == HEATCTL_SUB_PUSH && s->push_from >= 0 && s->push_from < p->table.n)
+            level = s->push_from;                 // A push does not go on after a restart
+        k->demand = p->table.level[level].demand; // Not the index, which a changed table would misplace
+        k->quiet = p->table.level[level].quiet;
     }
     k->integral = s->integral;
     k->scale = s->scale;
@@ -500,6 +511,17 @@ static void keep_resume(heatctl_t *s, heatctl_out_t *out, uint32_t now, int leve
     s->resumed = 1;
 }
 
+// A defrost has ended: is a push due? Only in DEMAND, from a level at or below defrost.pushmax, and with
+// defrost.pushalt after every second such defrost
+static int push_due(heatctl_t *s, const heatctl_params_t *p)
+{
+    if (!p->defrost_push || s->state != HEATCTL_DEMAND || s->level < 0 || s->level >= level_push(&p->table) ||
+        p->table.level[s->level].demand > p->defrost_pushmax)
+        return 0;
+    s->pushed = !(p->defrost_pushalt && s->pushed);
+    return s->pushed;
+}
+
 heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatctl_in_t *in, uint32_t now)
 {
     heatctl_out_t out = {0};
@@ -539,11 +561,18 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
                 out.resend_fan = 1;
                 if (p->defrost_watchdog && n > p->defrost_loops)
                     defrost_rest = n;
-                else
+                else if (push_due(s, p)) { // 100q for a while first, whatever the heat account asks
+                    s->push_from = s->level;
+                    s->level = level_push(&p->table);
+                    s->level_at = now;
+                    enter_sub(s, &out, now, HEATCTL_SUB_PUSH);
+                } else
                     enter_sub(s, &out, now, p->defrost_hold ? HEATCTL_SUB_HOLD : HEATCTL_SUB_NONE);
             }
         } else if (s->armed && !isnan(in->liquid) && in->liquid < p->defrost_enter) {
             s->armed = 0;
+            if (s->sub == HEATCTL_SUB_PUSH)
+                s->level = s->push_from; // The push ends here
             enter_sub(s, &out, now, HEATCTL_SUB_DEFROST);
             if (s->defrosts == HEATCTL_DEFROSTS_MAX) {
                 memmove(s->defrost_at, s->defrost_at + 1, sizeof(*s->defrost_at) * (HEATCTL_DEFROSTS_MAX - 1));
@@ -551,6 +580,11 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
             }
             s->defrost_at[s->defrosts++] = now;
             reason(&out, "defrost, liquid %.1f < %.1f", in->liquid, p->defrost_enter);
+        } else if (s->sub == HEATCTL_SUB_PUSH && now - s->sub_since >= p->defrost_push) {
+            s->level = s->push_from; // Back where it was, and its heat is in the heat deficit as a surplus
+            s->level_at = now;
+            enter_sub(s, &out, now, p->defrost_hold ? HEATCTL_SUB_HOLD : HEATCTL_SUB_NONE);
+            reason(&out, "post-defrost push over");
         } else if (s->sub == HEATCTL_SUB_HOLD && now - s->sub_since >= p->defrost_hold) {
             enter_sub(s, &out, now, HEATCTL_SUB_NONE);
             reason(&out, "post-defrost hold over");
@@ -558,8 +592,9 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
     } else
         s->armed = 0; // Not heating, so the coil may cool; heating has to be established again
 
-    // Outdoor, smoothed, frozen during defrost and the hold after it (the unit's reading jumps)
-    if (!isnan(in->outdoor) && s->sub != HEATCTL_SUB_DEFROST && s->sub != HEATCTL_SUB_HOLD) {
+    // Outdoor, smoothed, frozen during defrost and the push and hold after it (the unit's reading jumps)
+    if (!isnan(in->outdoor) && s->sub != HEATCTL_SUB_DEFROST && s->sub != HEATCTL_SUB_PUSH &&
+        s->sub != HEATCTL_SUB_HOLD) {
         if (!s->outdoor_ok)
             s->outdoor = in->outdoor;
         else
@@ -727,7 +762,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
             s->level = level_wanted(t, top, s->heatw / (s->level == -2 ? scale : cop));
         else if (s->level > top)
             s->level = top; // Cap at once, also in defrost (e.g. a shorter table)
-        else if (s->sub == HEATCTL_SUB_DEFROST)
+        else if (s->sub == HEATCTL_SUB_DEFROST || s->sub == HEATCTL_SUB_PUSH)
             ; // Hold
         else if (stale)
             ; // Hold

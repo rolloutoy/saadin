@@ -58,6 +58,8 @@ static heatctl_params_t params(void)
         .defrost_max = 30 * 60,
         .defrost_hold = 10 * 60,
         .defrost_holdmax = 100,
+        .defrost_push = 0,
+        .defrost_pushmax = 85,
         .defrost_watchdog = 0,
         .defrost_loops = 3,
         .defrost_window = 90 * 60,
@@ -641,6 +643,139 @@ static void test_hold_cap(int full, int max)
     run(&x, 2);
     run(&x, 600);
     CHECK("after hold back to top", x.out.demand == 100 && x.out.quiet == !full);
+}
+
+// A 5 min defrost, to the step it ends on
+static void defrost_once(sim_t *x)
+{
+    x->in.liquid = -20;
+    run(x, 300);
+    x->in.liquid = 35;
+    run(x, 1);
+}
+
+// defrost.push: after a defrost 100q for that long, from a level at or below defrost.pushmax, and then the hold
+static void test_push(void)
+{
+    sim_t x;
+    start(&x);
+    x.p.defrost_push = 360;
+    CHECK("push: sub-state name", !strcmp(heatctl_sub_name(HEATCTL_SUB_PUSH), "push"));
+    run(&x, 100);
+    float outdoor = x.out.outdoor;
+    x.in.outdoor = -5; // The unit's reading jumps
+    defrost_once(&x);
+    CHECK("push: entered from the defrost", x.out.sub == HEATCTL_SUB_PUSH && x.out.changed && x.out.resend_fan);
+    CHECK("push: 100% with quiet outdoor, not plain 100", x.out.demand == 100 && x.out.quiet);
+    float deficit = x.out.deficit;
+    run(&x, 359);
+    CHECK("push: lasts defrost.push", x.out.sub == HEATCTL_SUB_PUSH && x.out.demand == 100 && x.out.quiet);
+    CHECK("push: outdoor frozen", x.out.outdoor == outdoor);
+    CHECK("push: its heat is booked as a surplus", x.out.deficit < deficit - 100);
+    heatctl_keep_t k;
+    heatctl_keep(&x.s, &x.p, &k, 5000);
+    CHECK("push: the level before it is the one kept over a restart", k.demand == 60 && k.quiet);
+    run(&x, 1);
+    CHECK("push: then the hold", x.out.sub == HEATCTL_SUB_HOLD && x.out.changed);
+    CHECK("push: demand back to the level before the defrost", x.out.demand == 60);
+    run(&x, 599);
+    CHECK("push: the hold lasts defrost.hold from the end of the push", x.out.sub == HEATCTL_SUB_HOLD);
+    CHECK("push: demand not raised in the hold", x.out.demand <= 60);
+    run(&x, 1);
+    CHECK("push: hold over", x.out.sub == HEATCTL_SUB_NONE && x.out.changed);
+
+    // A defrost in the push: the level before the push is the one held, and pushed from again
+    start(&x);
+    x.p.defrost_push = 360;
+    run(&x, 100);
+    defrost_once(&x);
+    run(&x, 100);
+    x.in.liquid = -20;
+    run(&x, 1);
+    CHECK("defrost in the push: back to the level before it", x.out.sub == HEATCTL_SUB_DEFROST && x.out.demand == 60);
+    run(&x, 299);
+    x.in.liquid = 35;
+    run(&x, 1);
+    CHECK("defrost in the push: pushed again", x.out.sub == HEATCTL_SUB_PUSH && x.out.demand == 100);
+    run(&x, 360);
+    CHECK("defrost in the push: and back again", x.out.sub == HEATCTL_SUB_HOLD && x.out.demand == 60);
+
+    // No hold: the push alone
+    start(&x);
+    x.p.defrost_push = 360;
+    x.p.defrost_hold = 0;
+    run(&x, 100);
+    defrost_once(&x);
+    CHECK("push with no hold: push", x.out.sub == HEATCTL_SUB_PUSH && x.out.demand == 100);
+    run(&x, 360);
+    CHECK("push with no hold: over", x.out.sub == HEATCTL_SUB_NONE && x.out.changed && x.out.demand == 60);
+
+    // Only from a level at or below defrost.pushmax
+    start(&x);
+    x.p.defrost_push = 360;
+    x.p.defrost_pushmax = 50;
+    run(&x, 100);
+    defrost_once(&x);
+    CHECK("push: none from a level above defrost.pushmax", x.out.sub == HEATCTL_SUB_HOLD && x.out.demand == 60);
+
+    // At 100q there is nothing to push to
+    start(&x);
+    x.p.defrost_push = 360;
+    x.p.defrost_pushmax = 100;
+    x.p.demand_full = 0;
+    x.in.room = 18;
+    run(&x, 5 * 3600);
+    defrost_once(&x);
+    CHECK("push: none at 100q", x.out.sub == HEATCTL_SUB_HOLD && x.out.demand == 100 && x.out.quiet);
+
+    // defrost.pushalt: after every second defrost only
+    start(&x);
+    x.p.defrost_push = 360;
+    x.p.defrost_pushalt = 1;
+    run(&x, 100);
+    defrost_once(&x);
+    CHECK("push alternate: first defrost pushed", x.out.sub == HEATCTL_SUB_PUSH);
+    run(&x, 1800);
+    defrost_once(&x);
+    CHECK("push alternate: second not", x.out.sub == HEATCTL_SUB_HOLD && x.out.demand < 100);
+    run(&x, 1800);
+    defrost_once(&x);
+    CHECK("push alternate: third pushed", x.out.sub == HEATCTL_SUB_PUSH);
+
+    // The watchdog's rest comes before a push
+    start(&x);
+    x.p.defrost_push = 360;
+    x.p.defrost_watchdog = 1;
+    for (int i = 0; i < 4; i++) {
+        run(&x, 600);
+        defrost_once(&x);
+    }
+    CHECK("push: the rest after a defrost loop wins", x.out.state == HEATCTL_IDLE && x.out.sub == HEATCTL_SUB_REST);
+
+    // COLD is at 100 already: the hold only
+    start(&x);
+    x.p.defrost_push = 360;
+    memset(&x.s, 0, sizeof(x.s));
+    x.in.outdoor = -20;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    run_until(&x, HEATCTL_COLD, -1, 4000);
+    defrost_once(&x);
+    CHECK("push: none in COLD", x.out.state == HEATCTL_COLD && x.out.sub == HEATCTL_SUB_HOLD);
+
+    // COLD entered in the push: the hold starts there
+    start(&x);
+    x.p.defrost_push = 900;
+    memset(&x.s, 0, sizeof(x.s));
+    x.in.outdoor = -20;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    run(&x, 100);
+    defrost_once(&x);
+    CHECK("push into COLD: push in DEMAND", x.out.state == HEATCTL_DEMAND && x.out.sub == HEATCTL_SUB_PUSH);
+    run_until(&x, HEATCTL_COLD, -1, 4000);
+    CHECK("push into COLD: the hold from there", x.out.sub == HEATCTL_SUB_HOLD);
+    uint32_t hold = x.now;
+    run_until(&x, HEATCTL_COLD, HEATCTL_SUB_NONE, 4000);
+    CHECK("push into COLD: the hold lasts defrost.hold", x.now - hold == 600);
 }
 
 static void test_watchdog(int defrosts)
@@ -1762,6 +1897,7 @@ int main(void)
     test_hold_cap(0, 100);
     test_hold_cap(0, 95);
     test_hold_cap(0, 80);
+    test_push();
     test_watchdog(3);
     test_watchdog(4);
     test_watchdog_off();

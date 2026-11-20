@@ -27,7 +27,7 @@ var Graph = (function () {
         'fanset',
         'quiet'
     ];
-    var SHADED = { defrost: 1, hold: 1, rest: 1, idle: 1, cold: 1, nosensor: 1 }; // Sub-states, then states
+    var SHADED = { defrost: 1, push: 1, hold: 1, rest: 1, idle: 1, cold: 1, nosensor: 1 }; // Sub-states, then states
 
     function runmean(num, den, win, min) {
         // Mean of num over the last win samples, or sum(num)/sum(den). null with fewer than min samples
@@ -403,6 +403,7 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
         ]; // Level lane, lighter to darker for more watts
         var SHADE = {
             defrost: ['#bdf', 'Defrost'],
+            push: ['#fdb', 'Push after a defrost'],
             hold: ['#cfc', 'Hold after a defrost'],
             rest: ['#fcc', 'Rest after a defrost loop'],
             idle: ['#e4e4e4', 'Heating off'],
@@ -416,7 +417,12 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
             cold: 'Cold weather',
             nosensor: 'No room reading'
         };
-        var SUB = { defrost: 'defrosting', hold: 'hold after a defrost', rest: 'rest after a defrost loop' };
+        var SUB = {
+            defrost: 'defrosting',
+            push: 'push after a defrost',
+            hold: 'hold after a defrost',
+            rest: 'rest after a defrost loop'
+        };
         var FONT = 'sans-serif',
             L = 46,
             R = 12,
