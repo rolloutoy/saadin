@@ -563,8 +563,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
                     defrost_rest = n;
                 else if (push_due(s, p)) { // 100q for a while first, whatever the heat account asks
                     s->push_from = s->level;
-                    s->level = level_push(&p->table);
-                    s->level_at = now;
+                    s->level = level_push(&p->table); // Not a demand change for demand.rate, nor is its end
                     enter_sub(s, &out, now, HEATCTL_SUB_PUSH);
                 } else
                     enter_sub(s, &out, now, p->defrost_hold ? HEATCTL_SUB_HOLD : HEATCTL_SUB_NONE);
@@ -582,7 +581,6 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
             reason(&out, "defrost, liquid %.1f < %.1f", in->liquid, p->defrost_enter);
         } else if (s->sub == HEATCTL_SUB_PUSH && now - s->sub_since >= p->defrost_push) {
             s->level = s->push_from; // Back where it was, and its heat is in the heat deficit as a surplus
-            s->level_at = now;
             enter_sub(s, &out, now, p->defrost_hold ? HEATCTL_SUB_HOLD : HEATCTL_SUB_NONE);
             reason(&out, "post-defrost push over");
         } else if (s->sub == HEATCTL_SUB_HOLD && now - s->sub_since >= p->defrost_hold) {

@@ -684,6 +684,17 @@ static void test_push(void)
     run(&x, 1);
     CHECK("push: hold over", x.out.sub == HEATCTL_SUB_NONE && x.out.changed);
 
+    // The push is not a demand change for demand.rate: the hold after it decides, so demand may go down at once
+    start(&x);
+    x.p.defrost_push = 360;
+    run(&x, 100);
+    defrost_once(&x);
+    x.in.room = 21.4; // Too warm by the end of the push
+    run(&x, 360);
+    CHECK("push: the level before the defrost at its end", x.out.sub == HEATCTL_SUB_HOLD && x.out.demand <= 60);
+    run(&x, 1);
+    CHECK("push: demand may step down in the hold at once", x.out.sub == HEATCTL_SUB_HOLD && x.out.demand < 60);
+
     // A defrost in the push: the level before the push is the one held, and pushed from again
     start(&x);
     x.p.defrost_push = 360;
