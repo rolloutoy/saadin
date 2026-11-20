@@ -4,6 +4,7 @@ Every user-visible change in Säädin since it was forked from upstream Faikout,
 
 ## 2026-11-20
 
+- Fixed: the device restarted when the heating graph page was opened, on boards with PSRAM. Gzipping `/graph.json` needs more stack than the web server's task had, so that task now has 12 KB on those boards (it was 6 KB). A firmware update that had not been confirmed yet was rolled back by that restart.
 - New setting `defrost.push` (default 0, no push): after a defrost, run the unit at 100% with quiet outdoor for that many minutes, then put demand back where it was and start the hold (`defrost.hold`). It is meant for short defrost cycles, where the unit defrosts again within the hour after it was left at a low demand level. Whether it prevents them is not yet tested on a unit.
   - `defrost.pushmax` (default 85%): the push happens only when demand was at most this before the defrost. There is no push in cold-weather mode.
   - `defrost.pushalt` (default off): push after every second defrost only, so cycles with and without a push can be compared in the same weather.

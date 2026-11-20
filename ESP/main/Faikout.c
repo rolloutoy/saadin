@@ -3875,6 +3875,8 @@ void app_main()
     if (webcontrol || websettings) {
         // Web interface
         httpd_config_t config = revk_httpd_config(19);
+        if (heap_caps_get_total_size(MALLOC_CAP_SPIRAM))
+            config.stack_size = 12 * 1024; // /graph.json is gzipped by the ROM's deflate, which takes some 5K of stack
         ESP_LOGE(TAG, "HTTPD stack %u sockets %u handlers %u", config.stack_size, config.max_open_sockets,
                  config.max_uri_handlers);
         if (!httpd_start(&webserver, &config)) {
