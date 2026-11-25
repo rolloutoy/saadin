@@ -305,11 +305,56 @@ static void test_cold(void)
     x.in.outdoor = -20;
     x.out = heatctl_step(&x.s, &x.p, &x.in, x.now); // Fresh start with outdoor already -20
     CHECK("outdoor smoothing starts at first reading", NEAR(x.out.outdoor, -20));
-    int t = run_until(&x, HEATCTL_COLD, -1, 4000);
-    CHECK("DEMAND -> COLD after cold.hold", t == 900);
+    CHECK("start below cold.enter: COLD at once", x.out.state == HEATCTL_COLD && x.out.changed);
     CHECK("COLD: demand 100 QO off", x.out.demand == 100 && !x.out.quiet);
     CHECK("COLD: setpoint starts at cold.set", NEAR(x.out.setpoint, 23));
+    CHECK("COLD at start reason", strstr(x.out.reason, "start") && strstr(x.out.reason, "outdoor"));
+
+    // Started again (auto off and on) long after the outdoor went cold: COLD at once too
+    x.in.enabled = 0;
+    run(&x, 3600);
+    x.in.enabled = 1;
+    run(&x, 1);
+    CHECK("restart below cold.enter: COLD at once", x.out.state == HEATCTL_COLD && x.out.changed);
+
+    // Outdoor not known at the start: its first reading below cold.enter enters COLD at once
+    memset(&x.s, 0, sizeof(x.s));
+    x.in.outdoor = NAN;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    CHECK("start with outdoor unknown: DEMAND", x.out.state == HEATCTL_DEMAND);
+    run(&x, 10);
+    x.in.outdoor = -20;
+    run(&x, 1);
+    CHECK("first outdoor reading below cold.enter: COLD at once", x.out.state == HEATCTL_COLD);
+    // ...but once outdoor has been known above cold.enter, cold.hold applies
+    memset(&x.s, 0, sizeof(x.s));
+    x.in.outdoor = NAN;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    run(&x, 10);
+    x.in.outdoor = 5;
+    run(&x, 10);
+    x.in.outdoor = -20;
+    run(&x, 1);
+    CHECK("outdoor known mild first: stays DEMAND", x.out.state == HEATCTL_DEMAND);
+
+    // DEMAND -> COLD while running: cold.hold after smoothed outdoor goes below cold.enter
+    memset(&x.s, 0, sizeof(x.s));
+    x.in.outdoor = 5;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    CHECK("start above cold.enter: DEMAND", x.out.state == HEATCTL_DEMAND);
+    x.in.outdoor = -30;
+    uint32_t below = 0;
+    int entered = 0;
+    for (int i = 0; i < 4 * 3600 && !entered; i++) {
+        run(&x, 1);
+        if (!below && x.out.outdoor < -15)
+            below = x.now;
+        if (x.out.state == HEATCTL_COLD)
+            entered = 1;
+    }
+    CHECK("DEMAND -> COLD after cold.hold below cold.enter", entered && below && x.now - below == 900);
     CHECK("COLD reason", strstr(x.out.reason, "outdoor") != NULL);
+    x.in.outdoor = -20;
 
     // COLD -> DEMAND: cold.hold after smoothed outdoor goes above cold.exit
     x.in.outdoor = -5;
@@ -349,7 +394,7 @@ static void test_cold(void)
     run_until(&x, HEATCTL_COLD, -1, 4000);
     x.in.room = 18;
     float sp = x.out.setpoint;
-    uint32_t at = x.now;
+    uint32_t at = x.s.setpoint_at;
     int ok = 1, steps = 0;
     for (int i = 0; i < 6 * 3600; i++) {
         run(&x, 1);
@@ -529,8 +574,9 @@ static void test_hold_carry(void)
     sim_t x;
     start(&x);
     memset(&x.s, 0, sizeof(x.s));
-    x.in.outdoor = -20;
+    x.in.outdoor = -14.9; // Starts in DEMAND, and goes below cold.enter within a minute
     x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    x.in.outdoor = -20;
     run(&x, 100);
     x.in.liquid = -20;
     run(&x, 300);

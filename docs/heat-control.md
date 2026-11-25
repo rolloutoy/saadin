@@ -25,7 +25,7 @@ Controller disabled (`auto.e` off or `auto.t` 0), unit off, or unit not in heat 
 
 On the way into OFF, for whichever reason, the controller leaves nothing behind: demand goes back to 100% and QO off, and the setpoint goes to `stop.temp` (default 22 °C), clamped to `t.min`…`t.max`. The setpoint is only replaced if it is still the one the controller sent, so a setpoint set by hand at the same time (e.g. with a switch to cool) is kept.
 
-When the controller starts (enabled, unit on in heat) it starts **fresh** in DEMAND with the integral at the heat of the `demand.start` level (default 60%), except for the first start after a restart, which may resume (below).
+When the controller starts (enabled, unit on in heat) it starts **fresh** in DEMAND with the integral at the heat of the `demand.start` level (default 60%), or in COLD if the outdoor temperature is already below `cold.enter`, except for the first start after a restart, which may resume (below).
 
 ### After a restart
 
@@ -68,7 +68,7 @@ After each step the controller writes a small block to RTC memory (`RTC_NOINIT_A
 - Sends demand 100 with QO **always off**.
 - A second PI loop drives the **setpoint** from room temperature error. It starts at `cold.set` (default 23 °C), is clamped to `t.min`…`t.max`, rounded to 0.5 °C, and moves at most 0.5 °C per `cold.rate` (default 1800 s); big setpoint jumps are reported to cause defrost loops. Gains `cold.kp` (°C setpoint per °C error, default 2.0), `cold.ti` (minutes, default 120), not yet tested on hardware.
 - No IDLE from COLD: on overshoot the setpoint PI pulls the setpoint down and the unit thermostats off by itself.
-- Entered from DEMAND when the smoothed outdoor temperature stays below `cold.enter` (default −15 °C) for `cold.hold` (default 60 min). Exits to DEMAND when it stays above `cold.exit` (default −10 °C) for `cold.hold`.
+- Entered from DEMAND when the smoothed outdoor temperature stays below `cold.enter` (default −15 °C) for `cold.hold` (default 60 min). A fresh start below `cold.enter` enters COLD at once, with no DEMAND to hold against; so does the first outdoor reading below it, if the start had none. Exits to DEMAND when it stays above `cold.exit` (default −10 °C) for `cold.hold`.
 - On exit to DEMAND the integral starts at the heat of the 95% level (the house has just needed a lot of heat).
 - Unknown outdoor temperature never enters COLD.
 

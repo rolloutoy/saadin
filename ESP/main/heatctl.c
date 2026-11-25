@@ -605,10 +605,14 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         s->keep_pending = 0; // Tried once only
         if (!why)
             keep_resume(s, &out, now, level);
-        else {
+        else if (outdoor < p->cold_enter) { // No DEMAND to leave yet, so no cold.hold to wait (false if unknown)
+            enter_cold(s, p, &out, now);
+            reason(&out, "start, outdoor %.1f < %.1f%s%s", outdoor, p->cold_enter, *why ? ", not resumed: " : "", why);
+        } else {
             enter_demand(s, p, &out, now, p->demand_start);
             reason(&out, "start%s%s", *why ? ", not resumed: " : "", why);
         }
+        s->cold_start = !s->outdoor_ok; // Outdoor not known yet: its first reading decides as above
     }
 
     if (defrost_rest) { // Defrost-loop watchdog
@@ -634,6 +638,9 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
                 // Only from the lowest level: above it, an overshoot just steps demand down
                 enter(s, &out, now, HEATCTL_IDLE, HEATCTL_SUB_NONE);
                 reason(&out, "room %.2f > target %.2f+%.1f", room, target, p->idle_over);
+            } else if (s->is_cold && s->cold_start) {
+                enter_cold(s, p, &out, now);
+                reason(&out, "first outdoor %.1f < %.1f", outdoor, p->cold_enter);
             } else if (s->is_cold && now - s->cold_since >= p->cold_hold) {
                 enter_cold(s, p, &out, now);
                 reason(&out, "outdoor %.1f < %.1f for %lu min", outdoor, p->cold_enter,
@@ -665,6 +672,8 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
             break;
         }
     }
+    if (s->outdoor_ok)
+        s->cold_start = 0;
 
     // Outputs
     float e = target - room;

@@ -166,6 +166,7 @@ typedef struct {
     uint8_t outdoor_ok;     // outdoor is valid
     uint8_t is_cold;        // Outdoor below cold_enter since cold_since
     uint8_t is_warm;        // Outdoor above cold_exit since warm_since
+    uint8_t cold_start;     // Started with outdoor unknown: its first reading below cold_enter enters COLD at once
     uint32_t room_at;       // Time of the last fresh room reading (or start)
     float room;             // Smoothed room
     float outdoor;          // Smoothed outdoor

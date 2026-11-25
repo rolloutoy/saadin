@@ -54,7 +54,7 @@ Heating starts again when the room falls below the target, after at least `idle.
 
 ### Cold weather
 
-When it stays below `cold.enter` (−15 °C) outside for `cold.hold` (60 minutes), the controller runs the unit at demand 100% with quiet outdoor off. It then controls the room by moving the setpoint, 0.5 °C at a time, at most once every `cold.rate` (30 minutes). It starts at `cold.set` (23 °C).
+When it stays below `cold.enter` (−15 °C) outside for `cold.hold` (60 minutes), the controller runs the unit at demand 100% with quiet outdoor off. It then controls the room by moving the setpoint, 0.5 °C at a time, at most once every `cold.rate` (30 minutes). It starts at `cold.set` (23 °C). If it is already below `cold.enter` when heating control starts, it goes straight to this mode, without the 60 minutes.
 
 It goes back to demand control when it stays above `cold.exit` (−10 °C) for 60 minutes.
 
