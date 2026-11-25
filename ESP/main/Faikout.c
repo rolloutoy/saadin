@@ -1854,8 +1854,10 @@ static esp_err_t web_graph_json(httpd_req_t *req)
         char text[HEATCTL_LEVELS_MAX * 20];
         heatctl_parse_table(&table, demandtable ?: "", revk_settings_find("demandtable", NULL)->def);
         heatctl_format_table(&table, text, sizeof(text));
-        out("{\"interval\":%d,\"table\":\"%s\",\"boot\":%lu,\"begin\":%lu,\"seq\":%lu,\"ago\":[", HEATLOG_INTERVAL,
-            text, (unsigned long)heatlogboot, (unsigned long)oldest, (unsigned long)begin);
+        // And cold.band (0.01 ℃), for the band the average room is kept in under target control
+        out("{\"interval\":%d,\"table\":\"%s\",\"band\":%d,\"boot\":%lu,\"begin\":%lu,\"seq\":%lu,\"ago\":[",
+            HEATLOG_INTERVAL, text, coldband * 100 / coldband_scale, (unsigned long)heatlogboot, (unsigned long)oldest,
+            (unsigned long)begin);
     }
     for (uint32_t i = 0, ago = 0; i < n; i++) {
         const heatlog_sample_t *p = get(i);
