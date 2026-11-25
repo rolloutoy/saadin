@@ -14,6 +14,7 @@ Every user-visible change in Säädin since it was forked from upstream Faikout,
 
 ## 2026-11-20
 
+- Fixed: the device restarted when the heating graph page was opened, on boards with PSRAM. Gzipping `/graph.json` needs more stack than the web server's task had, so that task now has 12 KB on those boards (it was 6 KB). A firmware update that had not been confirmed yet was rolled back by that restart.
 - The heating graph page opens much sooner. It loads the last 12 hours of the log at first, in place of all 5 days (about 3 MB, which took half a minute), and *Refresh* now fetches only the samples kept since the last one loaded, in place of the whole log each time.
   - *All*, or a range longer than is loaded (*1 day*, *3 days*), loads that much of the log. The page opens showing the last 12 hours; `/graph?span=all` opens it on the whole log.
   - `/graph.json` still gives the whole log. New: `/graph.json?span=S` gives the last S seconds and `/graph.json?since=N` the samples from number N on. A reply has three new fields: `seq`, the number of its first sample, `begin`, the number of the oldest sample the device holds, and `boot`, which changes when the device restarts.
