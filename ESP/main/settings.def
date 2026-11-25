@@ -110,15 +110,15 @@ u8	idle.min	30		.live	.unit="min"			// Minimum time heating off
 enum	idle.fan	1		.live	.enums="Leave,Auto,1,2,3,4,5,Quiet,Outdoor"	// Fan while heating is off
 s	idle.fanmap			.live					// Fan while heating is off by outdoor temperature (idle.fan Outdoor), outdoor:fan,... fan A, 1-5 or Q, e.g. -5:5,0:4,5:3
 
-s8	cold.enter	-15		.live	.unit="℃"			// Full power below this outdoor temperature
-s8	cold.exit	-10		.live	.unit="℃"			// Back to demand above this outdoor temperature
+s8	cold.enter	2		.live	.unit="℃"			// Target control (setpoint, no demand limit) below this outdoor temperature
+s8	cold.exit	5		.live	.unit="℃"			// Back to demand control above this outdoor temperature
 u8	cold.hold	60		.live	.unit="min"			// Outdoor temperature must stay past cold.enter or cold.exit this long
-u16	cold.set	23		.live	.decimal=1 .unit="℃"		// Starting setpoint at full power
-u16	cold.rate	1800		.live	.unit="s"			// Minimum time between 0.5℃ setpoint steps at full power
-u8	cold.kp		2		.live	.decimal=1			// Setpoint change per degree below target at full power
-u16	cold.ti		120		.live	.unit="min"			// Integral time at full power, 0 for none
-enum	cold.fan	5		.live	.enums="Leave,Auto,1,2,3,4,5,Quiet,Outdoor"	// Fan at full power
-s	cold.fanmap			.live					// Fan at full power by outdoor temperature (cold.fan Outdoor), outdoor:fan,... fan A, 1-5 or Q, e.g. -5:5,0:4,5:3
+u16	cold.set	23		.live	.decimal=1 .unit="℃"		// Setpoint on entering target control
+u16	cold.avg	180		.live	.unit="min"			// Target control: room temperature averaged over this long, 0 for none
+u8	cold.band	0.4		.live	.decimal=1 .unit="℃"		// Target control: setpoint steps 0.5℃ when the average room is further than this from the target
+u16	cold.dwell	180		.live	.unit="min"			// Target control: minimum time between setpoint steps
+enum	cold.fan	5		.live	.enums="Leave,Auto,1,2,3,4,5,Quiet,Outdoor"	// Fan in target control
+s	cold.fanmap			.live					// Fan in target control by outdoor temperature (cold.fan Outdoor), outdoor:fan,... fan A, 1-5 or Q, e.g. -5:5,0:4,5:3
 
 u8	defrost.enter	5		.live	.unit="℃"			// Defrost when liquid drops below this
 u8	defrost.exit	25		.live	.unit="℃"			// Defrost over when liquid is back to this

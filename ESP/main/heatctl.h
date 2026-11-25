@@ -16,7 +16,7 @@
 #define HEATCTL_FAN_MAP (-2)        // Fan: by outdoor temperature, from the state's fan map
 
 #define HEATCTL_KEEP_MAGIC 0x5361644bu // heatctl_keep_t.magic, "SadK"
-#define HEATCTL_KEEP_VERSION 1   // heatctl_keep_t: bump whenever a field is added, removed, moved or changes meaning
+#define HEATCTL_KEEP_VERSION 2   // heatctl_keep_t: bump whenever a field is added, removed, moved or changes meaning
 #define HEATCTL_KEEP_AGE 1800    // A kept block older than this (s) is not resumed
 #define HEATCTL_RESUMED_SHOW 600 // out.resumed is set for this long after a resume (s)
 
@@ -47,7 +47,7 @@ typedef enum {
     HEATCTL_OFF,      // Disabled, unit off, or not heating: nothing is sent
     HEATCTL_IDLE,     // Heating off (low setpoint)
     HEATCTL_DEMAND,   // Fixed setpoint, PI loop on demand
-    HEATCTL_COLD,     // Demand 100, PI loop on setpoint
+    HEATCTL_COLD,     // Target control: demand 100, setpoint steps on the average room
     HEATCTL_NOSENSOR, // No room reading, plain unit thermostat
 } heatctl_state_t;
 
@@ -80,13 +80,13 @@ typedef struct {
     float idle_under;  // Leave IDLE below target - this
     uint32_t idle_min; // Minimum IDLE time (s)
     // COLD
-    float cold_enter;   // Enter COLD below this outdoor temperature
-    float cold_exit;    // Leave COLD above this outdoor temperature
-    uint32_t cold_hold; // For this long (s)
-    float cold_set;     // Setpoint on entering COLD
-    uint32_t cold_rate; // Minimum time between 0.5 °C setpoint steps (s)
-    float cold_kp;      // °C setpoint per °C error
-    float cold_ti;      // Integral time (s), 0 for none
+    float cold_enter;    // Enter COLD below this outdoor temperature
+    float cold_exit;     // Leave COLD above this outdoor temperature
+    uint32_t cold_hold;  // For this long (s)
+    float cold_set;      // Setpoint on entering COLD
+    uint32_t cold_avg;   // Room averaged over this long (s), 0 for none
+    float cold_band;     // A 0.5 °C setpoint step when the average room is further than this from the target (°C)
+    uint32_t cold_dwell; // Minimum time between setpoint steps (s)
     // DEFROST
     float defrost_enter;      // Liquid below this is a defrost
     float defrost_exit;       // Liquid at or above this ends it
@@ -123,7 +123,7 @@ typedef struct {
     float target;   // Effective target (auto.t + curve)
     float curve;    // Curve offset in target
     float heatw;    // Heat request (W of heat), NAN when not in use
-    float integral; // Integral: W of heat in DEMAND/IDLE, setpoint °C in COLD
+    float integral; // Integral: W of heat in DEMAND/IDLE; in COLD the average room (°C)
     float deficit; // Heat deficit (Wh): heat target less heat given so far, negative for a surplus, NAN when not in use
     float heattarget;   // Heat target (W): the heat request and the making up for defrosts, NAN when not in use
     float scale;        // Heat taken per watt of the demand table (W per W), NAN when not in use
@@ -135,21 +135,21 @@ typedef struct {
     char reason[100];   // Why it changed
 } heatctl_out_t;
 
-typedef struct {         // Controller state kept over a restart (in RTC memory), see heatctl_keep()
-    uint32_t magic;      // HEATCTL_KEEP_MAGIC, 0 if nothing is kept
-    uint32_t version;    // HEATCTL_KEEP_VERSION
-    uint32_t at;         // Time written (s), on a clock that runs on over a restart
-    uint8_t state;       // HEATCTL_DEMAND, HEATCTL_COLD or HEATCTL_IDLE
-    uint8_t rest;        // IDLE: in the defrost-loop watchdog rest, and the state to resume after it, else 0
-    uint8_t demand;      // DEMAND: the level in use, by its demand (%)...
-    uint8_t quiet;       // ...and quiet outdoor
-    float integral;      // DEMAND integral (W of heat), in IDLE the one DEMAND carries on with
-    float scale;         // Heat per watt of the demand table, 0 if not learnt yet
-    float deficit;       // DEMAND heat deficit (Wh)
-    float debt;          // DEMAND defrost debt (Wh)
-    float setpoint;      // COLD setpoint
-    float cold_integral; // COLD integral (°C)
-    uint32_t crc;        // CRC-32 of all before it
+typedef struct {      // Controller state kept over a restart (in RTC memory), see heatctl_keep()
+    uint32_t magic;   // HEATCTL_KEEP_MAGIC, 0 if nothing is kept
+    uint32_t version; // HEATCTL_KEEP_VERSION
+    uint32_t at;      // Time written (s), on a clock that runs on over a restart
+    uint8_t state;    // HEATCTL_DEMAND, HEATCTL_COLD or HEATCTL_IDLE
+    uint8_t rest;     // IDLE: in the defrost-loop watchdog rest, and the state to resume after it, else 0
+    uint8_t demand;   // DEMAND: the level in use, by its demand (%)...
+    uint8_t quiet;    // ...and quiet outdoor
+    float integral;   // DEMAND integral (W of heat), in IDLE the one DEMAND carries on with
+    float scale;      // Heat per watt of the demand table, 0 if not learnt yet
+    float deficit;    // DEMAND heat deficit (Wh)
+    float debt;       // DEMAND defrost debt (Wh)
+    float setpoint;   // COLD setpoint
+    float cold_room;  // COLD average room (°C)
+    uint32_t crc;     // CRC-32 of all before it
 } heatctl_keep_t;
 
 typedef struct {
@@ -176,7 +176,8 @@ typedef struct {
     float deficit;             // DEMAND heat deficit (Wh)
     float debt;                // Heat a defrost cost (Wh), not yet in the heat deficit
     float scale;               // Heat the unit gives per watt of the demand table, smoothed, 0 if not set yet
-    float cold_integral;       // COLD integral (°C)
+    double cold_room;          // COLD average room (°C), NAN until there is a reading; double, as a float stops
+                               // moving at about 0.01 °C off with a step of a second in hours
     float heatw;               // Last heat request (W of heat)
     int level;                 // Current level (DEMAND)
     uint32_t level_at;         // Time of the last demand change

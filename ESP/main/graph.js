@@ -139,8 +139,8 @@ var Graph = (function () {
         m.outdoor = tc(d.outdoor);
         m.liquid = tc(d.liquid);
         m.intake = tc(d.intake);
-        // The integral is watts of heat in demand control, a setpoint at full power
-        m.setint = tc(
+        // The integral is watts of heat in demand control, the average room in target control
+        m.avg = tc(
             d.integral.map(function (v, i) {
                 return cold(i) ? v : null;
             })
@@ -182,20 +182,15 @@ var Graph = (function () {
         m.tune = function (i) {
             var v = d.kp[i];
             if (v == null) return '';
-            return (
-                'kp ' +
-                (cold(i) ? v / 100 + ' ℃/℃' : v + ' W/℃') +
-                (d.ti[i] ? ', ti ' + d.ti[i] + ' min' : ', no integral')
-            );
+            return 'kp ' + v + ' W/℃' + (d.ti[i] ? ', ti ' + d.ti[i] + ' min' : ', no integral');
         };
-        m.marks = []; // Changes of kp or ti, apart for demand control and full power
-        var last = [];
+        m.marks = []; // Changes of kp or ti in demand control
+        var last = '';
         for (i = 0; i < k; i++) {
-            var tu = m.tune(i),
-                c = +cold(i);
+            var tu = m.tune(i);
             if (!tu) continue;
-            if (last[c] && last[c] != tu) m.marks.push({ t: m.t[i] - m.iv, s: tu });
-            last[c] = tu;
+            if (last && last != tu) m.marks.push({ t: m.t[i] - m.iv, s: tu });
+            last = tu;
         }
         return m;
     }
@@ -406,14 +401,14 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
             hold: ['#cfc', 'Hold after a defrost'],
             rest: ['#fcc', 'Rest after a defrost loop'],
             idle: ['#e4e4e4', 'Heating off'],
-            cold: ['#dcf', 'Cold weather'],
+            cold: ['#dcf', 'Target control'],
             nosensor: ['#fe9', 'No room reading']
         };
         var STATE = {
             off: 'Not running',
             idle: 'Heating off',
             demand: 'Demand control',
-            cold: 'Cold weather',
+            cold: 'Target control',
             nosensor: 'No room reading'
         };
         var SUB = { defrost: 'defrosting', hold: 'hold after a defrost', rest: 'rest after a defrost loop' };
@@ -566,7 +561,7 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
                 'Drag to pan, ctrl+scroll or pinch to zoom, double-click for all that is loaded.',
                 'The last 12 hours are loaded at first. All, or a longer range, loads that much of the log.',
                 'Refresh adds the new samples at the chosen interval and keeps the range shown.',
-                'A dashed line marks a change of kp or ti. In cold weather the integral is a setpoint.',
+                'A dashed line marks a change of kp or ti. In target control the setpoint steps on the average room.',
                 'Heat request and its integral are watts of heat.',
                 'Heat target is the heat request and the making up, over some hours, for what defrosts cost.',
                 'Heat deficit is the heat target less the heat given so far: demand steps up to make it up.',
@@ -606,7 +601,7 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
                                 S('Target', m.target, C.blue, { step: 1 }),
                                 S('Effective target', m.effective, C.blue, { step: 1, dash: '5 4', w: 1.5 }),
                                 S('Setpoint', m.setpoint, C.yellow, { step: 1, off: 1 }),
-                                S('Setpoint integral', m.setint, C.yellow, { step: 1, dash: '5 4', w: 1.5, off: 1 })
+                                S('Average room', m.avg, C.yellow, { step: 1, dash: '5 4', w: 1.5, off: 1 })
                             ]
                         },
                         { unit: 'Outdoor, ' + U, h: 96, dp: 1, one: 1, series: [S('Outdoor', m.outdoor, C.blue)] }

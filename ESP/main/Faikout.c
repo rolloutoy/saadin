@@ -2185,7 +2185,7 @@ static esp_err_t web_control(httpd_req_t *req)
         "var c=o.ctl_curve||0,cs=c?' (curve '+(c>0?'+':'')+c.toFixed(2)+')':'';"             //
         "var tg=o.ctl_target!=undefined?' · target '+cf(o.ctl_target)+cs:'';"                //
         "var r=o.ctl=='demand'?'Demand '+o.demand+'%%'+(o.quiet?' QO':'')+tg+(o.ctl_heatw!=undefined?' · heat '+o.ctl_heatw+' W':''):" //
-        "o.ctl=='cold'?'Cold · setpoint '+cf(o.temp)+tg:"                                                   //
+        "o.ctl=='cold'?'Target control · setpoint '+cf(o.temp)+tg:"                                         //
         "o.ctl=='idle'?'Heating off'+tg:"                                                                   //
         "o.ctl=='nosensor'?'No room reading · unit thermostat at '+cf(o.temp):o.ctl;"                       //
         "if(o.ctl_sub=='defrost')r+=' · ❄ defrost';"                                                        //
@@ -3454,9 +3454,9 @@ void revk_web_extra(httpd_req_t *req, int page)
         revk_web_setting(req, "Fan, heating off", "idlefan");
         if (idlefan == REVK_SETTINGS_IDLEFAN_OUTDOOR)
             revk_web_setting(req, "Fan by outdoor, heating off", "idlefanmap");
-        revk_web_setting(req, "Fan, full power (cold)", "coldfan");
+        revk_web_setting(req, "Fan, target control", "coldfan");
         if (coldfan == REVK_SETTINGS_COLDFAN_OUTDOOR)
-            revk_web_setting(req, "Fan by outdoor, full power (cold)", "coldfanmap");
+            revk_web_setting(req, "Fan by outdoor, target control", "coldfanmap");
         if (demandfan == REVK_SETTINGS_DEMANDFAN_OUTDOOR || idlefan == REVK_SETTINGS_IDLEFAN_OUTDOOR ||
             coldfan == REVK_SETTINGS_COLDFAN_OUTDOOR)
             revk_web_setting(req, "Fan by outdoor, kept for", "fanhold");
@@ -3560,9 +3560,9 @@ static void heatctl_settings(heatctl_params_t *p)
     p->cold_exit = coldexit;
     p->cold_hold = coldhold * 60;
     p->cold_set = (float)coldset / coldset_scale;
-    p->cold_rate = coldrate;
-    p->cold_kp = (float)coldkp / coldkp_scale;
-    p->cold_ti = coldti * 60;
+    p->cold_avg = coldavg * 60;
+    p->cold_band = (float)coldband / coldband_scale;
+    p->cold_dwell = colddwell * 60;
     p->defrost_enter = defrostenter;
     p->defrost_exit = defrostexit;
     p->defrost_max = defrostmax * 60;
@@ -3656,7 +3656,7 @@ static void heatctl_tick(uint32_t now)
     heatctl_out_t o = heatctl_step(&heatctl, &p, &in, now);
     heatctl_keep(&heatctl, &p, &heatkeep, rtctime);
     ctl = o;
-    uint8_t cold = (o.state == HEATCTL_COLD), pi = (cold || o.state == HEATCTL_DEMAND); // A PI loop is running
+    uint8_t cold = (o.state == HEATCTL_COLD), pi = (o.state == HEATCTL_DEMAND); // The PI loop is running
     heatlog_in_t l = {
         .room = in.room,
         .outdoor = in.outdoor,
@@ -3668,12 +3668,12 @@ static void heatctl_tick(uint32_t now)
         .fan = fan,
         .intake = intake,
         .heatout = in.heatout,
-        .integral = pi ? o.integral : NAN,
+        .integral = pi || cold ? o.integral : NAN, // In COLD the average room
         .deficit = o.deficit,
         .heattarget = o.heattarget,
         .scale = o.scale,
-        .kp = pi ? (cold ? p.cold_kp : p.kp) : NAN,
-        .ti = pi ? (cold ? p.cold_ti : p.ti) / 60.0 : NAN,
+        .kp = pi ? p.kp : NAN,
+        .ti = pi ? p.ti / 60.0 : NAN,
         .target = autot ? (float)autot / autot_scale : NAN,
         .effective = o.state != HEATCTL_OFF ? o.target : NAN,
         .setpoint = (daikin.status_known & CONTROL_temp) ? daikin.temp : NAN,

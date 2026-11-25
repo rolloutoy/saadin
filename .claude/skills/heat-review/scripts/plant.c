@@ -65,7 +65,7 @@ int main(int argc, char **argv)
             q95 = unit.level[r].watts * hpt, p95 = unit.level[r].watts * ppt;
     // Controller, as the device has it: what sim.py passes from device.json, else the default in settings.def.
     // Left out are settings that do nothing here: the setpoints sent to the unit, the fans, the defrost thresholds
-    // on a liquid temperature the plant makes up, and cold mode's own loop
+    // on a liquid temperature the plant makes up, and target control's own setpoint steps
     float T = envf("TARGET", 21); // auto.t, before the curve
     heatctl_params_t p = {
         .target = T,
@@ -85,13 +85,13 @@ int main(int argc, char **argv)
         .idle_over = envf("IDLE_OVER", 0.5),
         .idle_under = envf("IDLE_UNDER", 0),
         .idle_min = envf("IDLE_MIN", 30) * 60,
-        .cold_enter = envf("COLD_ENTER", -15),
-        .cold_exit = envf("COLD_EXIT", -10),
+        .cold_enter = envf("COLD_ENTER", 2),
+        .cold_exit = envf("COLD_EXIT", 5),
         .cold_hold = envf("COLD_HOLD", 60) * 60,
         .cold_set = 23,
-        .cold_rate = 1800,
-        .cold_kp = 2,
-        .cold_ti = 7200,
+        .cold_avg = 3 * 3600,
+        .cold_band = 0.4,
+        .cold_dwell = 3 * 3600,
         .defrost_enter = 5,
         .defrost_exit = 25,
         .defrost_max = 1800,
@@ -137,7 +137,7 @@ int main(int argc, char **argv)
         float h = 0, pw = 0;
         if (o.state == HEATCTL_DEMAND || o.state == HEATCTL_COLD) {
             if (o.state == HEATCTL_COLD || (o.demand == 100 && !o.quiet))
-                h = q100, pw = p100; // Full power's own setpoint control is not modelled: it gives all it has
+                h = q100, pw = p100; // Target control's setpoint is not modelled: it gives all it has
             else if (o.demand == 100)
                 h = q100q, pw = p100q;
             else
