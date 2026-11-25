@@ -139,6 +139,23 @@ function log(n, f, table) {
     check('average room in target control only', m.avg[0] == null && near(m.avg[1], 23.5));
 }
 
+// Target control: the band around the effective target, and the setpoint it steps
+{
+    const d = log(2, i =>
+        i ? { state: 'cold', effective: 2250, setpoint: 2150 } : { effective: 2250, setpoint: 3000 }
+    );
+    d.band = 40;
+    const m = G.prep(d, AT, 0);
+    check('band in target control only', m.bandLo[0] == null && m.bandHi[0] == null);
+    check('band is the effective target ± cold.band', near(m.bandLo[1], 22.1) && near(m.bandHi[1], 22.9));
+    check('setpoint of target control only', m.coldset[0] == null && near(m.coldset[1], 21.5));
+    const f = G.prep(Object.assign({}, d, { band: 40 }), AT, 1);
+    check('band in Fahrenheit is ± 0.72', near(f.bandHi[1] - f.bandLo[1], 1.44, 1e-6));
+    delete d.band;
+    const n = G.prep(d, AT, 0);
+    check('no band in a log without one', n.bandLo[1] == null && n.bandHi[1] == null);
+}
+
 // Means: heat output over 2 hours, COP over 6 hours with the defrosts counted in
 {
     const m = G.prep(

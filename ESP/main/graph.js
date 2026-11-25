@@ -145,6 +145,21 @@ var Graph = (function () {
                 return cold(i) ? v : null;
             })
         );
+        // In target control the setpoint steps 0.5 when the average room is outside the effective target ± cold.band
+        function band(sign) {
+            return tc(
+                d.effective.map(function (v, i) {
+                    return v == null || d.band == null || !cold(i) ? null : v + sign * d.band;
+                })
+            );
+        }
+        m.bandLo = band(-1);
+        m.bandHi = band(1);
+        m.coldset = tc(
+            d.setpoint.map(function (v, i) {
+                return cold(i) ? v : null;
+            })
+        );
         m.integral = d.integral.map(function (v, i) {
             return cold(i) ? null : v;
         });
@@ -561,7 +576,8 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
                 'Drag to pan, ctrl+scroll or pinch to zoom, double-click for all that is loaded.',
                 'The last 12 hours are loaded at first. All, or a longer range, loads that much of the log.',
                 'Refresh adds the new samples at the chosen interval and keeps the range shown.',
-                'A dashed line marks a change of kp or ti. In target control the setpoint steps on the average room.',
+                'A dashed line marks a change of kp or ti.',
+                'In target control the setpoint steps 0.5 ℃ when the average room is outside the shaded band.',
                 'Heat request and its integral are watts of heat.',
                 'Heat target is the heat request and the making up, over some hours, for what defrosts cost.',
                 'Heat deficit is the heat target less the heat given so far: demand steps up to make it up.',
@@ -597,11 +613,12 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
                             h: 220,
                             dp: 2,
                             series: [
+                                S('Target control band', m.bandHi, C.violet, { lo: m.bandLo }),
                                 S('Room', m.room, C.red),
                                 S('Target', m.target, C.blue, { step: 1 }),
                                 S('Effective target', m.effective, C.blue, { step: 1, dash: '5 4', w: 1.5 }),
-                                S('Setpoint', m.setpoint, C.yellow, { step: 1, off: 1 }),
-                                S('Average room', m.avg, C.yellow, { step: 1, dash: '5 4', w: 1.5, off: 1 })
+                                S('Average room', m.avg, C.violet),
+                                S('Setpoint', m.coldset, C.yellow, { step: 1 })
                             ]
                         },
                         { unit: 'Outdoor, ' + U, h: 96, dp: 1, one: 1, series: [S('Outdoor', m.outdoor, C.blue)] }
@@ -778,9 +795,9 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
                     .attr('y1', 5)
                     .attr('y2', 5)
                     .attr('stroke', se.c)
-                    .attr('stroke-width', se.w >= 2 ? 3 : 2)
+                    .attr('stroke-width', se.lo ? 10 : se.w >= 2 ? 3 : 2)
                     .attr('stroke-dasharray', se.dash || null)
-                    .attr('opacity', se.alpha || 1);
+                    .attr('opacity', se.lo ? 0.2 : se.alpha || 1);
                 if (!cfg.one) b.append('span').text(se.name);
                 se.val = b.append('b');
                 if (cfg.one) b.attr('disabled', true).attr('aria-pressed', null);
@@ -825,6 +842,8 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
                         if (v < lo) lo = v;
                         if (v > hi) hi = v;
                     }
+                    v = se.lo ? se.lo[i] : null;
+                    if (v != null && v < lo) lo = v;
                 }
             });
             if (lo == Infinity) {
@@ -909,7 +928,10 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
                 .merge(ln)
                 .order()
                 .attr('stroke', function (se) {
-                    return se.c;
+                    return se.lo ? 'none' : se.c;
+                })
+                .attr('fill', function (se) {
+                    return se.lo ? se.c : 'none'; // A band from lo to v
                 })
                 .attr('stroke-width', function (se) {
                     return se.w;
@@ -918,10 +940,25 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
                     return se.dash || null;
                 })
                 .attr('opacity', function (se) {
-                    return se.alpha || 1;
+                    return se.lo ? 0.15 : se.alpha || 1;
                 })
                 .attr('d', function (se) {
-                    return Graph.path(M.t, se.v, se.step, px, y, I0, I1, pw);
+                    if (!se.lo) return Graph.path(M.t, se.v, se.step, px, y, I0, I1, pw);
+                    var area = d3
+                        .area()
+                        .defined(function (i) {
+                            return se.v[i] != null && se.lo[i] != null;
+                        })
+                        .x(function (i) {
+                            return px(M.t[i]);
+                        })
+                        .y0(function (i) {
+                            return y(se.lo[i]);
+                        })
+                        .y1(function (i) {
+                            return y(se.v[i]);
+                        });
+                    return area(d3.range(I0, I1 + 1, Math.max(1, Math.ceil((I1 - I0 + 1) / pw))));
                 });
             var wash = s.gL.selectAll('path.z').data(cfg.wash && vis.length ? [vis[0]] : []); // From zero to the line
             wash.exit().remove();
@@ -1050,7 +1087,7 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
                     .attr('y1', s.T)
                     .attr('y2', s.cfg.h - s.B);
                 var vis = s.cfg.series.filter(function (se) {
-                    return !se.off && se.v[i] != null;
+                    return !se.off && !se.lo && se.v[i] != null;
                 });
                 var c = s.gD.selectAll('circle').data(on ? vis : []);
                 c.exit().remove();
@@ -1068,7 +1105,9 @@ if (typeof document != 'undefined' && typeof d3 != 'undefined')
                         return se.c;
                     });
                 s.cfg.series.forEach(function (se) {
-                    se.val.text(se.off ? '' : num(se.v[i], s.cfg.dp));
+                    var t = num(se.v[i], s.cfg.dp);
+                    if (se.lo && se.v[i] != null) t = num(se.lo[i], s.cfg.dp) + '–' + t; // A band
+                    se.val.text(se.off ? '' : t);
                 });
             });
             var parts = [STATE[M.st(i)] || M.st(i)];
