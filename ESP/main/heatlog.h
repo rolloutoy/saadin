@@ -23,11 +23,11 @@ typedef struct {      // Inputs, about once a second, NAN if not known
     float effective;  // Effective target, with the curve (°C), last
     float setpoint;   // Unit setpoint (°C), last
     float demand;     // Unit demand (%), last
-    float integral;   // PI integral, last: W, or setpoint (°C) in COLD
+    float integral;   // PI integral, last: W, or the average room (°C) in COLD
     float deficit;    // Heat deficit (Wh), last
     float heattarget; // Heat target (W), mean
     float scale;      // Heat taken per watt of the demand table (W per W), last
-    float kp;         // PI gain in use, last: W per °C, or °C per °C in COLD
+    float kp;         // PI gain in use, last: W per °C, none in COLD
     float ti;         // PI integral time in use (min), last
     uint8_t state;    // heatctl_state_t, last
     uint8_t sub;      // heatctl_sub_t, last, but a defrost anywhere in the sample wins
@@ -55,7 +55,7 @@ typedef struct { // One sample, temperatures in 0.01 °C, HEATLOG_NONE if not kn
     int16_t deficit;    // Wh
     int16_t heattarget; // W
     int16_t scale;      // 0.01 W per W
-    int16_t kp;         // W per °C, or 0.01 °C per °C in COLD
+    int16_t kp;         // W per °C
     int16_t ti;         // min
     uint8_t state;
     uint8_t sub;

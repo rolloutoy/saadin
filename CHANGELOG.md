@@ -4,9 +4,13 @@ Every user-visible change in Säädin since it was forked from upstream Faikout,
 
 ## 2026-11-25
 
-- When heating control starts (`auto.e` turned on, or the unit switched on in heat) with the outdoor temperature already below `cold.enter`, it now goes into full power (COLD) at once. It used to start in demand control and wait `cold.hold` (60 min by default) before going to full power, and after a restart of the device that wait always ran in full, as the device had no outdoor reading from before it.
+- Cold mode is now **target control**, and it is used much more: from +2 °C outside down (`cold.enter`, was −15 °C), back to demand control above +5 °C (`cold.exit`, was −10 °C). Around freezing the unit defrosts often, and demand control coped badly with that, while the unit on its own setpoint does not. Demand stays at 100% and quiet outdoor off, as before; it was never full power, the unit's own thermostat decides.
+  - The setpoint is no longer moved by a PI loop. The room is averaged over `cold.avg` (3 hours); when the average is more than `cold.band` (0.4 °C) above or below the target, the setpoint steps 0.5 °C down or up, and then waits at least `cold.dwell` (3 hours) before the next step, also after entering target control. A single defrost moves the 3-hour average by a few hundredths of a degree, so it does not bring a step on.
+  - `cold.kp`, `cold.ti` and `cold.rate` are gone. The PI loop sampled the room at the moment of each step, so a defrost dip times `cold.kp` moved the setpoint: in a replay of 165 hours of the unit on its own setpoint, about 11 setpoint changes a day and a setpoint between 19 and 23.5 °C. The average and the band make 1-3 a day.
+  - The graph shows the average room where it showed the setpoint integral, the status line says "Target control", and the integral in the status (`ctl_i`) is the average room in target control. A target control state kept over a restart by older firmware is not resumed.
+- When heating control starts (`auto.e` turned on, or the unit switched on in heat) with the outdoor temperature already below `cold.enter`, it now goes into target control (COLD) at once. It used to start in demand control and wait `cold.hold` (60 min by default) before switching, and after a restart of the device that wait always ran in full, as the device had no outdoor reading from before it.
   - If the unit has not reported the outdoor temperature yet when heating control starts, its first reading decides the same way.
-  - `cold.hold` still applies to moving between demand control and full power once heating is running.
+  - `cold.hold` still applies to moving between demand control and target control once heating is running.
 
 ## 2026-11-20
 

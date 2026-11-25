@@ -29,7 +29,7 @@ static void keep(heatlog_t *l, uint32_t now)
     float mean[HEATLOG_MEANS];
     for (int i = 0; i < HEATLOG_MEANS; i++)
         mean[i] = l->num[i] ? l->sum[i] / l->num[i] : NAN;
-    float pi = l->last.state == HEATCTL_COLD ? 100 : 1; // The COLD loop works on the setpoint, so finer units
+    float pi = l->last.state == HEATCTL_COLD ? 100 : 1; // In COLD the integral is the average room, so finer units
     heatlog_sample_t s = {
         .t = now,
         .room = scaled(mean[0], 100),

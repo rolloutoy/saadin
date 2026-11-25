@@ -50,9 +50,9 @@ static heatctl_params_t params(void)
         .cold_exit = -10,
         .cold_hold = 15 * 60,
         .cold_set = 23,
-        .cold_rate = 600,
-        .cold_kp = 2,
-        .cold_ti = 120 * 60,
+        .cold_avg = 180 * 60,
+        .cold_band = 0.4,
+        .cold_dwell = 180 * 60,
         .defrost_enter = 5,
         .defrost_exit = 25,
         .defrost_max = 30 * 60,
@@ -386,37 +386,57 @@ static void test_cold(void)
     run(&x, 3 * 3600);
     CHECK("short cold spell stays DEMAND", x.out.state == HEATCTL_DEMAND);
 
-    // COLD setpoint PI: steps of 0.5 at most once per cold.rate, clamped to t.max
+    // COLD setpoint: steps of 0.5 when the room averaged over cold.avg is more than cold.band off the target, at most
+    // once per cold.dwell
     memset(&x.s, 0, sizeof(x.s));
     x.in.outdoor = -20;
     x.in.room = 21;
     x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
-    run_until(&x, HEATCTL_COLD, -1, 4000);
-    x.in.room = 18;
+    CHECK("COLD: setpoint starts at cold.set", NEAR(x.out.setpoint, 23));
+    CHECK("COLD: average starts at the room", NEAR(x.out.integral, 21));
+    x.in.room = 19; // 2 under at once: still no step until cold.dwell after entering
+    int t = run_until(&x, HEATCTL_COLD, -1, 1);
     float sp = x.out.setpoint;
-    uint32_t at = x.s.setpoint_at;
+    uint32_t in_cold = x.now - 1;
+    while (x.out.setpoint == sp && x.now - in_cold < 6 * 3600)
+        run(&x, 1);
+    CHECK("COLD: first step cold.dwell after entering", x.now - in_cold == 180 * 60);
+    CHECK("COLD: step up 0.5", NEAR(x.out.setpoint, 23.5));
+    x.in.room = 21.3; // Within the band: no step however long
+    run(&x, 24 * 3600);
+    sp = x.out.setpoint;
+    run(&x, 24 * 3600);
+    CHECK("COLD: no step inside cold.band", x.out.setpoint == sp);
+    CHECK("COLD: average follows the room", fabsf(x.out.integral - 21.3f) < 0.01f);
+    x.in.room = 20.3; // 1.0 down: the average is under target - 0.4 once 0.7 of it is in, ln(1/0.3) cold.avg, 217 min
+    uint32_t dropped = x.now;
+    while (x.out.setpoint == sp && x.now - dropped < 6 * 3600)
+        run(&x, 1);
+    t = x.now - dropped;
+    CHECK("COLD: step once the average leaves the band", t > 215 * 60 && t < 225 * 60); // And auto.smooth
+    CHECK("COLD: up by 0.5", NEAR(x.out.setpoint, sp + 0.5f));
+    // Room stays low: steps go on, 0.5 each, cold.dwell apart, up to t.max
+    x.in.room = 18;
+    sp = x.out.setpoint;
+    uint32_t at = x.now;
     int ok = 1, steps = 0;
-    for (int i = 0; i < 6 * 3600; i++) {
+    for (int i = 0; i < 4 * 24 * 3600; i++) {
         run(&x, 1);
         if (x.out.setpoint != sp) {
-            if (fabsf(x.out.setpoint - sp) > 0.5f + 1e-4f || x.now - at < 600)
-                ok = 0;
-            if (fmodf(x.out.setpoint * 2, 1) != 0)
+            if (!NEAR(x.out.setpoint - sp, 0.5) || x.now - at < 180 * 60)
                 ok = 0;
             sp = x.out.setpoint;
             at = x.now;
             steps++;
         }
     }
-    CHECK("COLD setpoint steps of 0.5 per cold.rate", ok && steps >= 5);
-    CHECK("COLD setpoint clamped to t.max", NEAR(x.out.setpoint, 32));
-    CHECK("COLD integral clamped to t.max", x.out.integral <= 32.0f + 1e-4f);
-    // Room warm: setpoint comes down, no IDLE from COLD
+    CHECK("COLD: steps of 0.5 cold.dwell apart", ok && steps >= 15);
+    CHECK("COLD: setpoint clamped to t.max", NEAR(x.out.setpoint, 32));
+    // Room warm: setpoint comes down to t.min, no IDLE from COLD
     x.in.room = 24;
-    run(&x, 6 * 3600);
+    run(&x, 6 * 24 * 3600);
     CHECK("COLD never goes IDLE", x.out.state == HEATCTL_COLD);
-    CHECK("COLD setpoint comes down", x.out.setpoint < 23);
-    CHECK("COLD setpoint clamped to t.min", x.out.setpoint >= 16);
+    CHECK("COLD: setpoint clamped to t.min", NEAR(x.out.setpoint, 16));
 }
 
 static void test_defrost(void)
@@ -590,7 +610,7 @@ static void test_hold_carry(void)
     CHECK("hold carry: hold lasts defrost.hold in all", x.now - hold == 600);
 }
 
-// In the post-defrost hold the COLD integral keeps running, but the setpoint does not rise
+// In the post-defrost hold the COLD average keeps running, but the setpoint does not rise
 static void test_cold_hold(void)
 {
     sim_t x;
@@ -599,20 +619,21 @@ static void test_cold_hold(void)
     x.in.outdoor = -20;
     x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
     run_until(&x, HEATCTL_COLD, -1, 4000);
-    run(&x, 1800); // Room at target, so the setpoint stays at cold.set past cold.rate
+    x.in.room = 18; // A step up is due once cold.dwell is over, which falls in the hold after this defrost
+    run(&x, 180 * 60 - 600);
+    float sp = x.out.setpoint;
     x.in.liquid = -20;
     run(&x, 300);
     x.in.liquid = 35;
     run(&x, 1);
     CHECK("COLD hold: in hold", x.out.state == HEATCTL_COLD && x.out.sub == HEATCTL_SUB_HOLD);
-    x.in.room = 19;
-    float integral = x.out.integral, sp = x.out.setpoint;
+    float avg = x.out.integral;
     run(&x, 598);
-    CHECK("COLD hold: integral keeps running", x.out.integral > integral);
+    CHECK("COLD hold: average keeps running", x.out.integral < avg);
     CHECK("COLD hold: setpoint not raised", x.out.setpoint == sp);
     run_until(&x, HEATCTL_COLD, HEATCTL_SUB_NONE, 10);
     run(&x, 1);
-    CHECK("COLD hold over: setpoint rises", x.out.setpoint > sp);
+    CHECK("COLD hold over: setpoint rises", NEAR(x.out.setpoint, sp + 0.5f));
 }
 
 // defrost.hold 0 turns the hold off
@@ -1329,17 +1350,17 @@ static void test_no_integral(void)
     run(&x, 600);
     CHECK("ti back on: integral moves", x.out.integral > i0 + 1);
 
-    // COLD: cold.ti 0 keeps the integral at cold.set
+    // COLD: cold.avg 0 takes the room as it is
     memset(&x.s, 0, sizeof(x.s));
-    x.p.cold_ti = 0;
+    x.p.cold_avg = 0;
     x.in.room = 21;
     x.in.outdoor = -20;
     x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
-    run_until(&x, HEATCTL_COLD, -1, 4000);
-    x.in.room = 20;
-    run(&x, 6 * 3600);
-    CHECK("cold.ti 0: integral stays at cold.set", NEAR(x.out.integral, 23));
-    CHECK("cold.ti 0: setpoint is cold.set + cold.kp x error", NEAR(x.out.setpoint, 25));
+    x.in.room = 20.5;
+    run(&x, 1);
+    CHECK("cold.avg 0: average is the room", x.out.integral == x.out.room);
+    run(&x, 180 * 60);
+    CHECK("cold.avg 0: steps on the room", NEAR(x.out.setpoint, 23.5));
 }
 
 // The fan.flow default: air flow (m3/h) at any fan speed the unit may report, not only at the fan settings
@@ -1467,15 +1488,15 @@ static void test_keep_cold(void)
     x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
     run_until(&x, HEATCTL_COLD, -1, 4000);
     x.in.room = 19;
-    run(&x, 2 * 3600);
+    run(&x, 4 * 3600);
     heatctl_out_t o = x.out;
-    float integral = x.s.cold_integral;
+    float avg = x.s.cold_room;
     CHECK("keep cold: setpoint moved", o.state == HEATCTL_COLD && o.setpoint > 23.4f);
     heatctl_keep_t k = keep(&x);
     reboot(&x, &k, CLOCK + 60);
     run(&x, 1);
     CHECK("resume cold: COLD", x.out.state == HEATCTL_COLD && x.out.changed && x.out.resumed);
-    CHECK("resume cold: setpoint and integral kept", x.out.setpoint == o.setpoint && x.out.integral == integral);
+    CHECK("resume cold: setpoint and average kept", x.out.setpoint == o.setpoint && x.out.integral == avg);
     CHECK("resume cold: demand 100", x.out.demand == 100 && !x.out.quiet);
     CHECK("resume cold: reason", strstr(x.out.reason, "resumed") && strstr(x.out.reason, "setpoint"));
     run(&x, 4 * 3600);
@@ -1694,7 +1715,7 @@ static void test_keep_reject(void)
         {"state unknown", 9, 7, CLOCK, 0, 1},
         {"rest to resume unknown", 10, HEATCTL_IDLE, CLOCK, 0, 1},
         {"cold setpoint above t.max", 11, 32.5, CLOCK, 1, 1},
-        {"cold integral below t.min", 12, 15, CLOCK, 1, 1},
+        {"cold average NAN", 12, NAN, CLOCK, 1, 1},
         {"cold setpoint NAN", 11, NAN, CLOCK, 1, 1},
     };
     for (unsigned i = 0; i < sizeof(bad) / sizeof(*bad); i++) {
@@ -1736,7 +1757,7 @@ static void test_keep_reject(void)
             k.setpoint = bad[i].value;
             break;
         case 12:
-            k.cold_integral = bad[i].value;
+            k.cold_room = bad[i].value;
             break;
         }
         if (bad[i].sealed)

@@ -116,7 +116,7 @@ function log(n, f, table) {
         m.levH[0] == 1920 && m.levH[1] == 4530 && m.levH[2] == 6175
     );
     check('heating off is no watts and no level', m.lev[3] == null && m.levW[3] === 0 && m.levH[3] === 0);
-    check('full power has no level', m.lev[4] == null && m.levW[4] == null);
+    check('target control has no level', m.lev[4] == null && m.levW[4] == null);
     check('a demand not in the table has no level', m.lev[5] == null && m.levW[5] == null);
     check('levels in table order', m.levels.join() == '40,95,100q,100');
     const n = G.prep(
@@ -127,7 +127,7 @@ function log(n, f, table) {
     check('no table, no level', n.lev[0] == null && n.levels.length == 0);
 }
 
-// The PI parts: watts in demand control, a setpoint at full power
+// The PI parts: watts in demand control; in target control the integral column is the average room
 {
     const m = G.prep(
         log(2, i => (i ? { state: 'cold', heatw: null, integral: 2350 } : { heatw: 1500, integral: 1200 })),
@@ -135,8 +135,8 @@ function log(n, f, table) {
         0
     );
     check('proportional is the heat request less the integral', m.prop[0] == 300 && m.integral[0] == 1200);
-    check('no watts integral at full power', m.integral[1] == null && m.prop[1] == null);
-    check('setpoint integral at full power only', m.setint[0] == null && near(m.setint[1], 23.5));
+    check('no watts integral in target control', m.integral[1] == null && m.prop[1] == null);
+    check('average room in target control only', m.avg[0] == null && near(m.avg[1], 23.5));
 }
 
 // Means: heat output over 2 hours, COP over 6 hours with the defrosts counted in

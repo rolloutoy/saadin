@@ -339,9 +339,9 @@ static void resume_demand(heatctl_t *s, const heatctl_params_t *p, heatctl_out_t
 static void enter_cold(heatctl_t *s, const heatctl_params_t *p, heatctl_out_t *out, uint32_t now)
 {
     enter(s, out, now, HEATCTL_COLD, keep_hold(s));
-    s->cold_integral = clampf(p->cold_set, p->tmin, p->tmax);
-    s->setpoint = round_half(s->cold_integral);
-    s->setpoint_at = now;
+    s->cold_room = s->room_ok ? s->room : NAN; // The average starts at the room
+    s->setpoint = round_half(clampf(p->cold_set, p->tmin, p->tmax));
+    s->setpoint_at = now; // The first step comes cold.dwell after entering at the soonest
 }
 
 // Track how long a condition has held
@@ -423,7 +423,7 @@ void heatctl_keep(const heatctl_t *s, const heatctl_params_t *p, heatctl_keep_t 
     k->deficit = s->deficit;
     k->debt = s->debt;
     k->setpoint = s->setpoint;
-    k->cold_integral = s->cold_integral;
+    k->cold_room = s->cold_room;
     k->crc = keep_crc(k);
 }
 
@@ -440,7 +440,7 @@ static const char *keep_check(const heatctl_t *s, const heatctl_params_t *p, uin
     if (keep_age(s, now) > HEATCTL_KEEP_AGE)
         return "too old";
     if (!isfinite(k->integral) || !isfinite(k->scale) || !isfinite(k->deficit) || !isfinite(k->debt) ||
-        !isfinite(k->setpoint) || !isfinite(k->cold_integral))
+        !isfinite(k->setpoint) || (k->state == HEATCTL_COLD && !isfinite(k->cold_room)))
         return "bad value";
     float cop = table_cop(p);
     if (k->scale && (k->scale < cop / 2 || k->scale > cop * 2)) // As the DEMAND step clamps it, 0 if not learnt yet
@@ -459,7 +459,7 @@ static const char *keep_check(const heatctl_t *s, const heatctl_params_t *p, uin
         return NULL;
     }
     case HEATCTL_COLD:
-        if (k->setpoint < p->tmin || k->setpoint > p->tmax || k->cold_integral < p->tmin || k->cold_integral > p->tmax)
+        if (k->setpoint < p->tmin || k->setpoint > p->tmax)
             return "bad value";
         return NULL;
     case HEATCTL_IDLE:
@@ -487,10 +487,10 @@ static void keep_resume(heatctl_t *s, heatctl_out_t *out, uint32_t now, int leve
                k->integral);
     } else if (k->state == HEATCTL_COLD) {
         enter(s, out, now, HEATCTL_COLD, HEATCTL_SUB_NONE);
-        s->cold_integral = k->cold_integral;
+        s->cold_room = k->cold_room;
         s->setpoint = k->setpoint;
         s->setpoint_at = now;
-        reason(out, "resumed after restart, setpoint %.1f, integral %.1f", k->setpoint, k->cold_integral);
+        reason(out, "resumed after restart, setpoint %.1f, average room %.2f", k->setpoint, k->cold_room);
     } else {
         enter(s, out, now, HEATCTL_IDLE, k->rest ? HEATCTL_SUB_REST : HEATCTL_SUB_NONE);
         s->integral = k->integral; // To carry on with when heating comes on again
@@ -779,16 +779,22 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         out.integral = s->integral;
         break;
     case HEATCTL_COLD:
-        if (!freeze) { // PI on the setpoint, the integral in °C
-            float di = p->cold_ti > 0 ? p->cold_kp * e * dt / p->cold_ti : 0;
-            s->cold_integral = clampf(s->cold_integral + di, p->tmin, p->tmax);
+        if (!stale) { // Room averaged over cold.avg, defrost dips and all: they are part of the room the house has
+            if (!isfinite(s->cold_room) || !p->cold_avg)
+                s->cold_room = room;
+            else
+                s->cold_room += (room - s->cold_room) * dt / (p->cold_avg + dt);
         }
-        if (!stale && s->sub != HEATCTL_SUB_DEFROST && now - s->setpoint_at >= p->cold_rate) {
-            float want = round_half(clampf(p->cold_kp * e + s->cold_integral, p->tmin, p->tmax));
-            if (noraise && want > s->setpoint)
-                want = s->setpoint;
-            if (want != s->setpoint) { // Steps of 0.5 at most
-                s->setpoint += clampf(want - s->setpoint, -0.5, 0.5);
+        if (!stale && s->sub != HEATCTL_SUB_DEFROST && isfinite(s->cold_room) &&
+            now - s->setpoint_at >= p->cold_dwell) { // A step of 0.5 when the average is outside target ± cold.band
+            float want = s->setpoint;
+            if (s->cold_room > target + p->cold_band)
+                want -= 0.5;
+            else if (s->cold_room < target - p->cold_band && !noraise)
+                want += 0.5;
+            want = clampf(want, p->tmin, p->tmax);
+            if (want != s->setpoint) {
+                s->setpoint = want;
                 s->setpoint_at = now;
             }
         }
@@ -796,7 +802,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
         out.quiet = 0;
         out.setpoint = s->setpoint;
         out.fan = state_fan(s, p, p->cold_fan, &p->cold_fanmap, outdoor, now);
-        out.integral = s->cold_integral;
+        out.integral = s->cold_room;
         for (int i = p->table.n - 1; i >= 0; i--)
             if (!p->table.level[i].quiet) {
                 out.heatw = p->table.level[i].watts * table_cop(p);

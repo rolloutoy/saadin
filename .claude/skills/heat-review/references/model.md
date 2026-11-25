@@ -105,8 +105,10 @@ Be explicit about these whenever a conclusion leans on them.
 - **Fan speed.** The unit's figures mix whatever fan speeds the logs had. The fan map changes fan speed with
   outdoor temperature, so the outdoor slope partly stands for it. The plant gives the house the estimated heat
   as it is, without the per-fan scale.
-- **Full-power (cold) mode.** Below `cold.enter` the firmware controls by setpoint; the plant just gives all it
-  has. Results below about -13 degC mean little.
+- **Target control (cold mode).** Below `cold.enter` (+2 degC by default) the firmware steps the setpoint on the
+  room averaged over `cold.avg` and leaves demand at 100; the plant just gives all it has. So a scenario colder
+  than `cold.enter` says nothing about the room there: judge target control on logs of the unit at a setpoint
+  (auto mode off, or target control itself), where the unit holds its intake about 2.5 degC over the setpoint.
 - **Sensor placement and lags**, except through the `--robust` variants.
 - **Heating off (idle).** It happens in the plant, but the unit's behaviour at restart is not fitted.
 - **The sun and the wind, hour by hour.** They are in the fit of the house, so that they do not bend its figures,

@@ -224,8 +224,9 @@ def test_plant_runs_on_the_settings_on_record(d):
 def test_plant_follows_the_target_curve(d):
     m = model.load_model()
     scen = sim.parse_scen("-10")
-    flat = sim.run(m, scen, {"TARGET": 21, "CURVE": ""})["steady"]
-    bent = sim.run(m, scen, {"TARGET": 21, "CURVE": "-20:1.0,0:0"})["steady"]  # Half a degree up at -10
+    demand = {"TARGET": 21, "COLD_ENTER": -30, "COLD_EXIT": -25}  # Demand control: the plant does not model the setpoint
+    flat = sim.run(m, scen, dict(demand, CURVE=""))["steady"]
+    bent = sim.run(m, scen, dict(demand, CURVE="-20:1.0,0:0"))["steady"]  # Half a degree up at -10
     shift = (bent["lo"] + bent["hi"]) / 2 - (flat["lo"] + flat["hi"]) / 2
     assert 0.35 < shift < 0.65, "the room moved %+.2f degC with a curve that asks for +0.50" % shift
     assert abs(bent["mean"]) < 0.1, "mean error %+.2f against the target with the curve in it" % bent["mean"]
