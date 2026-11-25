@@ -2,6 +2,12 @@
 
 Every user-visible change in Säädin since it was forked from upstream Faikout, newest first. As required by GPL-3.0 §5(a), this is the dated record of how Säädin differs from Faikout. [README.md](README.md#changes-from-faikout) has a summary.
 
+## 2026-11-25
+
+- When heating control starts (`auto.e` turned on, or the unit switched on in heat) with the outdoor temperature already below `cold.enter`, it now goes into full power (COLD) at once. It used to start in demand control and wait `cold.hold` (60 min by default) before going to full power, and after a restart of the device that wait always ran in full, as the device had no outdoor reading from before it.
+  - If the unit has not reported the outdoor temperature yet when heating control starts, its first reading decides the same way.
+  - `cold.hold` still applies to moving between demand control and full power once heating is running.
+
 ## 2026-11-20
 
 - The heating graph page opens much sooner. It loads the last 12 hours of the log at first, in place of all 5 days (about 3 MB, which took half a minute), and *Refresh* now fetches only the samples kept since the last one loaded, in place of the whole log each time.
