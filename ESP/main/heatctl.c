@@ -798,13 +798,18 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
                 s->setpoint_at = now;
             }
         }
+        // Quiet outdoor down to cold.quiet, for gentler running and defrosts, then the unit's full output
+        if (isnan(outdoor) || outdoor < p->cold_quiet)
+            s->cold_quiet = 0;
+        else if (outdoor >= p->cold_quiet + HEATCTL_QUIET_HYST)
+            s->cold_quiet = 1;
         out.demand = 100;
-        out.quiet = 0;
+        out.quiet = s->cold_quiet;
         out.setpoint = s->setpoint;
         out.fan = state_fan(s, p, p->cold_fan, &p->cold_fanmap, outdoor, now);
         out.integral = s->cold_room;
         for (int i = p->table.n - 1; i >= 0; i--)
-            if (!p->table.level[i].quiet) {
+            if (p->table.level[i].quiet == out.quiet) {
                 out.heatw = p->table.level[i].watts * table_cop(p);
                 break;
             }

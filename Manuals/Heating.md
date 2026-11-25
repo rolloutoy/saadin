@@ -54,11 +54,13 @@ Heating starts again when the room falls below the target, after at least `idle.
 
 ### Target control
 
-When it stays below `cold.enter` (+2 °C) outside for `cold.hold` (60 minutes), the controller stops limiting demand and lets the unit's own thermostat run it, with quiet outdoor off. Around freezing, where the unit defrosts often, this copes with defrosts better than demand control. The unit holds its own air intake at about the setpoint plus 2.5 °C, which leaves the room near the setpoint plus 0.5–1 °C, varying with the weather and the time of day. The controller steers the room to the target by moving the setpoint:
+When it stays below `cold.enter` (+2 °C) outside for `cold.hold` (60 minutes), the controller stops limiting demand and lets the unit's own thermostat run it. Around freezing, where the unit defrosts often, this copes with defrosts better than demand control. The unit holds its own air intake at about the setpoint plus 2.5 °C, which leaves the room near the setpoint plus 0.5–1 °C, varying with the weather and the time of day. The controller steers the room to the target by moving the setpoint:
 
 - It averages the room over `cold.avg` (3 hours), so a single defrost barely moves the average.
 - When the average is more than `cold.band` (0.4 °C) above the target, the setpoint goes down 0.5 °C; more than that below the target, up 0.5 °C.
 - After a step, or on entering target control, it waits at least `cold.dwell` (3 hours) before the next one, so the room can show what the last step did.
+
+Quiet outdoor stays on down to `cold.quiet` (−5 °C) outside. The outdoor unit then runs gentler, and builds up frost more slowly, so it defrosts less often. Below that it is off, so the unit can give all it has. It comes back on once it is 0.5 °C above `cold.quiet` again. To run target control with quiet outdoor always off, set `cold.quiet` to `cold.exit` or above.
 
 It starts at `cold.set` (23 °C). If it is already below `cold.enter` when heating control starts, it goes straight to target control, without the 60 minutes.
 
@@ -165,7 +167,8 @@ Set these on the *Advanced* settings page, or over MQTT. While the controller is
 |`cold.avg`|180 min|The room is averaged over this long. 0 takes the room as it is|
 |`cold.band`|0.4 °C|The setpoint steps 0.5 °C when the average room is further than this from the target|
 |`cold.dwell`|180 min|Minimum time between setpoint steps, and from entering target control to the first|
-|`cold.fan`|Leave|Fan speed in target control|
+|`cold.quiet`|−5 °C|Quiet outdoor on down to this outdoor temperature, off below it|
+|`cold.fan`|Leave|Fan speed in target control. Outdoor sets it by outdoor temperature from `cold.fanmap`|
 
 These defaults come from replaying 165 hours of the unit running on its own setpoint. They have not run on a real unit yet.
 

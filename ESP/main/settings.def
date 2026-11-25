@@ -117,6 +117,7 @@ u16	cold.set	23		.live	.decimal=1 .unit="℃"		// Setpoint on entering target co
 u16	cold.avg	180		.live	.unit="min"			// Target control: room temperature averaged over this long, 0 for none
 u8	cold.band	0.4		.live	.decimal=1 .unit="℃"		// Target control: setpoint steps 0.5℃ when the average room is further than this from the target
 u16	cold.dwell	180		.live	.unit="min"			// Target control: minimum time between setpoint steps
+s8	cold.quiet	-5		.live	.unit="℃"			// Target control: quiet outdoor on down to this outdoor temperature, off below it (at or above cold.exit for never)
 enum	cold.fan	5		.live	.enums="Leave,Auto,1,2,3,4,5,Quiet,Outdoor"	// Fan in target control
 s	cold.fanmap			.live					// Fan in target control by outdoor temperature (cold.fan Outdoor), outdoor:fan,... fan A, 1-5 or Q, e.g. -5:5,0:4,5:3
 

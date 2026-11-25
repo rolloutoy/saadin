@@ -53,6 +53,7 @@ static heatctl_params_t params(void)
         .cold_avg = 180 * 60,
         .cold_band = 0.4,
         .cold_dwell = 180 * 60,
+        .cold_quiet = -5,
         .defrost_enter = 5,
         .defrost_exit = 25,
         .defrost_max = 30 * 60,
@@ -437,6 +438,39 @@ static void test_cold(void)
     run(&x, 6 * 24 * 3600);
     CHECK("COLD never goes IDLE", x.out.state == HEATCTL_COLD);
     CHECK("COLD: setpoint clamped to t.min", NEAR(x.out.setpoint, 16));
+}
+
+static void test_cold_quiet(void)
+{ // COLD: quiet outdoor on while the smoothed outdoor is at or above cold.quiet, off below it, on again 0.5 above it
+    sim_t x;
+    start(&x);
+    memset(&x.s, 0, sizeof(x.s));
+    x.p.cold_enter = 2;
+    x.p.cold_exit = 5;
+    x.in.outdoor = 0;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    CHECK("cold.quiet: COLD at 0", x.out.state == HEATCTL_COLD);
+    CHECK("cold.quiet: QO on above cold.quiet", x.out.demand == 100 && x.out.quiet);
+    x.in.outdoor = -5.2; // Smoothed goes below -5 in time
+    int t = 0;
+    while (x.out.quiet && t < 6 * 3600) {
+        run(&x, 1);
+        t++;
+    }
+    CHECK("cold.quiet: QO off below cold.quiet", !x.out.quiet && x.out.outdoor < -5 && x.out.outdoor > -5.01);
+    CHECK("cold.quiet: still COLD", x.out.state == HEATCTL_COLD && x.out.demand == 100);
+    x.in.outdoor = -4.7; // Back above -5, but not by 0.5
+    run(&x, 6 * 3600);
+    CHECK("cold.quiet: QO stays off within 0.5 above", !x.out.quiet);
+    x.in.outdoor = -4.4;
+    run(&x, 6 * 3600);
+    CHECK("cold.quiet: QO on again 0.5 above", x.out.quiet);
+
+    // Warmer than cold.quiet at the start, colder than it from the start: off
+    memset(&x.s, 0, sizeof(x.s));
+    x.in.outdoor = -10;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    CHECK("cold.quiet: QO off at the start below it", x.out.state == HEATCTL_COLD && !x.out.quiet);
 }
 
 static void test_defrost(void)
@@ -1817,6 +1851,7 @@ int main(void)
     test_idle_heat_known();
     test_idle_only_from_lowest();
     test_cold();
+    test_cold_quiet();
     test_defrost();
     test_defrost_rearm();
     test_hold_carry();
