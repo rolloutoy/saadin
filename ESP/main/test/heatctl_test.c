@@ -50,8 +50,8 @@ static heatctl_params_t params(void)
         .cold_exit = -10,
         .cold_hold = 15 * 60,
         .cold_set = 23,
-        .cold_min = 16,
-        .cold_max = 32,
+        .cold_min = 21.5,
+        .cold_max = 25,
         .cold_avg = 180 * 60,
         .cold_band = 0.4,
         .cold_dwell = 180 * 60,
@@ -418,7 +418,9 @@ static void test_cold(void)
     t = x.now - dropped;
     CHECK("COLD: step once the average leaves the band", t > 215 * 60 && t < 225 * 60); // And auto.smooth
     CHECK("COLD: up by 0.5", NEAR(x.out.setpoint, sp + 0.5f));
-    // Room stays low: steps go on, 0.5 each, cold.dwell apart, up to cold.max, which is t.max by default
+    // Room stays low: steps go on, 0.5 each, cold.dwell apart, up to t.max with cold.min and cold.max out of the way
+    x.p.cold_min = 16;
+    x.p.cold_max = 32;
     x.in.room = 18;
     sp = x.out.setpoint;
     uint32_t at = x.now;
@@ -520,6 +522,18 @@ static void test_cold_limits(void)
             ok = 0;
     }
     CHECK("cold.min above cold.max: cold.max", ok);
+
+    // Limits off the setpoint's 0.5 grid count as the nearest 0.5
+    memset(&x.s, 0, sizeof(x.s));
+    x.p.cold_min = 21.3;
+    x.p.cold_max = 23.7;
+    x.in.room = 18;
+    x.out = heatctl_step(&x.s, &x.p, &x.in, x.now);
+    run(&x, 24 * 3600);
+    CHECK("cold.max 23.7: 23.5", x.out.setpoint == 23.5f);
+    x.in.room = 24;
+    run(&x, 2 * 24 * 3600);
+    CHECK("cold.min 21.3: 21.5", x.out.setpoint == 21.5f);
 }
 
 static void test_cold_quiet(void)
@@ -1624,7 +1638,7 @@ static void test_keep_cold(void)
     run(&x, 1);
     CHECK("resume cold, over cold.max: COLD at cold.max",
           x.out.state == HEATCTL_COLD && x.out.resumed && NEAR(x.out.setpoint, 23));
-    x.p.cold_max = 32;
+    x.p.cold_max = 25;
 
     // Warm after the restart: back to DEMAND only after cold.hold
     x.in = inputs();

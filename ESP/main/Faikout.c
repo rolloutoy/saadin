@@ -3562,8 +3562,8 @@ static void heatctl_settings(heatctl_params_t *p)
     p->cold_exit = coldexit;
     p->cold_hold = coldhold * 60;
     p->cold_set = (float)coldset / coldset_scale;
-    p->cold_min = coldmin;
-    p->cold_max = coldmax;
+    p->cold_min = (float)coldmin / coldmin_scale;
+    p->cold_max = (float)coldmax / coldmax_scale;
     p->cold_avg = coldavg * 60;
     p->cold_band = (float)coldband / coldband_scale;
     p->cold_dwell = colddwell * 60;

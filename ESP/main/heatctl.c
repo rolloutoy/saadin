@@ -277,10 +277,11 @@ static float round_half(float v)
     return roundf(v * 2) / 2;
 }
 
-// The COLD setpoint's limits: cold.min…cold.max, within t.min…t.max (the upper limit where the two cross)
+// The COLD setpoint's limits: cold.min…cold.max to the nearest 0.5, within t.min…t.max (the upper limit where the
+// two cross)
 static float cold_clamp(const heatctl_params_t *p, float v)
 {
-    v = fminf(fmaxf(v, p->cold_min), p->cold_max);
+    v = fminf(fmaxf(v, round_half(p->cold_min)), round_half(p->cold_max));
     return fminf(fmaxf(v, p->tmin), p->tmax);
 }
 

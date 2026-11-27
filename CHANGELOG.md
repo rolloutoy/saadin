@@ -4,7 +4,9 @@ Every user-visible change in Säädin since it was forked from upstream Faikout,
 
 ## 2026-11-27
 
-- Target control keeps its setpoint within `cold.min`…`cold.max`, two new settings in whole degrees. The defaults, 16 and 32 °C, are the limits it had (`t.min` and `t.max`, which still apply). Set `cold.max` a few degrees above the target, e.g. 24: when the unit gives all it has and the room is still under the target, a higher setpoint heats no more, and the setpoint used to climb on to 32 °C and then take hours per degree to come back down once the weather eased, with the room over the target meanwhile.
+- Target control keeps its setpoint within `cold.min`…`cold.max`, two new settings, 21.5 and 25 °C by default. It used to range over all of `t.min`…`t.max` (16…32 °C), which still apply. When the unit gives all it has and the room is still under the target, a higher setpoint heats no more, and the setpoint used to climb on to 32 °C and then take hours per degree to come back down once the weather eased, with the room over the target meanwhile.
+  - The defaults suit a target (`auto.t`) of about 22…24 °C, as the room runs about 0.5…1 °C over the setpoint. With a lower target, lower `cold.min`, or the room stays over the target in target control; with a higher one, raise `cold.max`.
+  - The limits are taken to the nearest 0.5 °C.
   - `cold.set` outside the limits starts at the nearer one. A limit changed past the current setpoint moves the setpoint at once.
 
 ## 2026-11-25
