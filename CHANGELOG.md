@@ -2,6 +2,13 @@
 
 Every user-visible change in Säädin since it was forked from upstream Faikout, newest first. As required by GPL-3.0 §5(a), this is the dated record of how Säädin differs from Faikout. [README.md](README.md#changes-from-faikout) has a summary.
 
+## 2026-11-27
+
+- Target control keeps its setpoint within `cold.min`…`cold.max`, two new settings, 21.5 and 25 °C by default. It used to range over all of `t.min`…`t.max` (16…32 °C), which still apply. When the unit gives all it has and the room is still under the target, a higher setpoint heats no more, and the setpoint used to climb on to 32 °C and then take hours per degree to come back down once the weather eased, with the room over the target meanwhile.
+  - The defaults suit a target (`auto.t`) of about 22…24 °C, as the room runs about 0.5…1 °C over the setpoint. With a lower target, lower `cold.min`, or the room stays over the target in target control; with a higher one, raise `cold.max`.
+  - The limits are taken to the nearest 0.5 °C.
+  - `cold.set` outside the limits starts at the nearer one. A limit changed past the current setpoint moves the setpoint at once.
+
 ## 2026-11-25
 
 - Target control keeps quiet outdoor on down to `cold.quiet` (−5 °C by default) outside, and turns it off below that, so the unit runs gentler and defrosts less often in the mild cold, and still gives all it has in the real cold. It comes back on 0.5 °C above `cold.quiet`. Set `cold.quiet` at or above `cold.exit` to keep the old behaviour, quiet outdoor always off. The status line shows QO in target control when it is on.

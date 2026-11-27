@@ -114,6 +114,8 @@ s8	cold.enter	2		.live	.unit="℃"			// Target control (setpoint, no demand limi
 s8	cold.exit	5		.live	.unit="℃"			// Back to demand control above this outdoor temperature
 u8	cold.hold	60		.live	.unit="min"			// Outdoor temperature must stay past cold.enter or cold.exit this long
 u16	cold.set	23		.live	.decimal=1 .unit="℃"		// Setpoint on entering target control
+u16	cold.min	21.5		.live	.decimal=1 .unit="℃"		// Target control: setpoint no lower than this (and t.min)
+u16	cold.max	25		.live	.decimal=1 .unit="℃"		// Target control: setpoint no higher than this (and t.max)
 u16	cold.avg	180		.live	.unit="min"			// Target control: room temperature averaged over this long, 0 for none
 u8	cold.band	0.4		.live	.decimal=1 .unit="℃"		// Target control: setpoint steps 0.5℃ when the average room is further than this from the target
 u16	cold.dwell	180		.live	.unit="min"			// Target control: minimum time between setpoint steps

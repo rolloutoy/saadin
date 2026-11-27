@@ -31,7 +31,7 @@ static const char *envs(const char *n, const char *d)
 
 // The controller's settings or inputs changed: give every new field its value in main() below (a setting's default
 // is in settings.def, and sim.py's SETTING_ENV passes the device's own), then put the new sizes here
-_Static_assert(sizeof(heatctl_params_t) == 432 && sizeof(heatctl_in_t) == 20,
+_Static_assert(sizeof(heatctl_params_t) == 440 && sizeof(heatctl_in_t) == 20,
                "heatctl_params_t or heatctl_in_t changed: plant.c must follow, see the comment above this line");
 
 int main(int argc, char **argv)
@@ -89,6 +89,8 @@ int main(int argc, char **argv)
         .cold_exit = envf("COLD_EXIT", 5),
         .cold_hold = envf("COLD_HOLD", 60) * 60,
         .cold_set = 23,
+        .cold_min = 21.5,
+        .cold_max = 25,
         .cold_avg = 3 * 3600,
         .cold_band = 0.4,
         .cold_dwell = 3 * 3600,
