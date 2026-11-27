@@ -31,7 +31,7 @@ static const char *envs(const char *n, const char *d)
 
 // The controller's settings or inputs changed: give every new field its value in main() below (a setting's default
 // is in settings.def, and sim.py's SETTING_ENV passes the device's own), then put the new sizes here
-_Static_assert(sizeof(heatctl_params_t) == 428 && sizeof(heatctl_in_t) == 20,
+_Static_assert(sizeof(heatctl_params_t) == 432 && sizeof(heatctl_in_t) == 20,
                "heatctl_params_t or heatctl_in_t changed: plant.c must follow, see the comment above this line");
 
 int main(int argc, char **argv)
@@ -92,6 +92,7 @@ int main(int argc, char **argv)
         .cold_avg = 3 * 3600,
         .cold_band = 0.4,
         .cold_dwell = 3 * 3600,
+        .cold_quiet = envf("COLD_QUIET", -5),
         .defrost_enter = 5,
         .defrost_exit = 25,
         .defrost_max = 1800,
@@ -136,8 +137,8 @@ int main(int argc, char **argv)
             g += pulse;
         float h = 0, pw = 0;
         if (o.state == HEATCTL_DEMAND || o.state == HEATCTL_COLD) {
-            if (o.state == HEATCTL_COLD || (o.demand == 100 && !o.quiet))
-                h = q100, pw = p100; // Target control's setpoint is not modelled: it gives all it has
+            if (o.demand == 100 && !o.quiet)
+                h = q100, pw = p100; // Target control's setpoint is not modelled: it gives all it has, with QO or not
             else if (o.demand == 100)
                 h = q100q, pw = p100q;
             else

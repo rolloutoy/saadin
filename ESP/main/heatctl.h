@@ -12,6 +12,7 @@
 #define HEATCTL_DT_MAX 60           // Longest step integrated (s)
 #define HEATCTL_DEFROST_SPREAD 7200 // The heat a defrost cost is asked for over about this long (s)
 #define HEATCTL_SCALE_SMOOTH 1800   // Smoothing of the heat the unit gives per watt of the demand table (s)
+#define HEATCTL_QUIET_HYST 0.5      // COLD: quiet outdoor back on this far above cold.quiet (°C)
 #define HEATCTL_FAN_LEAVE (-1)      // Fan: leave alone
 #define HEATCTL_FAN_MAP (-2)        // Fan: by outdoor temperature, from the state's fan map
 
@@ -87,6 +88,7 @@ typedef struct {
     uint32_t cold_avg;   // Room averaged over this long (s), 0 for none
     float cold_band;     // A 0.5 °C setpoint step when the average room is further than this from the target (°C)
     uint32_t cold_dwell; // Minimum time between setpoint steps (s)
+    float cold_quiet;    // Quiet outdoor on in COLD while outdoor is at or above this, off below it (°C)
     // DEFROST
     float defrost_enter;      // Liquid below this is a defrost
     float defrost_exit;       // Liquid at or above this ends it
@@ -183,6 +185,7 @@ typedef struct {
     uint32_t level_at;         // Time of the last demand change
     float setpoint;            // Current setpoint (COLD)
     uint32_t setpoint_at;      // Time of the last setpoint change (COLD)
+    uint8_t cold_quiet;        // Quiet outdoor on (COLD)
     heatctl_state_t fan_state; // State the fan from a map was set in, HEATCTL_OFF if none
     int8_t fan;                // Fan from a map
     uint32_t fan_at;           // Time it was set

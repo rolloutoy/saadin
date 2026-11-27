@@ -2187,7 +2187,7 @@ static esp_err_t web_control(httpd_req_t *req)
         "var c=o.ctl_curve||0,cs=c?' (curve '+(c>0?'+':'')+c.toFixed(2)+')':'';"             //
         "var tg=o.ctl_target!=undefined?' · target '+cf(o.ctl_target)+cs:'';"                //
         "var r=o.ctl=='demand'?'Demand '+o.demand+'%%'+(o.quiet?' QO':'')+tg+(o.ctl_heatw!=undefined?' · heat '+o.ctl_heatw+' W':''):" //
-        "o.ctl=='cold'?'Target control · setpoint '+cf(o.temp)+tg:"                                         //
+        "o.ctl=='cold'?'Target control · setpoint '+cf(o.temp)+(o.quiet?' QO':'')+tg:"                      //
         "o.ctl=='idle'?'Heating off'+tg:"                                                                   //
         "o.ctl=='nosensor'?'No room reading · unit thermostat at '+cf(o.temp):o.ctl;"                       //
         "if(o.ctl_sub=='defrost')r+=' · ❄ defrost';"                                                        //
@@ -3565,6 +3565,7 @@ static void heatctl_settings(heatctl_params_t *p)
     p->cold_avg = coldavg * 60;
     p->cold_band = (float)coldband / coldband_scale;
     p->cold_dwell = colddwell * 60;
+    p->cold_quiet = coldquiet;
     p->defrost_enter = defrostenter;
     p->defrost_exit = defrostexit;
     p->defrost_max = defrostmax * 60;

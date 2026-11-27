@@ -43,6 +43,7 @@ SETTING_ENV = {"auto.t": "TARGET", "auto.curve": "CURVE", "auto.smooth": "SMOOTH
                "demand.full": "FULL", "demand.minrun": "MINRUN",
                "idle.over": "IDLE_OVER", "idle.under": "IDLE_UNDER", "idle.min": "IDLE_MIN",
                "cold.enter": "COLD_ENTER", "cold.exit": "COLD_EXIT", "cold.hold": "COLD_HOLD",
+               "cold.quiet": "COLD_QUIET",
                "defrost.hold": "HOLD", "defrost.holdmax": "HOLDMAX", "defrost.watchdog": "WATCHDOG",
                "defrost.loops": "LOOPS", "defrost.window": "WINDOW", "defrost.rest": "REST"}
 DEFAULT_SCEN = ["-11", "-6", "-1", "4", "-1,0,day", "-1,0>-1,500", "4,0>4,-500", "-6,0>-6,-700"]
