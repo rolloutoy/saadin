@@ -277,6 +277,13 @@ static float round_half(float v)
     return roundf(v * 2) / 2;
 }
 
+// The COLD setpoint's limits: cold.min…cold.max, within t.min…t.max (the upper limit where the two cross)
+static float cold_clamp(const heatctl_params_t *p, float v)
+{
+    v = fminf(fmaxf(v, p->cold_min), p->cold_max);
+    return fminf(fmaxf(v, p->tmin), p->tmax);
+}
+
 static void reason(heatctl_out_t *out, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 static void reason(heatctl_out_t *out, const char *fmt, ...)
 {
@@ -340,7 +347,7 @@ static void enter_cold(heatctl_t *s, const heatctl_params_t *p, heatctl_out_t *o
 {
     enter(s, out, now, HEATCTL_COLD, keep_hold(s));
     s->cold_room = s->room_ok ? s->room : NAN; // The average starts at the room
-    s->setpoint = round_half(clampf(p->cold_set, p->tmin, p->tmax));
+    s->setpoint = round_half(cold_clamp(p, p->cold_set));
     s->setpoint_at = now; // The first step comes cold.dwell after entering at the soonest
 }
 
@@ -785,6 +792,10 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
             else
                 s->cold_room += (room - s->cold_room) * dt / (p->cold_avg + dt);
         }
+        if (cold_clamp(p, s->setpoint) != s->setpoint) { // A limit moved past the setpoint: at once, as a step
+            s->setpoint = cold_clamp(p, s->setpoint);
+            s->setpoint_at = now;
+        }
         if (!stale && s->sub != HEATCTL_SUB_DEFROST && isfinite(s->cold_room) &&
             now - s->setpoint_at >= p->cold_dwell) { // A step of 0.5 when the average is outside target ± cold.band
             float want = s->setpoint;
@@ -792,7 +803,7 @@ heatctl_out_t heatctl_step(heatctl_t *s, const heatctl_params_t *p, const heatct
                 want -= 0.5;
             else if (s->cold_room < target - p->cold_band && !noraise)
                 want += 0.5;
-            want = clampf(want, p->tmin, p->tmax);
+            want = cold_clamp(p, want);
             if (want != s->setpoint) {
                 s->setpoint = want;
                 s->setpoint_at = now;

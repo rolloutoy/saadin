@@ -85,6 +85,8 @@ typedef struct {
     float cold_exit;     // Leave COLD above this outdoor temperature
     uint32_t cold_hold;  // For this long (s)
     float cold_set;      // Setpoint on entering COLD
+    float cold_min;      // Setpoint in COLD no lower than this...
+    float cold_max;      // ...and no higher than this, both within tmin…tmax
     uint32_t cold_avg;   // Room averaged over this long (s), 0 for none
     float cold_band;     // A 0.5 °C setpoint step when the average room is further than this from the target (°C)
     uint32_t cold_dwell; // Minimum time between setpoint steps (s)
